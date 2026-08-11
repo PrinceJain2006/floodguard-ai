@@ -1,27 +1,40 @@
+# FloodGuard AI — Production Requirements
+# IBM Cloud Code Engine / Docker deployment
+# Python 3.11+
+
+# ── Core Web Framework ──────────────────────
 streamlit==1.41.1
+streamlit-folium==0.23.2
+
+# ── Data & ML ───────────────────────────────
+pandas==2.2.3
+numpy==2.1.3
+scikit-learn==1.5.2
+joblib==1.4.2
+xgboost==2.1.3
+
+# ── Geospatial Maps ──────────────────────────
+folium==0.18.0
+
+# ── Visualisation ────────────────────────────
+plotly==5.24.1
+
+# ── HTTP / IBM WatsonX ──────────────────────
+httpx==0.28.1
+requests==2.32.3
+
+# ── Config / Secrets ────────────────────────
+python-dotenv==1.0.1
+
+# ── Image handling (citizen photo upload) ───
+Pillow==11.0.0
+
+# ── Backend / DB (optional API layer) ───────
 fastapi==0.115.5
 uvicorn==0.32.1
 pydantic==2.10.3
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
-pandas==2.2.3
-numpy==2.1.3
-scikit-learn==1.5.2
-xgboost==2.1.3
-joblib==1.4.2
-plotly==5.24.1
-folium==0.18.0
-streamlit-folium==0.23.2
-requests==2.32.3
-httpx==0.28.1
-python-dotenv==1.0.1
+python-multipart==0.0.20
 passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.3.0
-python-multipart==0.0.20
-Pillow==11.0.0
-openai==1.58.1
-pytest==8.3.4
-pytest-asyncio==0.24.0
-httpx==0.28.1
-colorlog==6.9.0
-rich==13.9.4

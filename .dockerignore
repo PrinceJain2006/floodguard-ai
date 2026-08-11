@@ -1,0 +1,45 @@
+# Docker build exclusions — keep image lean and secure
+# These files are excluded from the Docker build context
+
+# Git
+.git
+.gitignore
+
+# Secrets — NEVER bake into image
+.env
+*.env
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+*.egg-info
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (generated at runtime)
+logs/*.log
+
+# Tests (not needed in production image)
+tests/
+
+# Docs
+*.md
+ARCHITECTURE.md
+DEMO_SCRIPT.md
+
+# Local DB
+*.db
+*.sqlite3

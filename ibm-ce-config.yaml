@@ -1,0 +1,72 @@
+# FloodGuard AI — IBM Cloud Code Engine
+# Manual deployment steps and configuration reference
+# Use this alongside ibm-ce-deploy.sh
+
+## APPLICATION DETAILS
+app_name: floodguard-ai
+github_repo: https://github.com/PrinceJain2006/floodguard-ai
+branch: main
+dockerfile: Dockerfile
+entry_command: ./start.sh
+port: 8080
+min_instances: 0
+max_instances: 3
+cpu: 1 vCPU
+memory: 4 GB
+
+## REQUIRED ENVIRONMENT VARIABLES / SECRETS
+# Set these in IBM Cloud Code Engine as a Secret named: floodguard-secrets
+WATSONX_API_KEY=<your_watsonx_api_key>
+WATSONX_PROJECT_ID=<your_watsonx_project_id>
+WATSONX_URL=https://us-south.ml.cloud.ibm.com
+DEMO_MODE=true
+APP_NAME=FloodGuard AI
+APP_VERSION=2.0.0
+JWT_SECRET_KEY=<generate_random_32char_hex>
+
+## OPTIONAL
+OPENWEATHER_API_KEY=
+PORT=8080
+
+## IBM CLOUD CLI COMMANDS (manual / step-by-step)
+# 1. Login
+ibmcloud login --sso
+ibmcloud target -r us-south -g Default
+
+# 2. Install Code Engine plugin (once)
+ibmcloud plugin install code-engine
+
+# 3. Create / select project
+ibmcloud ce project create --name floodguard-ai
+ibmcloud ce project select --name floodguard-ai
+
+# 4. Create secret
+ibmcloud ce secret create --name floodguard-secrets \
+  --from-literal WATSONX_API_KEY=YOUR_KEY \
+  --from-literal WATSONX_PROJECT_ID=YOUR_PROJECT_ID \
+  --from-literal WATSONX_URL=https://us-south.ml.cloud.ibm.com \
+  --from-literal DEMO_MODE=true \
+  --from-literal JWT_SECRET_KEY=change-this-to-random-string
+
+# 5. Deploy from GitHub
+ibmcloud ce app create \
+  --name floodguard-ai \
+  --build-source https://github.com/PrinceJain2006/floodguard-ai \
+  --build-git-branch main \
+  --dockerfile Dockerfile \
+  --env-from-secret floodguard-secrets \
+  --port 8080 \
+  --min-scale 0 \
+  --max-scale 3 \
+  --cpu 1 \
+  --memory 4G \
+  --wait
+
+# 6. Get URL
+ibmcloud ce app get --name floodguard-ai
+
+# 7. View logs
+ibmcloud ce app logs --name floodguard-ai --follow
+
+# 8. Update (redeploy after code push)
+ibmcloud ce app update --name floodguard-ai --wait

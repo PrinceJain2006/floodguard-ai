@@ -7,9 +7,13 @@ textColor = "#e2e8f0"
 font = "sans serif"
 
 [server]
-maxUploadSize = 50
-enableCORS = false
+# IBM Cloud Code Engine provides PORT env var — read dynamically in start.sh
+# headless=true required for containerised/cloud deployment
 headless = true
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 50
 
 [browser]
 gatherUsageStats = false
+serverAddress = "0.0.0.0"
