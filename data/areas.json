@@ -1,0 +1,216 @@
+{
+  "Ahmedabad": [
+    {
+      "name": "Maninagar",
+      "lat": 22.9908,
+      "lon": 72.6084,
+      "elevation": 49,
+      "density": 0.9
+    },
+    {
+      "name": "Navrangpura",
+      "lat": 23.0395,
+      "lon": 72.5616,
+      "elevation": 53,
+      "density": 0.7
+    },
+    {
+      "name": "Naroda",
+      "lat": 23.0892,
+      "lon": 72.6571,
+      "elevation": 47,
+      "density": 0.85
+    },
+    {
+      "name": "Vatva",
+      "lat": 22.9518,
+      "lon": 72.6401,
+      "elevation": 45,
+      "density": 0.75
+    },
+    {
+      "name": "Gota",
+      "lat": 23.1187,
+      "lon": 72.5574,
+      "elevation": 55,
+      "density": 0.6
+    },
+    {
+      "name": "Chandkheda",
+      "lat": 23.1169,
+      "lon": 72.5877,
+      "elevation": 56,
+      "density": 0.65
+    },
+    {
+      "name": "Bopal",
+      "lat": 23.0239,
+      "lon": 72.4705,
+      "elevation": 58,
+      "density": 0.55
+    },
+    {
+      "name": "Satellite",
+      "lat": 23.0218,
+      "lon": 72.526,
+      "elevation": 54,
+      "density": 0.72
+    },
+    {
+      "name": "Vejalpur",
+      "lat": 22.9995,
+      "lon": 72.5191,
+      "elevation": 51,
+      "density": 0.68
+    },
+    {
+      "name": "Isanpur",
+      "lat": 22.9726,
+      "lon": 72.6226,
+      "elevation": 46,
+      "density": 0.88
+    },
+    {
+      "name": "Nikol",
+      "lat": 23.0457,
+      "lon": 72.6481,
+      "elevation": 47,
+      "density": 0.83
+    },
+    {
+      "name": "Odhav",
+      "lat": 23.0057,
+      "lon": 72.6601,
+      "elevation": 46,
+      "density": 0.78
+    },
+    {
+      "name": "Piplaj",
+      "lat": 22.9478,
+      "lon": 72.5641,
+      "elevation": 48,
+      "density": 0.65
+    },
+    {
+      "name": "Ranip",
+      "lat": 23.0751,
+      "lon": 72.5627,
+      "elevation": 52,
+      "density": 0.7
+    },
+    {
+      "name": "Ambawadi",
+      "lat": 23.0278,
+      "lon": 72.5521,
+      "elevation": 53,
+      "density": 0.72
+    }
+  ],
+  "Surat": [
+    {
+      "name": "Adajan",
+      "lat": 21.2063,
+      "lon": 72.806,
+      "elevation": 12,
+      "density": 0.82
+    },
+    {
+      "name": "Katargam",
+      "lat": 21.2253,
+      "lon": 72.8317,
+      "elevation": 10,
+      "density": 0.9
+    },
+    {
+      "name": "Rander",
+      "lat": 21.2371,
+      "lon": 72.7734,
+      "elevation": 11,
+      "density": 0.78
+    },
+    {
+      "name": "Udhna",
+      "lat": 21.168,
+      "lon": 72.8501,
+      "elevation": 9,
+      "density": 0.87
+    },
+    {
+      "name": "Limbayat",
+      "lat": 21.1817,
+      "lon": 72.8611,
+      "elevation": 10,
+      "density": 0.85
+    },
+    {
+      "name": "Vesu",
+      "lat": 21.1553,
+      "lon": 72.7888,
+      "elevation": 13,
+      "density": 0.65
+    },
+    {
+      "name": "Pal",
+      "lat": 21.182,
+      "lon": 72.7791,
+      "elevation": 11,
+      "density": 0.7
+    },
+    {
+      "name": "Varachha",
+      "lat": 21.21,
+      "lon": 72.8606,
+      "elevation": 10,
+      "density": 0.92
+    },
+    {
+      "name": "Bhatar",
+      "lat": 21.2326,
+      "lon": 72.8591,
+      "elevation": 11,
+      "density": 0.75
+    },
+    {
+      "name": "Piplod",
+      "lat": 21.1618,
+      "lon": 72.805,
+      "elevation": 13,
+      "density": 0.6
+    },
+    {
+      "name": "Althan",
+      "lat": 21.1446,
+      "lon": 72.7952,
+      "elevation": 14,
+      "density": 0.55
+    },
+    {
+      "name": "Sarthana",
+      "lat": 21.2302,
+      "lon": 72.8813,
+      "elevation": 9,
+      "density": 0.88
+    },
+    {
+      "name": "Dindoli",
+      "lat": 21.1451,
+      "lon": 72.8388,
+      "elevation": 10,
+      "density": 0.8
+    },
+    {
+      "name": "Kamrej",
+      "lat": 21.2638,
+      "lon": 72.9278,
+      "elevation": 12,
+      "density": 0.6
+    },
+    {
+      "name": "Sachin",
+      "lat": 21.0916,
+      "lon": 72.8773,
+      "elevation": 8,
+      "density": 0.7
+    }
+  ]
+}

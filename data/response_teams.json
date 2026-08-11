@@ -1,0 +1,302 @@
+[
+  {
+    "team_id": "TEAM-001",
+    "name": "Ahmedabad Pump Team #1",
+    "city": "Ahmedabad",
+    "team_type": "pump_team",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-92505473236",
+    "capacity": 12
+  },
+  {
+    "team_id": "TEAM-002",
+    "name": "Ahmedabad Pump Team #2",
+    "city": "Ahmedabad",
+    "team_type": "pump_team",
+    "status": "DEPLOYED",
+    "current_area": null,
+    "contact": "+91-96504680911",
+    "capacity": 14
+  },
+  {
+    "team_id": "TEAM-003",
+    "name": "Ahmedabad Pump Team #3",
+    "city": "Ahmedabad",
+    "team_type": "pump_team",
+    "status": "OFF_DUTY",
+    "current_area": null,
+    "contact": "+91-94023445846",
+    "capacity": 16
+  },
+  {
+    "team_id": "TEAM-004",
+    "name": "Ahmedabad Pump Team #4",
+    "city": "Ahmedabad",
+    "team_type": "pump_team",
+    "status": "OFF_DUTY",
+    "current_area": null,
+    "contact": "+91-98763540899",
+    "capacity": 16
+  },
+  {
+    "team_id": "TEAM-005",
+    "name": "Ahmedabad Emergency #5",
+    "city": "Ahmedabad",
+    "team_type": "emergency",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-96279095060",
+    "capacity": 5
+  },
+  {
+    "team_id": "TEAM-006",
+    "name": "Ahmedabad Emergency #6",
+    "city": "Ahmedabad",
+    "team_type": "emergency",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-99289047625",
+    "capacity": 7
+  },
+  {
+    "team_id": "TEAM-007",
+    "name": "Ahmedabad Emergency #7",
+    "city": "Ahmedabad",
+    "team_type": "emergency",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-99150456675",
+    "capacity": 13
+  },
+  {
+    "team_id": "TEAM-008",
+    "name": "Ahmedabad Drainage #8",
+    "city": "Ahmedabad",
+    "team_type": "drainage",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-97747841913",
+    "capacity": 9
+  },
+  {
+    "team_id": "TEAM-009",
+    "name": "Ahmedabad Drainage #9",
+    "city": "Ahmedabad",
+    "team_type": "drainage",
+    "status": "DEPLOYED",
+    "current_area": null,
+    "contact": "+91-91011314934",
+    "capacity": 9
+  },
+  {
+    "team_id": "TEAM-010",
+    "name": "Ahmedabad Drainage #10",
+    "city": "Ahmedabad",
+    "team_type": "drainage",
+    "status": "OFF_DUTY",
+    "current_area": null,
+    "contact": "+91-91620613757",
+    "capacity": 19
+  },
+  {
+    "team_id": "TEAM-011",
+    "name": "Ahmedabad Traffic #11",
+    "city": "Ahmedabad",
+    "team_type": "traffic",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-91986685732",
+    "capacity": 9
+  },
+  {
+    "team_id": "TEAM-012",
+    "name": "Ahmedabad Traffic #12",
+    "city": "Ahmedabad",
+    "team_type": "traffic",
+    "status": "DEPLOYED",
+    "current_area": null,
+    "contact": "+91-99844199907",
+    "capacity": 10
+  },
+  {
+    "team_id": "TEAM-013",
+    "name": "Ahmedabad Traffic #13",
+    "city": "Ahmedabad",
+    "team_type": "traffic",
+    "status": "OFF_DUTY",
+    "current_area": null,
+    "contact": "+91-98461221121",
+    "capacity": 5
+  },
+  {
+    "team_id": "TEAM-014",
+    "name": "Ahmedabad Traffic #14",
+    "city": "Ahmedabad",
+    "team_type": "traffic",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-92512317906",
+    "capacity": 6
+  },
+  {
+    "team_id": "TEAM-015",
+    "name": "Ahmedabad Rapid Response #15",
+    "city": "Ahmedabad",
+    "team_type": "rapid_response",
+    "status": "STANDBY",
+    "current_area": null,
+    "contact": "+91-91492370533",
+    "capacity": 14
+  },
+  {
+    "team_id": "TEAM-016",
+    "name": "Ahmedabad Rapid Response #16",
+    "city": "Ahmedabad",
+    "team_type": "rapid_response",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-98745711870",
+    "capacity": 20
+  },
+  {
+    "team_id": "TEAM-017",
+    "name": "Ahmedabad Rapid Response #17",
+    "city": "Ahmedabad",
+    "team_type": "rapid_response",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-98055614319",
+    "capacity": 15
+  },
+  {
+    "team_id": "TEAM-018",
+    "name": "Surat Pump Team #18",
+    "city": "Surat",
+    "team_type": "pump_team",
+    "status": "STANDBY",
+    "current_area": null,
+    "contact": "+91-92687321988",
+    "capacity": 20
+  },
+  {
+    "team_id": "TEAM-019",
+    "name": "Surat Pump Team #19",
+    "city": "Surat",
+    "team_type": "pump_team",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-99264233186",
+    "capacity": 14
+  },
+  {
+    "team_id": "TEAM-020",
+    "name": "Surat Emergency #20",
+    "city": "Surat",
+    "team_type": "emergency",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-97641834140",
+    "capacity": 20
+  },
+  {
+    "team_id": "TEAM-021",
+    "name": "Surat Emergency #21",
+    "city": "Surat",
+    "team_type": "emergency",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-95041674054",
+    "capacity": 13
+  },
+  {
+    "team_id": "TEAM-022",
+    "name": "Surat Drainage #22",
+    "city": "Surat",
+    "team_type": "drainage",
+    "status": "DEPLOYED",
+    "current_area": null,
+    "contact": "+91-95680521392",
+    "capacity": 14
+  },
+  {
+    "team_id": "TEAM-023",
+    "name": "Surat Drainage #23",
+    "city": "Surat",
+    "team_type": "drainage",
+    "status": "OFF_DUTY",
+    "current_area": null,
+    "contact": "+91-94901498776",
+    "capacity": 18
+  },
+  {
+    "team_id": "TEAM-024",
+    "name": "Surat Drainage #24",
+    "city": "Surat",
+    "team_type": "drainage",
+    "status": "DEPLOYED",
+    "current_area": null,
+    "contact": "+91-99971463034",
+    "capacity": 7
+  },
+  {
+    "team_id": "TEAM-025",
+    "name": "Surat Drainage #25",
+    "city": "Surat",
+    "team_type": "drainage",
+    "status": "DEPLOYED",
+    "current_area": null,
+    "contact": "+91-93314590016",
+    "capacity": 20
+  },
+  {
+    "team_id": "TEAM-026",
+    "name": "Surat Traffic #26",
+    "city": "Surat",
+    "team_type": "traffic",
+    "status": "AVAILABLE",
+    "current_area": null,
+    "contact": "+91-94014120734",
+    "capacity": 19
+  },
+  {
+    "team_id": "TEAM-027",
+    "name": "Surat Traffic #27",
+    "city": "Surat",
+    "team_type": "traffic",
+    "status": "STANDBY",
+    "current_area": null,
+    "contact": "+91-93740507573",
+    "capacity": 20
+  },
+  {
+    "team_id": "TEAM-028",
+    "name": "Surat Traffic #28",
+    "city": "Surat",
+    "team_type": "traffic",
+    "status": "STANDBY",
+    "current_area": null,
+    "contact": "+91-94818665669",
+    "capacity": 13
+  },
+  {
+    "team_id": "TEAM-029",
+    "name": "Surat Rapid Response #29",
+    "city": "Surat",
+    "team_type": "rapid_response",
+    "status": "OFF_DUTY",
+    "current_area": null,
+    "contact": "+91-91861138302",
+    "capacity": 17
+  },
+  {
+    "team_id": "TEAM-030",
+    "name": "Surat Rapid Response #30",
+    "city": "Surat",
+    "team_type": "rapid_response",
+    "status": "STANDBY",
+    "current_area": null,
+    "contact": "+91-97706567268",
+    "capacity": 14
+  }
+]

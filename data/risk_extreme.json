@@ -1,0 +1,772 @@
+[
+  {
+    "prediction_id": "PRED-0001",
+    "city": "Ahmedabad",
+    "area": "Maninagar",
+    "latitude": 22.98849,
+    "longitude": 72.60775,
+    "risk_score": 76.4,
+    "risk_level": "CRITICAL",
+    "confidence": 0.75,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 7 events/year",
+      "High road density — surface runoff risk",
+      "26 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.391,
+      "drainage_capacity": 0.16,
+      "historical_flood_freq": 0.156,
+      "citizen_reports": 0.124,
+      "elevation": 0.05
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0002",
+    "city": "Ahmedabad",
+    "area": "Navrangpura",
+    "latitude": 23.04196,
+    "longitude": 72.5583,
+    "risk_score": 70.1,
+    "risk_level": "HIGH",
+    "confidence": 0.83,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 4 events/year",
+      "14 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.313,
+      "drainage_capacity": 0.196,
+      "historical_flood_freq": 0.18,
+      "citizen_reports": 0.139,
+      "elevation": 0.075
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0003",
+    "city": "Ahmedabad",
+    "area": "Naroda",
+    "latitude": 23.09151,
+    "longitude": 72.66084,
+    "risk_score": 92.8,
+    "risk_level": "CRITICAL",
+    "confidence": 0.81,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 8 events/year",
+      "High road density — surface runoff risk"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.325,
+      "drainage_capacity": 0.166,
+      "historical_flood_freq": 0.158,
+      "citizen_reports": 0.098,
+      "elevation": 0.068
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0004",
+    "city": "Ahmedabad",
+    "area": "Vatva",
+    "latitude": 22.9533,
+    "longitude": 72.64051,
+    "risk_score": 57.8,
+    "risk_level": "HIGH",
+    "confidence": 0.9,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "Historical flooding frequency: 2 events/year",
+      "42 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.342,
+      "drainage_capacity": 0.238,
+      "historical_flood_freq": 0.175,
+      "citizen_reports": 0.11,
+      "elevation": 0.073
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0005",
+    "city": "Ahmedabad",
+    "area": "Gota",
+    "latitude": 23.12051,
+    "longitude": 72.55614,
+    "risk_score": 58.1,
+    "risk_level": "HIGH",
+    "confidence": 0.92,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "Historical flooding frequency: 3 events/year",
+      "12 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.254,
+      "drainage_capacity": 0.17,
+      "historical_flood_freq": 0.164,
+      "citizen_reports": 0.126,
+      "elevation": 0.086
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0006",
+    "city": "Ahmedabad",
+    "area": "Chandkheda",
+    "latitude": 23.12149,
+    "longitude": 72.58753,
+    "risk_score": 18.4,
+    "risk_level": "LOW",
+    "confidence": 0.8,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "44 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Continue monitoring. No immediate action required.",
+    "feature_importance": {
+      "rainfall_1h": 0.354,
+      "drainage_capacity": 0.241,
+      "historical_flood_freq": 0.113,
+      "citizen_reports": 0.134,
+      "elevation": 0.098
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0007",
+    "city": "Ahmedabad",
+    "area": "Bopal",
+    "latitude": 23.02028,
+    "longitude": 72.47459,
+    "risk_score": 87.4,
+    "risk_level": "CRITICAL",
+    "confidence": 0.76,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 2 events/year",
+      "38 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.282,
+      "drainage_capacity": 0.181,
+      "historical_flood_freq": 0.199,
+      "citizen_reports": 0.141,
+      "elevation": 0.053
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0008",
+    "city": "Ahmedabad",
+    "area": "Satellite",
+    "latitude": 23.0172,
+    "longitude": 72.52753,
+    "risk_score": 12.0,
+    "risk_level": "LOW",
+    "confidence": 0.91,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "41 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Continue monitoring. No immediate action required.",
+    "feature_importance": {
+      "rainfall_1h": 0.377,
+      "drainage_capacity": 0.212,
+      "historical_flood_freq": 0.129,
+      "citizen_reports": 0.127,
+      "elevation": 0.09
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0009",
+    "city": "Ahmedabad",
+    "area": "Vejalpur",
+    "latitude": 22.99993,
+    "longitude": 72.52295,
+    "risk_score": 64.0,
+    "risk_level": "HIGH",
+    "confidence": 0.84,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Historical flooding frequency: 3 events/year"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.25,
+      "drainage_capacity": 0.209,
+      "historical_flood_freq": 0.144,
+      "citizen_reports": 0.126,
+      "elevation": 0.102
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0010",
+    "city": "Ahmedabad",
+    "area": "Isanpur",
+    "latitude": 22.96831,
+    "longitude": 72.61827,
+    "risk_score": 69.1,
+    "risk_level": "HIGH",
+    "confidence": 0.83,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Historical flooding frequency: 2 events/year",
+      "High road density — surface runoff risk",
+      "12 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.329,
+      "drainage_capacity": 0.216,
+      "historical_flood_freq": 0.182,
+      "citizen_reports": 0.13,
+      "elevation": 0.097
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0011",
+    "city": "Ahmedabad",
+    "area": "Nikol",
+    "latitude": 23.04254,
+    "longitude": 72.64732,
+    "risk_score": 61.4,
+    "risk_level": "HIGH",
+    "confidence": 0.79,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Historical flooding frequency: 5 events/year",
+      "High road density — surface runoff risk",
+      "35 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.383,
+      "drainage_capacity": 0.166,
+      "historical_flood_freq": 0.124,
+      "citizen_reports": 0.144,
+      "elevation": 0.066
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.974150"
+  },
+  {
+    "prediction_id": "PRED-0012",
+    "city": "Ahmedabad",
+    "area": "Odhav",
+    "latitude": 23.01043,
+    "longitude": 72.65815,
+    "risk_score": 23.5,
+    "risk_level": "LOW",
+    "confidence": 0.74,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [],
+    "recommended_action": "Continue monitoring. No immediate action required.",
+    "feature_importance": {
+      "rainfall_1h": 0.319,
+      "drainage_capacity": 0.223,
+      "historical_flood_freq": 0.196,
+      "citizen_reports": 0.101,
+      "elevation": 0.101
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0013",
+    "city": "Ahmedabad",
+    "area": "Piplaj",
+    "latitude": 22.94347,
+    "longitude": 72.56871,
+    "risk_score": 14.2,
+    "risk_level": "LOW",
+    "confidence": 0.91,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [],
+    "recommended_action": "Continue monitoring. No immediate action required.",
+    "feature_importance": {
+      "rainfall_1h": 0.294,
+      "drainage_capacity": 0.245,
+      "historical_flood_freq": 0.164,
+      "citizen_reports": 0.102,
+      "elevation": 0.094
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0014",
+    "city": "Ahmedabad",
+    "area": "Ranip",
+    "latitude": 23.08008,
+    "longitude": 72.56028,
+    "risk_score": 80.2,
+    "risk_level": "CRITICAL",
+    "confidence": 0.89,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 8 events/year"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.385,
+      "drainage_capacity": 0.237,
+      "historical_flood_freq": 0.188,
+      "citizen_reports": 0.095,
+      "elevation": 0.114
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0015",
+    "city": "Ahmedabad",
+    "area": "Ambawadi",
+    "latitude": 23.02965,
+    "longitude": 72.5482,
+    "risk_score": 78.1,
+    "risk_level": "CRITICAL",
+    "confidence": 0.8,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 5 events/year",
+      "7 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.337,
+      "drainage_capacity": 0.241,
+      "historical_flood_freq": 0.139,
+      "citizen_reports": 0.088,
+      "elevation": 0.119
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0016",
+    "city": "Surat",
+    "area": "Adajan",
+    "latitude": 21.20192,
+    "longitude": 72.8104,
+    "risk_score": 7.6,
+    "risk_level": "LOW",
+    "confidence": 0.74,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High road density — surface runoff risk",
+      "27 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Continue monitoring. No immediate action required.",
+    "feature_importance": {
+      "rainfall_1h": 0.382,
+      "drainage_capacity": 0.179,
+      "historical_flood_freq": 0.174,
+      "citizen_reports": 0.144,
+      "elevation": 0.095
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0017",
+    "city": "Surat",
+    "area": "Katargam",
+    "latitude": 21.22908,
+    "longitude": 72.83007,
+    "risk_score": 76.7,
+    "risk_level": "CRITICAL",
+    "confidence": 0.96,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 8 events/year",
+      "High road density — surface runoff risk",
+      "23 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.302,
+      "drainage_capacity": 0.222,
+      "historical_flood_freq": 0.113,
+      "citizen_reports": 0.141,
+      "elevation": 0.12
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0018",
+    "city": "Surat",
+    "area": "Rander",
+    "latitude": 21.23472,
+    "longitude": 72.77,
+    "risk_score": 54.4,
+    "risk_level": "HIGH",
+    "confidence": 0.75,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "Historical flooding frequency: 6 events/year",
+      "9 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.313,
+      "drainage_capacity": 0.242,
+      "historical_flood_freq": 0.181,
+      "citizen_reports": 0.1,
+      "elevation": 0.111
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0019",
+    "city": "Surat",
+    "area": "Udhna",
+    "latitude": 21.16825,
+    "longitude": 72.84756,
+    "risk_score": 67.1,
+    "risk_level": "HIGH",
+    "confidence": 0.87,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Historical flooding frequency: 3 events/year",
+      "High road density — surface runoff risk"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.324,
+      "drainage_capacity": 0.22,
+      "historical_flood_freq": 0.137,
+      "citizen_reports": 0.088,
+      "elevation": 0.118
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0020",
+    "city": "Surat",
+    "area": "Limbayat",
+    "latitude": 21.18022,
+    "longitude": 72.86189,
+    "risk_score": 96.1,
+    "risk_level": "CRITICAL",
+    "confidence": 0.81,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 3 events/year",
+      "High road density — surface runoff risk"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.333,
+      "drainage_capacity": 0.228,
+      "historical_flood_freq": 0.121,
+      "citizen_reports": 0.117,
+      "elevation": 0.085
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0021",
+    "city": "Surat",
+    "area": "Vesu",
+    "latitude": 21.15413,
+    "longitude": 72.78819,
+    "risk_score": 89.0,
+    "risk_level": "CRITICAL",
+    "confidence": 0.94,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 4 events/year"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.342,
+      "drainage_capacity": 0.225,
+      "historical_flood_freq": 0.175,
+      "citizen_reports": 0.124,
+      "elevation": 0.063
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0022",
+    "city": "Surat",
+    "area": "Pal",
+    "latitude": 21.18219,
+    "longitude": 72.77882,
+    "risk_score": 61.9,
+    "risk_level": "HIGH",
+    "confidence": 0.86,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Historical flooding frequency: 4 events/year"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.303,
+      "drainage_capacity": 0.213,
+      "historical_flood_freq": 0.119,
+      "citizen_reports": 0.103,
+      "elevation": 0.069
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0023",
+    "city": "Surat",
+    "area": "Varachha",
+    "latitude": 21.20922,
+    "longitude": 72.85711,
+    "risk_score": 87.0,
+    "risk_level": "CRITICAL",
+    "confidence": 0.83,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 3 events/year",
+      "High road density — surface runoff risk",
+      "5 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.342,
+      "drainage_capacity": 0.232,
+      "historical_flood_freq": 0.159,
+      "citizen_reports": 0.145,
+      "elevation": 0.083
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0024",
+    "city": "Surat",
+    "area": "Bhatar",
+    "latitude": 21.22895,
+    "longitude": 72.85765,
+    "risk_score": 20.8,
+    "risk_level": "LOW",
+    "confidence": 0.87,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "29 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Continue monitoring. No immediate action required.",
+    "feature_importance": {
+      "rainfall_1h": 0.338,
+      "drainage_capacity": 0.227,
+      "historical_flood_freq": 0.15,
+      "citizen_reports": 0.085,
+      "elevation": 0.094
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0025",
+    "city": "Surat",
+    "area": "Piplod",
+    "latitude": 21.16354,
+    "longitude": 72.80718,
+    "risk_score": 71.6,
+    "risk_level": "HIGH",
+    "confidence": 0.87,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 5 events/year",
+      "18 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.372,
+      "drainage_capacity": 0.193,
+      "historical_flood_freq": 0.103,
+      "citizen_reports": 0.085,
+      "elevation": 0.116
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0026",
+    "city": "Surat",
+    "area": "Althan",
+    "latitude": 21.14645,
+    "longitude": 72.79598,
+    "risk_score": 59.7,
+    "risk_level": "HIGH",
+    "confidence": 0.88,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "Historical flooding frequency: 7 events/year"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.261,
+      "drainage_capacity": 0.176,
+      "historical_flood_freq": 0.163,
+      "citizen_reports": 0.103,
+      "elevation": 0.075
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0027",
+    "city": "Surat",
+    "area": "Sarthana",
+    "latitude": 21.22783,
+    "longitude": 72.88507,
+    "risk_score": 60.4,
+    "risk_level": "HIGH",
+    "confidence": 0.92,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Historical flooding frequency: 8 events/year",
+      "High road density — surface runoff risk"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.263,
+      "drainage_capacity": 0.201,
+      "historical_flood_freq": 0.11,
+      "citizen_reports": 0.143,
+      "elevation": 0.114
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0028",
+    "city": "Surat",
+    "area": "Dindoli",
+    "latitude": 21.1486,
+    "longitude": 72.83627,
+    "risk_score": 76.6,
+    "risk_level": "CRITICAL",
+    "confidence": 0.87,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Low drainage capacity in this zone",
+      "Historical flooding frequency: 4 events/year"
+    ],
+    "recommended_action": "Immediate deployment of emergency response. Evacuate low-lying areas.",
+    "feature_importance": {
+      "rainfall_1h": 0.376,
+      "drainage_capacity": 0.163,
+      "historical_flood_freq": 0.146,
+      "citizen_reports": 0.121,
+      "elevation": 0.084
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0029",
+    "city": "Surat",
+    "area": "Kamrej",
+    "latitude": 21.26666,
+    "longitude": 72.92461,
+    "risk_score": 52.4,
+    "risk_level": "HIGH",
+    "confidence": 0.8,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "Historical flooding frequency: 6 events/year"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.393,
+      "drainage_capacity": 0.218,
+      "historical_flood_freq": 0.113,
+      "citizen_reports": 0.11,
+      "elevation": 0.108
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  },
+  {
+    "prediction_id": "PRED-0030",
+    "city": "Surat",
+    "area": "Sachin",
+    "latitude": 21.09471,
+    "longitude": 72.87803,
+    "risk_score": 62.2,
+    "risk_level": "HIGH",
+    "confidence": 0.79,
+    "predicted_time_window": "Next 0-3 hours",
+    "main_reasons": [
+      "High rainfall intensity in last 3 hours",
+      "Historical flooding frequency: 3 events/year",
+      "44 citizen reports in last 2 hours"
+    ],
+    "recommended_action": "Deploy pump team. Inspect nearby drains. Issue public advisory.",
+    "feature_importance": {
+      "rainfall_1h": 0.346,
+      "drainage_capacity": 0.167,
+      "historical_flood_freq": 0.171,
+      "citizen_reports": 0.122,
+      "elevation": 0.057
+    },
+    "scenario": "EXTREME",
+    "created_at": "2026-08-11T07:23:07.975299"
+  }
+]
