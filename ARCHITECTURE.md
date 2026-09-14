@@ -32,7 +32,7 @@
 │  │                              │                                        │   │
 │  │  ┌───────────────────────────▼──────────────────────────────────┐    │   │
 │  │  │              🧠 IBM Granite Reasoning Layer                   │    │   │
-│  │  │   ibm/granite-3-8b-instruct via WatsonX API                  │    │   │
+│  │  │   ibm/granite-4-h-small via WatsonX API                  │    │   │
 │  │  │   · Report classification  · Situation reports               │    │   │
 │  │  │   · NL explanations        · Query answering                 │    │   │
 │  │  └──────────────────────────────────────────────────────────────┘    │   │

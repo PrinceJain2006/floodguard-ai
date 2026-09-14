@@ -139,7 +139,7 @@ st.markdown("""
     <div>
         <div style="font-weight:700;color:#e2e8f0;font-size:0.9rem">IBM Granite Integration</div>
         <div style="color:#94a3b8;font-size:0.8rem">
-            Using <strong>ibm/granite-3-8b-instruct</strong> via WatsonX for multilingual report understanding, 
+            Using <strong>ibm/granite-4-h-small</strong> via WatsonX for multilingual report understanding,
             incident classification, situation reports, explanation generation, and natural language queries.
             Configure <code>WATSONX_API_KEY</code> in <code>.env</code> to enable live Granite responses.
         </div>

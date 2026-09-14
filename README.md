@@ -84,7 +84,7 @@ DASHBOARD + ALERTS + SITUATION REPORT
 
 ## IBM Granite Integration
 
-Granite (`ibm/granite-3-8b-instruct`) via WatsonX is used for:
+Granite (`ibm/granite-4-h-small`) via WatsonX is used for:
 
 | Feature | Granite Role |
 |---------|-------------|

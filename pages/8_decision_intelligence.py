@@ -71,10 +71,11 @@ audit    = get_audit_trail()
 # ──────────────────────────────────────────────────────────────────────────────
 def _compute_fusions(s: dict) -> list[dict]:
     return fuse_all_zones(
-        risk_predictions  = s.get("risk_predictions", []),
-        drain_records     = s.get("raw_drains",        []),
-        report_records    = s.get("raw_reports",        []),
+        risk_predictions  = s.get("risk_predictions",   []),
+        drain_records     = s.get("raw_drains",          []),
+        report_records    = s.get("raw_reports",          []),
         incident_records  = s.get("drain_analysis", {}).get("scored_drains", []),
+        live_weather_records = s.get("live_weather_records", []),
     )
 
 

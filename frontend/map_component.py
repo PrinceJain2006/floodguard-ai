@@ -1,11 +1,43 @@
 """
-FloodGuard AI — Interactive Geospatial Map
-Folium-based map with flood risk zones, drains, reports, and teams.
-"""
-import folium
-import pandas as pd
-from datetime import datetime
+FloodGuard AI — Digital Twin Map Component
+===========================================
+Folium-based interactive map for Ahmedabad & Surat, Gujarat, India.
 
+SCOPE: This map is exclusively scoped to Ahmedabad and Surat as per the
+hackathon challenge "Smart Urban Flooding & Drainage Management System
+for Ahmedabad–Surat". Gujarat geography is used only as minimal visual
+context. All risk zones, drainage data, citizen reports, and response
+intelligence are associated only with Ahmedabad or Surat.
+
+Basemap: OpenStreetMap (no API key required).
+No CartoDB dependency.
+
+Layer structure:
+  • Predicted Flood Risk      (DEMO / ML-predicted)
+  • Weather Evidence          (DEMO / synthetic rainfall)
+  • Drainage Status           (DEMO / synthetic)
+  • Citizen Reports           (DEMO / synthetic)
+  • Response Teams            (DEMO / synthetic)
+
+City markers for Ahmedabad and Surat always visible.
+All data is DEMO/SIMULATED — clearly labeled.
+"""
+from __future__ import annotations
+
+import folium
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Scope constraint — ONLY Ahmedabad and Surat are in scope
+# ─────────────────────────────────────────────────────────────────────────────
+# Any data record whose "city" field is not one of these two cities is
+# silently excluded from the map. Gujarat coordinates are accepted for the
+# basemap context only — they do not imply the solution scope extends beyond
+# these two cities.
+_IN_SCOPE_CITIES = frozenset({"Ahmedabad", "Surat"})
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Color palettes
+# ─────────────────────────────────────────────────────────────────────────────
 RISK_COLORS = {
     "LOW":      "#22c55e",
     "MEDIUM":   "#eab308",
@@ -20,12 +52,83 @@ DRAIN_COLORS = {
     "LOW":      "#22c55e",
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Geography constants  (verified against seed_generator.py)
+# ─────────────────────────────────────────────────────────────────────────────
 CITY_CENTERS = {
     "Ahmedabad": [23.0225, 72.5714],
     "Surat":     [21.1702, 72.8311],
-    "All":       [22.2587, 71.1924],
+    # Midpoint that keeps both cities comfortably in frame
+    "All":       [22.25,   72.70],
 }
 
+DEFAULT_ZOOM = {
+    "Ahmedabad": 12,
+    "Surat":     12,
+    "All":       9,
+}
+
+# Gujarat bounding box — used for basemap context and coordinate sanity-check.
+# Accepting Gujarat-wide coordinates does NOT expand the solution scope;
+# all data markers are additionally filtered by _IN_SCOPE_CITIES.
+_LAT_MIN, _LAT_MAX = 20.0, 24.5
+_LON_MIN, _LON_MAX = 68.0, 75.5
+
+# Tight bounds encompassing both cities — always use this when city == "All"
+_AHMEDABAD_SURAT_BOUNDS = [
+    [20.90, 72.30],   # SW  (south of Surat, west of both)
+    [23.35, 73.10],   # NE  (north of Ahmedabad, east of both)
+]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _valid_coord(lat, lon) -> bool:
+    """Accept only coordinates within the Gujarat context region."""
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return False
+    return _LAT_MIN <= lat <= _LAT_MAX and _LON_MIN <= lon <= _LON_MAX
+
+
+def _in_scope_city(city: str) -> bool:
+    """
+    Return True only when the city is Ahmedabad or Surat.
+
+    This enforces the hackathon scope constraint: all risk zones, weather
+    evidence, drainage information, citizen reports, and response intelligence
+    shown on the map MUST be associated with Ahmedabad or Surat only.
+    Records tagged with any other city are silently excluded.
+    """
+    return city in _IN_SCOPE_CITIES
+
+
+def _city_marker(lat: float, lon: float, name: str) -> folium.Marker:
+    """
+    Permanent city pin marker — small coloured dot with a visible tooltip.
+    Replaced the old large opaque rectangular label which caused visual clutter.
+    """
+    dot_html = (
+        '<div style="'
+        'width:10px;height:10px;border-radius:50%;'
+        'background:#3b82f6;border:2px solid #fff;'
+        'box-shadow:0 0 4px rgba(59,130,246,0.7)'
+        '"></div>'
+    )
+    return folium.Marker(
+        location=[lat, lon],
+        tooltip=f"<b>{name}</b>",
+        icon=folium.DivIcon(html=dot_html, icon_size=(10, 10), icon_anchor=(5, 5)),
+        z_index_offset=1000,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main builder
+# ─────────────────────────────────────────────────────────────────────────────
 
 def build_flood_map(
     risk_predictions: list[dict],
@@ -33,128 +136,209 @@ def build_flood_map(
     report_data: list[dict],
     team_data: list[dict],
     city: str = "All",
-    zoom: int = 10,
+    zoom: int | None = None,
+    weather_data: list[dict] | None = None,
+    is_live: bool = False,
 ) -> folium.Map:
     """
-    Build a comprehensive Folium map for the FloodGuard dashboard.
-    """
-    center = CITY_CENTERS.get(city, CITY_CENTERS["All"])
-    if city == "All":
-        zoom = 8
+    Build the FloodGuard Digital Twin Map — Ahmedabad & Surat only.
 
+    SCOPE ENFORCEMENT: All five data layers (risk zones, weather evidence,
+    drainage, citizen reports, response teams) are filtered to records whose
+    "city" field matches "Ahmedabad" or "Surat" exclusively. Records tagged
+    with any other city are silently excluded before rendering.
+
+    • OpenStreetMap basemap only — no CartoDB, no API key required.
+    • City markers for Ahmedabad and Surat always pinned.
+    • Auto-fits to valid Gujarat markers when data is present.
+    • Invalid coordinates (outside Gujarat bounds) are silently skipped.
+    • weather_data: optional list of rainfall/weather dicts with keys
+      latitude, longitude, city, rainfall_1h, condition, source.
+    • is_live: when True the legend marks the weather layer as LIVE;
+      when False (default) it is marked DEMO to avoid false claims.
+    """
+    center     = CITY_CENTERS.get(city, CITY_CENTERS["All"])
+    zoom_start = zoom if zoom is not None else DEFAULT_ZOOM.get(city, 9)
+
+    # ── Base map — OpenStreetMap only, no API key required ────────────────
     m = folium.Map(
         location=center,
-        zoom_start=zoom,
-        tiles="CartoDB dark_matter",
-        attr="FloodGuard AI — DEMO DATA",
+        zoom_start=zoom_start,
+        tiles=None,
     )
 
-    # ── Layer groups ──────────────────────────
-    risk_layer   = folium.FeatureGroup(name="🌊 Flood Risk Zones", show=True)
-    drain_layer  = folium.FeatureGroup(name="🔧 Drainage Status", show=True)
-    report_layer = folium.FeatureGroup(name="📱 Citizen Reports", show=False)
-    team_layer   = folium.FeatureGroup(name="🚒 Response Teams", show=False)
+    # Single tile layer: standard OpenStreetMap
+    folium.TileLayer(
+        tiles="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        name="OpenStreetMap",
+        max_zoom=18,
+    ).add_to(m)
 
-    # ── Risk zones ────────────────────────────
+    # ── Permanent city markers (not toggleable) ───────────────────────────
+    if city in ("All", "Ahmedabad"):
+        _city_marker(23.0225, 72.5714, "📍 Ahmedabad").add_to(m)
+    if city in ("All", "Surat"):
+        _city_marker(21.1702, 72.8311, "📍 Surat").add_to(m)
+
+    # ── Layer groups — named to clearly distinguish live vs demo ─────────
+    risk_layer    = folium.FeatureGroup(name="🌊 Predicted Flood Risk [MODEL/DEMO]", show=True)
+    weather_layer = folium.FeatureGroup(name="🌧️ Live Weather Evidence",             show=True)
+    drain_layer   = folium.FeatureGroup(name="🔧 Drainage Status [DEMO]",            show=False)
+    report_layer  = folium.FeatureGroup(name="📱 Citizen Reports [DEMO]",            show=False)
+    team_layer    = folium.FeatureGroup(name="🚒 Response Teams [DEMO]",             show=False)
+
+    # Collect valid latlons from risk + drain markers for fit_bounds
+    bounds_latlons: list[list[float]] = []
+
+    # ── Predicted flood risk zones ────────────────────────────────────────
     for pred in risk_predictions:
+        # Scope guard: only Ahmedabad or Surat
+        if not _in_scope_city(pred.get("city", "")):
+            continue
         lat = pred.get("latitude")
         lon = pred.get("longitude")
-        if not lat or not lon:
+        if not _valid_coord(lat, lon):
             continue
+        lat, lon = float(lat), float(lon)
+        bounds_latlons.append([lat, lon])
 
-        level = pred.get("risk_level", "LOW")
-        score = pred.get("risk_score", 0)
-        color = RISK_COLORS.get(level, "#94a3b8")
-        radius = max(300, score * 25)  # Scale circle by risk score
+        level  = pred.get("risk_level", "LOW")
+        score  = pred.get("risk_score", 0)
+        color  = RISK_COLORS.get(level, "#94a3b8")
+        radius = max(250, min(score * 22, 2000))
 
-        # Circle overlay
         folium.Circle(
             location=[lat, lon],
             radius=radius,
             color=color,
             fill=True,
             fill_color=color,
-            fill_opacity=0.25,
-            weight=2,
-            tooltip=f"{pred.get('area')} — {level}",
+            fill_opacity=0.22,
+            weight=1.5,
+            tooltip=f"{pred.get('area')} — {level} ({score:.0f})",
         ).add_to(risk_layer)
 
-        # Marker
-        icon_html = f"""
-        <div style="background:{color};width:14px;height:14px;border-radius:50%;
-                    border:2px solid white;box-shadow:0 0 6px {color}"></div>
-        """
-        popup_html = _risk_popup(pred)
+        dot_html = (
+            f'<div style="'
+            f'background:{color};'
+            f'width:12px;height:12px;border-radius:50%;'
+            f'border:2px solid white;'
+            f'box-shadow:0 0 5px {color}'
+            f'"></div>'
+        )
         folium.Marker(
             location=[lat, lon],
-            popup=folium.Popup(popup_html, max_width=300),
-            tooltip=f"{pred.get('area')}, {pred.get('city')} — Risk: {level} ({score:.0f})",
-            icon=folium.DivIcon(
-                html=icon_html,
-                icon_size=(14, 14),
-                icon_anchor=(7, 7),
-            ),
+            popup=folium.Popup(_risk_popup(pred), max_width=280),
+            tooltip=f"{pred.get('area')}, {pred.get('city')} | {level} {score:.0f}/100",
+            icon=folium.DivIcon(html=dot_html, icon_size=(12, 12), icon_anchor=(6, 6)),
         ).add_to(risk_layer)
 
-    # ── Drains ────────────────────────────────
+    # ── Weather evidence layer ────────────────────────────────────────────
+    # Accepts either explicit weather_data or falls back to rainfall from
+    # risk_predictions (demo mode — clearly labeled)
+    weather_points = weather_data if weather_data else _weather_from_predictions(risk_predictions)
+    for wp in weather_points:
+        # Scope guard: only Ahmedabad or Surat
+        if not _in_scope_city(wp.get("city", "")):
+            continue
+        lat = wp.get("latitude")
+        lon = wp.get("longitude")
+        if not _valid_coord(lat, lon):
+            continue
+        lat, lon = float(lat), float(lon)
+
+        rain  = wp.get("rainfall_1h", 0)
+        cond  = wp.get("condition", "Rain")
+        src   = wp.get("source", "DEMO")
+        is_live = str(src).upper() not in ("DEMO", "SYNTHETIC", "SIMULATED")
+
+        w_color = (
+            "#ef4444" if rain >= 80 else
+            "#f97316" if rain >= 40 else
+            "#eab308" if rain >= 15 else
+            "#22c55e"
+        )
+        badge   = "LIVE" if is_live else "DEMO"
+        badge_c = "#22c55e" if is_live else "#7c3aed"
+
+        w_icon = (
+            f'<div style="'
+            f'background:rgba(15,17,23,0.75);'
+            f'border:1px solid {w_color};'
+            f'border-radius:4px;'
+            f'padding:2px 4px;'
+            f'font-size:10px;'
+            f'font-weight:700;'
+            f'color:{w_color};'
+            f'white-space:nowrap'
+            f'">🌧️ {rain:.0f}mm</div>'
+        )
+        folium.Marker(
+            location=[lat, lon],
+            popup=folium.Popup(_weather_popup(wp, is_live), max_width=240),
+            tooltip=f"{wp.get('city','?')} | Rain: {rain:.0f} mm/hr | {badge}",
+            icon=folium.DivIcon(html=w_icon, icon_size=(64, 20), icon_anchor=(32, 10)),
+        ).add_to(weather_layer)
+
+    # ── Drainage status ───────────────────────────────────────────────────
     for drain in drain_data:
+        # Scope guard: only Ahmedabad or Surat
+        if not _in_scope_city(drain.get("city", "")):
+            continue
         lat = drain.get("latitude")
         lon = drain.get("longitude")
-        if not lat or not lon:
+        if not _valid_coord(lat, lon):
             continue
+        lat, lon = float(lat), float(lon)
+        bounds_latlons.append([lat, lon])
 
         priority = drain.get("maintenance_priority", "LOW")
-        color = DRAIN_COLORS.get(priority, "#94a3b8")
-        status = drain.get("status", "OPERATIONAL")
-        icon_char = "⚠" if status == "BLOCKED" else "●"
+        color    = DRAIN_COLORS.get(priority, "#94a3b8")
+        status   = drain.get("status", "OPERATIONAL")
 
-        icon_html = f"""
-        <div style="background:{color};width:10px;height:10px;border-radius:2px;
-                    border:1px solid rgba(255,255,255,0.5);font-size:6px;
-                    display:flex;align-items:center;justify-content:center;color:white">
-        </div>
-        """
-        popup_html = _drain_popup(drain)
+        sq_html = (
+            f'<div style="'
+            f'background:{color};'
+            f'width:9px;height:9px;border-radius:2px;'
+            f'border:1px solid rgba(255,255,255,0.4)'
+            f'"></div>'
+        )
         folium.Marker(
             location=[lat, lon],
-            popup=folium.Popup(popup_html, max_width=260),
+            popup=folium.Popup(_drain_popup(drain), max_width=240),
             tooltip=f"Drain {drain.get('drain_id')} — {priority} ({status})",
-            icon=folium.DivIcon(
-                html=icon_html,
-                icon_size=(10, 10),
-                icon_anchor=(5, 5),
-            ),
+            icon=folium.DivIcon(html=sq_html, icon_size=(9, 9), icon_anchor=(4, 4)),
         ).add_to(drain_layer)
 
-    # ── Citizen reports ───────────────────────
-    report_sev_colors = {
+    # ── Citizen reports ───────────────────────────────────────────────────
+    sev_colors = {
         "CRITICAL": "#ef4444", "HIGH": "#f97316",
         "MEDIUM":   "#eab308", "LOW":  "#22c55e",
     }
-    for report in report_data[:100]:  # Cap to prevent map overload
+    for report in report_data[:80]:
+        # Scope guard: only Ahmedabad or Surat
+        if not _in_scope_city(report.get("city", "")):
+            continue
         lat = report.get("latitude")
         lon = report.get("longitude")
-        if not lat or not lon:
+        if not _valid_coord(lat, lon):
             continue
-
-        sev = report.get("severity", "MEDIUM")
-        color = report_sev_colors.get(sev, "#94a3b8")
-        icon_html = f"""
-        <div style="font-size:14px;line-height:1;filter:drop-shadow(0 0 3px {color})">📍</div>
-        """
-        popup_html = _report_popup(report)
+        lat, lon = float(lat), float(lon)
+        sev   = report.get("severity", "MEDIUM")
+        color = sev_colors.get(sev, "#94a3b8")
+        pin_html = (
+            f'<div style="font-size:13px;line-height:1;'
+            f'filter:drop-shadow(0 0 2px {color})">📍</div>'
+        )
         folium.Marker(
             location=[lat, lon],
-            popup=folium.Popup(popup_html, max_width=260),
-            tooltip=f"Report: {report.get('category','?').replace('_',' ').title()} — {sev}",
-            icon=folium.DivIcon(
-                html=icon_html,
-                icon_size=(18, 18),
-                icon_anchor=(9, 16),
-            ),
+            popup=folium.Popup(_report_popup(report), max_width=240),
+            tooltip=f"{report.get('category','?').replace('_',' ').title()} — {sev}",
+            icon=folium.DivIcon(html=pin_html, icon_size=(16, 16), icon_anchor=(8, 14)),
         ).add_to(report_layer)
 
-    # ── Response teams ────────────────────────
+    # ── Response teams ────────────────────────────────────────────────────
     team_icons = {
         "pump_team":      "💧",
         "emergency":      "🚨",
@@ -163,135 +347,233 @@ def build_flood_map(
         "rapid_response": "⚡",
     }
     for team in team_data:
+        # Scope guard: only Ahmedabad or Surat
+        if not _in_scope_city(team.get("city", "")):
+            continue
         lat = team.get("latitude")
         lon = team.get("longitude")
-        if not lat or not lon:
+        if not _valid_coord(lat, lon):
             continue
-
-        emoji = team_icons.get(team.get("team_type", ""), "🚒")
-        status = team.get("status", "AVAILABLE")
-        color = "#22c55e" if status == "AVAILABLE" else "#f97316" if status == "DEPLOYED" else "#94a3b8"
-        icon_html = f"""
-        <div style="font-size:16px;line-height:1;opacity:{'1.0' if status == 'DEPLOYED' else '0.7'}">{emoji}</div>
-        """
+        lat, lon  = float(lat), float(lon)
+        emoji     = team_icons.get(team.get("team_type", ""), "🚒")
+        status    = team.get("status", "AVAILABLE")
+        opacity   = "1.0" if status == "DEPLOYED" else "0.65"
+        t_html    = (
+            f'<div style="font-size:15px;line-height:1;opacity:{opacity}">{emoji}</div>'
+        )
         folium.Marker(
             location=[lat, lon],
-            tooltip=f"{team.get('name')} — {status}",
-            icon=folium.DivIcon(html=icon_html, icon_size=(20, 20), icon_anchor=(10, 10)),
+            tooltip=f"{team.get('name','Team')} — {status}",
+            icon=folium.DivIcon(html=t_html, icon_size=(18, 18), icon_anchor=(9, 9)),
         ).add_to(team_layer)
 
-    # ── Legend ────────────────────────────────
-    legend_html = """
-    <div style="position:fixed;bottom:30px;right:10px;z-index:999;
-                background:rgba(15,17,23,0.9);border:1px solid #2d3148;
-                border-radius:8px;padding:10px 14px;font-family:sans-serif">
-        <div style="color:#e2e8f0;font-weight:700;font-size:12px;margin-bottom:6px">FLOOD RISK LEVEL</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <div style="width:12px;height:12px;border-radius:50%;background:#ef4444"></div>
-            <span style="color:#e2e8f0;font-size:11px">CRITICAL</span>
+    # ── Compact legend — top-left, clear of the OSM attribution bar ──────
+    _wx_label   = "LIVE" if is_live else "DEMO"
+    _wx_color   = "#6ee7b7" if is_live else "#c4b5fd"
+    legend_html = f"""
+    <div style="position:fixed;top:10px;left:10px;z-index:998;
+                background:rgba(10,11,18,0.90);border:1px solid #2d3148;
+                border-radius:8px;padding:8px 11px;font-family:sans-serif;
+                font-size:10px;line-height:1.6;max-width:160px">
+        <div style="color:#94a3b8;font-weight:700;margin-bottom:4px;
+                    letter-spacing:0.05em;font-size:9px">FLOOD RISK</div>
+        <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
+            <span style="color:#e2e8f0">CRITICAL</span>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <div style="width:12px;height:12px;border-radius:50%;background:#f97316"></div>
-            <span style="color:#e2e8f0;font-size:11px">HIGH</span>
+        <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#f97316;flex-shrink:0"></div>
+            <span style="color:#e2e8f0">HIGH</span>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <div style="width:12px;height:12px;border-radius:50%;background:#eab308"></div>
-            <span style="color:#e2e8f0;font-size:11px">MEDIUM</span>
+        <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#eab308;flex-shrink:0"></div>
+            <span style="color:#e2e8f0">MEDIUM</span>
         </div>
-        <div style="display:flex;align-items:center;gap:6px">
-            <div style="width:12px;height:12px;border-radius:50%;background:#22c55e"></div>
-            <span style="color:#e2e8f0;font-size:11px">LOW</span>
+        <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#22c55e;flex-shrink:0"></div>
+            <span style="color:#e2e8f0">LOW</span>
         </div>
-        <div style="color:#94a3b8;font-size:9px;margin-top:6px">⚠️ DEMO/SIMULATED DATA</div>
+        <div style="border-top:1px solid #2d3148;margin:5px 0 4px"></div>
+        <div style="color:#94a3b8;font-weight:700;margin-bottom:4px;
+                    letter-spacing:0.05em;font-size:9px">LAYERS &amp; SOURCES</div>
+        <div style="font-size:9px;color:{_wx_color};margin-bottom:2px">🌧️ Weather — <b>{_wx_label}</b></div>
+        <div style="font-size:9px;color:#93c5fd;margin-bottom:2px">🌊 Flood Risk — <b>MODEL</b></div>
+        <div style="font-size:9px;color:#c4b5fd;margin-bottom:2px">🔧 Drainage — <b>DEMO</b></div>
+        <div style="font-size:9px;color:#c4b5fd;margin-bottom:2px">📱 Reports — <b>DEMO</b></div>
+        <div style="font-size:9px;color:#c4b5fd">🚒 Teams — <b>DEMO</b></div>
     </div>
     """
     m.get_root().html.add_child(folium.Element(legend_html))
 
-    # Add all layers
+    # ── Add layers ────────────────────────────────────────────────────────
     risk_layer.add_to(m)
+    weather_layer.add_to(m)
     drain_layer.add_to(m)
     report_layer.add_to(m)
     team_layer.add_to(m)
 
-    folium.LayerControl(collapsed=False, position="topright").add_to(m)
+    # Layer control — collapsed, top-right, away from city markers
+    folium.LayerControl(collapsed=True, position="topright").add_to(m)
+
+    # ── Auto-fit bounds ───────────────────────────────────────────────────
+    if city == "All":
+        # Always use the pre-defined Ahmedabad+Surat bounds for the "All" view
+        # so both cities are visible regardless of where markers fall.
+        m.fit_bounds(_AHMEDABAD_SURAT_BOUNDS)
+    elif len(bounds_latlons) >= 2:
+        lats = [p[0] for p in bounds_latlons]
+        lons = [p[1] for p in bounds_latlons]
+        pad  = 0.08
+        sw   = [max(min(lats) - pad, _LAT_MIN), max(min(lons) - pad, _LON_MIN)]
+        ne   = [min(max(lats) + pad, _LAT_MAX), min(max(lons) + pad, _LON_MAX)]
+        m.fit_bounds([sw, ne])
 
     return m
 
 
-def _risk_popup(pred: dict) -> str:
-    level = pred.get("risk_level", "LOW")
-    color = RISK_COLORS.get(level, "#94a3b8")
-    reasons = pred.get("main_reasons", [])
-    reasons_html = "".join(f"<li style='margin:2px 0'>{r}</li>" for r in reasons[:3])
-    action = pred.get("recommended_action", "")
-    rf = pred.get("input_features", {}).get("rainfall_1h", 0)
+# ─────────────────────────────────────────────────────────────────────────────
+# Weather evidence helper
+# ─────────────────────────────────────────────────────────────────────────────
 
-    return f"""
-    <div style="font-family:sans-serif;font-size:12px;min-width:240px">
-        <div style="background:{color};color:{'black' if level=='MEDIUM' else 'white'};
-                    padding:6px 10px;border-radius:6px 6px 0 0;font-weight:700;font-size:13px">
-            {pred.get('area')}, {pred.get('city')}
-        </div>
-        <div style="padding:8px 10px;background:#1a1d27;color:#e2e8f0;border-radius:0 0 6px 6px">
-            <div style="margin-bottom:6px">
-                <b>Risk Level:</b> <span style="color:{color}">{level}</span> &nbsp;
-                <b>Score:</b> {pred.get('risk_score', 0):.0f}/100
-            </div>
-            <div style="margin-bottom:6px"><b>Rainfall:</b> {rf:.0f} mm/hr</div>
-            <div style="margin-bottom:6px">
-                <b>Confidence:</b> {pred.get('confidence', 0):.0%}
-            </div>
-            <div style="margin-bottom:6px"><b>Key Factors:</b><ul style="margin:2px 0;padding-left:16px">{reasons_html}</ul></div>
-            <div style="background:rgba(255,255,255,0.05);padding:4px 6px;border-radius:4px;font-size:11px">
-                <b>Action:</b> {action[:100]}
-            </div>
-            <div style="color:#7c3aed;font-size:10px;margin-top:4px">⚙ DEMO/SIMULATED DATA</div>
-        </div>
-    </div>
+def _weather_from_predictions(risk_predictions: list[dict]) -> list[dict]:
     """
+    Derive demo weather evidence points from existing risk prediction data.
+    Uses one representative point per city (the highest-rainfall area).
+    Clearly labeled DEMO — not real weather readings.
+    """
+    by_city: dict[str, dict] = {}
+    for pred in risk_predictions:
+        city = pred.get("city", "")
+        rain = pred.get("input_features", {}).get("rainfall_1h", 0)
+        if city not in by_city or rain > by_city[city].get("rainfall_1h", 0):
+            by_city[city] = {
+                "city":        city,
+                "area":        pred.get("area", city),
+                "latitude":    pred.get("latitude"),
+                "longitude":   pred.get("longitude"),
+                "rainfall_1h": rain,
+                "rainfall_6h": pred.get("input_features", {}).get("rainfall_6h", rain * 5.5),
+                "condition":   _rain_condition(rain),
+                "source":      "DEMO",
+                "recorded_at": "Demo scenario data",
+            }
+    return list(by_city.values())
+
+
+def _rain_condition(rain_1h: float) -> str:
+    if rain_1h >= 80:
+        return "Extreme Rain"
+    if rain_1h >= 40:
+        return "Heavy Rain"
+    if rain_1h >= 15:
+        return "Moderate Rain"
+    if rain_1h >= 5:
+        return "Light Rain"
+    return "Dry / Trace"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Popup builders
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _risk_popup(pred: dict) -> str:
+    level        = pred.get("risk_level", "LOW")
+    color        = RISK_COLORS.get(level, "#94a3b8")
+    txt_color    = "black" if level == "MEDIUM" else "white"
+    score        = pred.get("risk_score", 0)
+    rf           = pred.get("input_features", {}).get("rainfall_1h", 0)
+    conf         = pred.get("confidence", 0)
+    reasons      = pred.get("main_reasons", [])
+    reasons_html = "".join(f"<li style='margin:1px 0'>{r}</li>" for r in reasons[:3])
+    action       = pred.get("recommended_action", "")[:100]
+
+    return (
+        f'<div style="font-family:sans-serif;font-size:12px;min-width:220px;max-width:270px">'
+        f'<div style="background:{color};color:{txt_color};padding:5px 9px;'
+        f'border-radius:5px 5px 0 0;font-weight:700;font-size:12px">'
+        f'{pred.get("area","")}, {pred.get("city","")}</div>'
+        f'<div style="padding:7px 9px;background:#1a1d27;color:#e2e8f0;border-radius:0 0 5px 5px">'
+        f'<div style="margin-bottom:4px"><b>Risk:</b> <span style="color:{color}">{level}</span>'
+        f' &nbsp; <b>Score:</b> {score:.0f}/100</div>'
+        f'<div style="margin-bottom:4px"><b>Rainfall:</b> {rf:.0f} mm/hr'
+        f' &nbsp; <b>Conf:</b> {conf:.0%}</div>'
+        f'<div style="margin-bottom:3px"><b>Evidence:</b>'
+        f'<ul style="margin:2px 0;padding-left:14px">{reasons_html}</ul></div>'
+        f'<div style="background:rgba(255,255,255,0.05);padding:3px 5px;'
+        f'border-radius:3px;font-size:10px">{action}</div>'
+        f'<div style="color:#a78bfa;font-size:9px;margin-top:3px">⚙ ML MODEL PREDICTION — DEMO DATA</div>'
+        f'</div></div>'
+    )
+
+
+def _weather_popup(wp: dict, is_live: bool) -> str:
+    rain   = wp.get("rainfall_1h", 0)
+    rain6  = wp.get("rainfall_6h", 0)
+    cond   = wp.get("condition", "—")
+    src    = wp.get("source", "DEMO")
+    rec    = wp.get("recorded_at", "—")
+    city   = wp.get("city", "—")
+    area   = wp.get("area", "")
+    badge  = "🟢 LIVE" if is_live else "⚙ DEMO"
+    b_col  = "#22c55e" if is_live else "#a78bfa"
+
+    return (
+        f'<div style="font-family:sans-serif;font-size:12px;min-width:200px;max-width:240px">'
+        f'<div style="background:#1e3a5f;color:#93c5fd;padding:5px 9px;'
+        f'border-radius:5px 5px 0 0;font-weight:700">🌧️ {city} — Weather Evidence</div>'
+        f'<div style="padding:7px 9px;background:#1a1d27;color:#e2e8f0;border-radius:0 0 5px 5px">'
+        f'<div><b>Area:</b> {area}</div>'
+        f'<div><b>Rainfall (1h):</b> {rain:.1f} mm/hr</div>'
+        f'<div><b>Rainfall (6h):</b> {rain6:.1f} mm</div>'
+        f'<div><b>Condition:</b> {cond}</div>'
+        f'<div><b>Source:</b> {src}</div>'
+        f'<div><b>Recorded:</b> {str(rec)[:19]}</div>'
+        f'<div style="color:{b_col};font-size:9px;margin-top:3px">{badge}</div>'
+        f'</div></div>'
+    )
 
 
 def _drain_popup(drain: dict) -> str:
-    priority = drain.get("maintenance_priority", "LOW")
-    color = DRAIN_COLORS.get(priority, "#94a3b8")
-    return f"""
-    <div style="font-family:sans-serif;font-size:12px;min-width:220px">
-        <div style="background:{color};color:{'black' if priority in ('LOW','MEDIUM') else 'white'};
-                    padding:6px 10px;border-radius:6px 6px 0 0;font-weight:700">
-            Drain {drain.get('drain_id')} — {priority}
-        </div>
-        <div style="padding:8px 10px;background:#1a1d27;color:#e2e8f0;border-radius:0 0 6px 6px">
-            <div><b>Area:</b> {drain.get('area')}, {drain.get('city')}</div>
-            <div><b>Type:</b> {drain.get('drain_type','').replace('_',' ').title()}</div>
-            <div><b>Status:</b> {drain.get('status')}</div>
-            <div><b>Condition:</b> {drain.get('condition')}</div>
-            <div><b>Capacity:</b> {drain.get('capacity_rating', 0):.0f}%</div>
-            <div><b>Blockages/yr:</b> {drain.get('blockage_frequency', 0)}</div>
-            <div style="margin-top:4px;font-size:11px;color:#f97316">
-                {drain.get('recommended_action', '')}
-            </div>
-        </div>
-    </div>
-    """
+    priority  = drain.get("maintenance_priority", "LOW")
+    color     = DRAIN_COLORS.get(priority, "#94a3b8")
+    txt_color = "black" if priority in ("LOW", "MEDIUM") else "white"
+
+    return (
+        f'<div style="font-family:sans-serif;font-size:12px;min-width:200px;max-width:240px">'
+        f'<div style="background:{color};color:{txt_color};padding:5px 9px;'
+        f'border-radius:5px 5px 0 0;font-weight:700">'
+        f'Drain {drain.get("drain_id","")} — {priority}</div>'
+        f'<div style="padding:7px 9px;background:#1a1d27;color:#e2e8f0;border-radius:0 0 5px 5px">'
+        f'<div><b>Zone:</b> {drain.get("area","")}, {drain.get("city","")}</div>'
+        f'<div><b>Type:</b> {drain.get("drain_type","").replace("_"," ").title()}</div>'
+        f'<div><b>Status:</b> {drain.get("status","")}</div>'
+        f'<div><b>Condition:</b> {drain.get("condition","")}</div>'
+        f'<div><b>Capacity:</b> {drain.get("capacity_rating",0):.0f}%</div>'
+        f'<div><b>Blockages/yr:</b> {drain.get("blockage_frequency",0)}</div>'
+        f'<div style="font-size:10px;color:#f97316;margin-top:3px">'
+        f'{drain.get("recommended_action","")}</div>'
+        f'<div style="color:#a78bfa;font-size:9px;margin-top:2px">⚙ DEMO DATA</div>'
+        f'</div></div>'
+    )
 
 
 def _report_popup(report: dict) -> str:
-    sev = report.get("severity", "MEDIUM")
-    sev_colors = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}
-    color = sev_colors.get(sev, "#94a3b8")
-    return f"""
-    <div style="font-family:sans-serif;font-size:12px;min-width:200px">
-        <div style="background:{color};color:{'black' if sev in ('MEDIUM','LOW') else 'white'};
-                    padding:6px 10px;border-radius:6px 6px 0 0;font-weight:700">
-            {report.get('category','').replace('_',' ').title()} — {sev}
-        </div>
-        <div style="padding:8px 10px;background:#1a1d27;color:#e2e8f0;border-radius:0 0 6px 6px">
-            <div><b>Area:</b> {report.get('area')}, {report.get('city')}</div>
-            <div><b>Language:</b> {report.get('language','').title()}</div>
-            <div><b>Status:</b> {report.get('status')}</div>
-            <div style="margin-top:4px;font-size:11px;font-style:italic;color:#94a3b8">
-                "{report.get('original_text', '')[:80]}..."
-            </div>
-        </div>
-    </div>
-    """
+    sev       = report.get("severity", "MEDIUM")
+    sev_c     = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}
+    color     = sev_c.get(sev, "#94a3b8")
+    txt_color = "black" if sev in ("MEDIUM", "LOW") else "white"
+    txt       = report.get("original_text", "")[:80]
+
+    return (
+        f'<div style="font-family:sans-serif;font-size:12px;min-width:190px;max-width:240px">'
+        f'<div style="background:{color};color:{txt_color};padding:5px 9px;'
+        f'border-radius:5px 5px 0 0;font-weight:700">'
+        f'{report.get("category","").replace("_"," ").title()} — {sev}</div>'
+        f'<div style="padding:7px 9px;background:#1a1d27;color:#e2e8f0;border-radius:0 0 5px 5px">'
+        f'<div><b>Zone:</b> {report.get("area","")}, {report.get("city","")}</div>'
+        f'<div><b>Language:</b> {report.get("language","").title()}</div>'
+        f'<div><b>Status:</b> {report.get("status","")}</div>'
+        f'<div style="font-size:10px;font-style:italic;color:#94a3b8;margin-top:3px">"{txt}…"</div>'
+        f'<div style="color:#a78bfa;font-size:9px;margin-top:2px">⚙ DEMO DATA</div>'
+        f'</div></div>'
+    )

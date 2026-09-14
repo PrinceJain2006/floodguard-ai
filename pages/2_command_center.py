@@ -10,10 +10,11 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timezone
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, ai_disclaimer, card,
-    risk_badge, demo_badge, simulated_badge, COLORS, RISK_EMOJI,
+    risk_badge, demo_badge, hybrid_badge, live_badge, model_badge,
+    simulated_badge, COLORS, RISK_EMOJI,
     risk_donut, rainfall_bar, risk_gauge, section_header
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
@@ -86,13 +87,19 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
+    # Determine sidebar data-mode badge based on live weather status
+    _sb_live = (orch.current_state or {}).get("live_weather_status", {}).get("is_live", False)
+    _sb_badge = hybrid_badge() if _sb_live else demo_badge()
+    _sb_note  = "🟢 Live Weather + 🟡 Synthetic Model Data" if _sb_live else "Synthetic data — no live source"
     st.markdown(f"""
     <div style="font-size:0.75rem;color:#94a3b8">
         <b>Current Scenario:</b> {SCENARIOS[st.session_state.scenario]['emoji']} {SCENARIOS[st.session_state.scenario]['label']}<br>
         <b>City:</b> {st.session_state.city_filter}<br>
         <b>Last updated:</b> {orch.current_state.get('last_updated','')[:16] if orch.current_state else 'N/A'}<br><br>
-        <span style="background:#7c3aed;color:white;padding:2px 6px;border-radius:4px;font-size:0.7rem">DEMO DATA</span>
-        Synthetic data only
+        {_sb_badge}<br>
+        <span style="font-size:0.68rem">{_sb_note}</span><br><br>
+        <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-size:0.7rem">📍 SCOPE</span>
+        Ahmedabad &amp; Surat only
     </div>
     """, unsafe_allow_html=True)
 
@@ -112,6 +119,9 @@ teams = state.get("teams", [])
 rainfall_data = state.get("rainfall_data", [])
 raw_drains = state.get("raw_drains", [])
 raw_reports = state.get("raw_reports", [])
+live_weather_status      = state.get("live_weather_status",      {"data_mode": "DEMO", "is_live": False, "fallback_reason": "Pipeline not yet run"})
+live_weather_records     = state.get("live_weather_records",     [])
+live_weather_map_points  = state.get("live_weather_map_points",  [])
 
 # ──────────────────────────────────────────────
 # Header
@@ -163,18 +173,27 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 
 # ── Tab 1: Live Risk Map ──────────────────────
 with tab1:
-    col_map, col_detail = st.columns([1.6, 1])
+    col_map, col_detail = st.columns([2, 1])
 
     with col_map:
-        section_header("LIVE FLOOD RISK MAP", demo_badge())
+        _map_badge = hybrid_badge() if live_weather_records else demo_badge()
+        section_header("DIGITAL TWIN MAP — Ahmedabad & Surat, Gujarat", _map_badge)
+        st.caption(
+            "🎯 **Scope:** Ahmedabad & Surat only — "
+            "Smart Urban Flooding & Drainage Management System for Ahmedabad–Surat. "
+            "🟢 Live Weather Evidence · 🔵 ML Flood-Risk Prediction · 🟡 Synthetic Demo Layers"
+        )
+        _is_live_map = bool(live_weather_map_points)
         m = build_flood_map(
             risk_predictions=predictions,
             drain_data=raw_drains[:80],
             report_data=raw_reports[:80],
             team_data=teams,
             city=st.session_state.city_filter,
+            weather_data=live_weather_map_points if _is_live_map else None,
+            is_live=_is_live_map,
         )
-        map_data = st_folium(m, width="100%", height=500, key="cmd_map")
+        map_data = st_folium(m, width="100%", height=560, key="cmd_map")
 
     with col_detail:
         section_header("RISK DISTRIBUTION")
@@ -513,14 +532,127 @@ with tab7:
             st.dataframe(df_rain_sorted, use_container_width=True, hide_index=True, height=380)
 
 # ──────────────────────────────────────────────
+# Live Data Intelligence section
+# ──────────────────────────────────────────────
+st.markdown("---")
+_lws = live_weather_status
+_is_live = _lws.get("is_live", False)
+_data_mode = _lws.get("data_mode", "DEMO")
+_source = _lws.get("source", "Synthetic")
+_last_upd = _lws.get("last_updated", "N/A")
+_fallback = _lws.get("fallback_reason", "")
+_stale = _lws.get("is_stale", False)
+
+# When live weather is available, show HYBRID (not just LIVE — flood model is still synthetic)
+# When unavailable, show DEMO
+_top_badge_html = hybrid_badge() if _is_live else demo_badge()
+_top_sub = "🟢 Live Weather · 🔵 ML Flood Risk · 🟡 Synthetic Drainage / Reports / Teams" if _is_live else "🟡 All data is synthetic — live source unavailable"
+
+st.markdown(f"""
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.2rem">
+  <div style="font-size:1rem;font-weight:800;color:#e2e8f0;text-transform:uppercase;
+              letter-spacing:0.06em">📡 Live Data Intelligence</div>
+  {_top_badge_html}
+  {"<span style='color:#f97316;font-size:0.7rem'>⚠ Stale data</span>" if _stale else ""}
+</div>
+<div style="font-size:0.72rem;color:#94a3b8;margin-bottom:0.5rem">{_top_sub}</div>
+""", unsafe_allow_html=True)
+
+_ldi_c1, _ldi_c2, _ldi_c3 = st.columns([1, 1, 1.4])
+
+with _ldi_c1:
+    _ahm = _lws.get("cities", {}).get("Ahmedabad", {})
+    st.markdown(f"""
+    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
+      <div style="font-weight:700;color:#93c5fd;margin-bottom:0.4rem">📍 Ahmedabad</div>
+      {"".join([
+          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Rainfall:</b> {_ahm.get("rainfall_1h","—")} mm/hr</div>',
+          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Condition:</b> {_ahm.get("condition","—")}</div>',
+          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Temp:</b> {_ahm.get("temperature","—")}°C</div>',
+          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Precip Prob:</b> {_ahm.get("precip_prob","—")}%</div>',
+          f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.3rem">Updated: {str(_ahm.get("recorded_at","—"))[:16]}</div>',
+      ]) if _ahm.get("available") else '<div style="font-size:0.8rem;color:#94a3b8">Live data unavailable</div>'}
+    </div>
+    """, unsafe_allow_html=True)
+
+with _ldi_c2:
+    _srt = _lws.get("cities", {}).get("Surat", {})
+    st.markdown(f"""
+    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
+      <div style="font-weight:700;color:#93c5fd;margin-bottom:0.4rem">📍 Surat</div>
+      {"".join([
+          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Rainfall:</b> {_srt.get("rainfall_1h","—")} mm/hr</div>',
+          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Condition:</b> {_srt.get("condition","—")}</div>',
+          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Temp:</b> {_srt.get("temperature","—")}°C</div>',
+          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Precip Prob:</b> {_srt.get("precip_prob","—")}%</div>',
+          f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.3rem">Updated: {str(_srt.get("recorded_at","—"))[:16]}</div>',
+      ]) if _srt.get("available") else '<div style="font-size:0.8rem;color:#94a3b8">Live data unavailable</div>'}
+    </div>
+    """, unsafe_allow_html=True)
+
+with _ldi_c3:
+    _cache_age = _lws.get("cache_age_sec")
+    _next_refresh = (
+        f"{max(0, int(600 - _cache_age))}s" if _cache_age is not None else "—"
+    )
+    st.markdown(f"""
+    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
+      <div style="font-weight:700;color:#94a3b8;margin-bottom:0.4rem">📊 Data Status</div>
+      <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Weather:</b>
+        {live_badge() if _is_live else demo_badge()}
+      </div>
+      <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Flood Risk:</b>
+        {model_badge()}
+      </div>
+      <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Drainage / Reports:</b>
+        {demo_badge()}
+      </div>
+      <div style="font-size:0.8rem;color:#e2e8f0"><b>Source:</b> {_source}</div>
+      <div style="font-size:0.8rem;color:#e2e8f0"><b>Last updated:</b> {str(_last_upd)[:19]}</div>
+      <div style="font-size:0.8rem;color:#e2e8f0"><b>Next refresh:</b> {_next_refresh}</div>
+      {f'<div style="font-size:0.75rem;color:#f97316;margin-top:0.3rem">⚠ {_fallback[:80]}</div>' if _fallback else ""}
+      <div style="font-size:0.7rem;color:#94a3b8;margin-top:0.4rem;border-top:1px solid #2d3148;padding-top:0.3rem">
+        🟢 LIVE = Open-Meteo weather evidence<br>
+        🔵 MODEL = ML flood-risk prediction<br>
+        🟡 DEMO = synthetic drainage / reports / teams<br>
+        Live weather is <b>evidence</b> — not a confirmed flood location.
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Manual refresh button
+_ref_col, _ = st.columns([1, 3])
+with _ref_col:
+    if st.button("🔄 Refresh Live Data", key="live_refresh_btn", use_container_width=True):
+        try:
+            from services.live_data_manager import get_live_data_manager as _get_ldm
+            _get_ldm().refresh(force=True)
+            # Re-run the pipeline to blend fresh weather
+            with st.spinner("Fetching live weather and re-running pipeline..."):
+                orch.run_pipeline(
+                    scenario=st.session_state.scenario,
+                    city=st.session_state.city_filter,
+                )
+            st.rerun()
+        except Exception as _e:
+            st.warning(f"Live refresh unavailable: {_e}")
+
+# ──────────────────────────────────────────────
 # Footer
 # ──────────────────────────────────────────────
 st.markdown("---")
+_footer_badge = hybrid_badge() if _is_live else demo_badge()
+_footer_note  = (
+    "🟢 Live weather from Open-Meteo · 🔵 ML flood-risk prediction · 🟡 Synthetic drainage, reports &amp; teams."
+    if _is_live else
+    "All data is synthetic/demo — live weather source unavailable."
+)
 st.markdown(f"""
 <div style="text-align:center;color:#475569;font-size:0.72rem">
-    FloodGuard AI v1.0 | Municipal Command Center | 
-    Scenario: {SCENARIOS[st.session_state.scenario]['label']} | 
-    {demo_badge()} All displayed values are synthetic demo data.<br>
+    FloodGuard AI v1.0 | Municipal Command Center |
+    Scenario: {SCENARIOS[st.session_state.scenario]['label']} |
+    {_footer_badge}<br>
+    {_footer_note}<br>
     AI recommendations require authorized human verification. Not for operational emergency use.
 </div>
 """, unsafe_allow_html=True)

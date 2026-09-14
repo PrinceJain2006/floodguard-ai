@@ -188,6 +188,33 @@ def demo_badge():
     return '<span class="demo-label">DEMO DATA</span>'
 
 
+def hybrid_badge():
+    """Badge for hybrid mode: live weather + synthetic model data."""
+    return (
+        '<span style="background:#0f4c2a;color:#6ee7b7;font-size:0.7rem;'
+        'padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">'
+        '🟢 HYBRID DATA</span>'
+    )
+
+
+def live_badge():
+    """Badge for a fully-live data source."""
+    return (
+        '<span style="background:#14532d;color:#bbf7d0;font-size:0.7rem;'
+        'padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">'
+        '🟢 LIVE</span>'
+    )
+
+
+def model_badge():
+    """Badge marking ML-model / predicted data."""
+    return (
+        '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;'
+        'padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">'
+        '🔵 MODEL</span>'
+    )
+
+
 def simulated_badge():
     return '<span class="simulated-label">⚙ SIMULATED</span>'
 

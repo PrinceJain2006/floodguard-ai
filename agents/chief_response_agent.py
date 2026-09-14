@@ -239,6 +239,8 @@ class ChiefResponseAgent:
             if level not in ("CRITICAL", "HIGH"):
                 continue
 
+            zone_city = zone.get("city", "")
+
             needed = []
             if level == "CRITICAL":
                 needed = ["pump_team", "rapid_response", "emergency"]
@@ -247,7 +249,11 @@ class ChiefResponseAgent:
 
             assigned = []
             for t_type in needed:
-                avail = [t for t in available_teams.get(t_type, []) if t.get("status") == "AVAILABLE"]
+                # CITY MATCHING: only assign teams that belong to the same city as the zone
+                avail = [
+                    t for t in available_teams.get(t_type, [])
+                    if t.get("status") == "AVAILABLE" and t.get("city") == zone_city
+                ]
                 if avail:
                     t = avail[0]
                     assigned.append({
@@ -255,17 +261,19 @@ class ChiefResponseAgent:
                         "team_name": t.get("name", t["team_id"]),
                         "team_type": t_type,
                         "status": "AVAILABLE",
+                        "city": zone_city,
                         "estimated_travel_min": random.randint(5, 25),
                     })
 
-            # Simulated recommendation even without available team
+            # If no same-city resource is available, report clearly — never assign cross-city
             if not assigned:
                 assigned.append({
-                    "team_id": "SIMULATED",
-                    "team_name": f"Nearest {needed[0].replace('_',' ').title() if needed else 'Response'} Unit",
+                    "team_id": "NO_SAME_CITY_RESOURCE",
+                    "team_name": f"No available {zone_city} {needed[0].replace('_',' ').title() if needed else 'Response'} team",
                     "team_type": needed[0] if needed else "rapid_response",
-                    "status": "STANDBY",
-                    "estimated_travel_min": random.randint(15, 40),
+                    "status": "UNAVAILABLE",
+                    "city": zone_city,
+                    "estimated_travel_min": None,
                 })
 
             recommendations.append({

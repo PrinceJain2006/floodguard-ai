@@ -19,7 +19,7 @@ else:
 WATSONX_API_KEY: str = os.getenv("WATSONX_API_KEY", "")
 WATSONX_PROJECT_ID: str = os.getenv("WATSONX_PROJECT_ID", "")
 WATSONX_URL: str = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
-GRANITE_MODEL_ID: str = "ibm/granite-3-8b-instruct"
+GRANITE_MODEL_ID: str = os.getenv("GRANITE_MODEL_ID", "ibm/granite-4-h-small")
 
 # ──────────────────────────────────────────────
 # JWT / Auth
@@ -51,6 +51,18 @@ DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() == "true"
 # ──────────────────────────────────────────────
 OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "")
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+
+# ──────────────────────────────────────────────
+# Live Weather / Open-Meteo (no API key required)
+# ──────────────────────────────────────────────
+# Set to "false" to force DEMO mode even when internet is available.
+LIVE_WEATHER_ENABLED: bool = os.getenv("LIVE_WEATHER_ENABLED", "true").lower() == "true"
+# How many seconds a live weather result is considered fresh before re-fetching.
+LIVE_DATA_CACHE_TTL: int = int(os.getenv("LIVE_DATA_CACHE_TTL", "600"))   # 10 minutes
+# Hard timeout for outbound HTTP requests to weather APIs.
+LIVE_DATA_REQUEST_TIMEOUT: int = int(os.getenv("LIVE_DATA_REQUEST_TIMEOUT", "8"))
+# Maximum age (seconds) of a cached result before it is treated as stale.
+LIVE_DATA_STALE_THRESHOLD: int = int(os.getenv("LIVE_DATA_STALE_THRESHOLD", "1800"))  # 30 min
 
 # ──────────────────────────────────────────────
 # Paths

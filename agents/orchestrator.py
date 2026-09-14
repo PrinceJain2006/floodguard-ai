@@ -6,7 +6,7 @@ Implements the multi-agent workflow pipeline.
 """
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +23,7 @@ try:
         generate_rainfall_data, generate_drains, generate_flood_incidents,
         generate_citizen_reports, generate_response_teams, generate_risk_predictions, ALL_AREAS
     )
+    from services.live_data_manager import get_live_data_manager
 except ImportError:
     from flood_risk_agent import get_flood_risk_agent
     from drainage_agent import get_drainage_agent
@@ -32,6 +33,10 @@ except ImportError:
     from granite_service import generate_situation_report, answer_query, granite_status
     from chief_response_agent import get_chief_agent
     from closed_loop_learning import get_learning_store
+    try:
+        from services.live_data_manager import get_live_data_manager
+    except ImportError:
+        get_live_data_manager = None  # type: ignore[assignment]
 
 
 SCENARIOS = {
@@ -65,7 +70,7 @@ class AgentOrchestrator:
 
     def _log_step(self, step: str, agent: str, status: str, details: str = ""):
         self.pipeline_log.append({
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "step": step,
             "agent": agent,
             "status": status,
@@ -106,6 +111,64 @@ class AgentOrchestrator:
             incidents = [i for i in incidents if i["city"] == city]
             reports   = [r for r in reports   if r["city"] == city]
             teams     = [t for t in teams     if t["city"] == city]
+
+        # ── Step 1b: Overlay live weather rainfall (if available) ──────────
+        # Fetch live weather and blend into the rainfall records.
+        # Live observations replace the synthetic city-level records where
+        # available; area-level synthetic records are always preserved since
+        # Open-Meteo returns only one city-centre reading per city.
+        # This ensures the ML model receives real current rainfall signals.
+        live_weather_status = {"data_mode": "DEMO", "is_live": False, "fallback_reason": "not attempted"}
+        live_weather_records: list[dict] = []
+        live_weather_map_points: list[dict] = []
+        try:
+            if get_live_data_manager is not None:
+                ldm = get_live_data_manager()
+                ldm.refresh()
+                live_weather_status = ldm.get_status()
+                live_rf = ldm.get_rainfall_records(city_filter=city)
+                if live_rf:
+                    # Build a lookup: city → live_rain_1h
+                    live_lookup = {r["city"]: r for r in live_rf}
+                    # Blend: update synthetic rainfall records with live 1h value
+                    # for the matching city, scaling other accumulators proportionally
+                    blended = []
+                    for rec in rainfall:
+                        live_rec = live_lookup.get(rec.get("city", ""))
+                        if live_rec:
+                            live_r1h = live_rec["rainfall_1h"]
+                            # Preserve synthetic multi-hour accumulators but
+                            # scale them proportionally if live 1h differs
+                            synth_r1h = rec.get("rainfall_1h", 1.0) or 1.0
+                            scale = live_r1h / synth_r1h if synth_r1h > 0 else 1.0
+                            # Cap scale to avoid wild extrapolation
+                            scale = max(0.1, min(scale, 10.0))
+                            blended.append({
+                                **rec,
+                                "rainfall_1h":  round(live_r1h, 1),
+                                "rainfall_3h":  round(rec.get("rainfall_3h", 0) * scale, 1),
+                                "rainfall_6h":  round(rec.get("rainfall_6h", 0) * scale, 1),
+                                "rainfall_24h": round(rec.get("rainfall_24h", 0) * scale, 1),
+                                "data_source":  "Open-Meteo (LIVE, blended)",
+                                "is_live":      True,
+                            })
+                        else:
+                            blended.append(rec)
+                    rainfall = blended
+                    live_weather_records = live_rf
+                    # Map-ready points (city-centre weather markers for the Digital Twin)
+                    live_weather_map_points = ldm.weather_to_map_points(city_filter=city)
+                    self._log_step(
+                        "LIVE_WEATHER", "LiveDataManager", "COMPLETE",
+                        f"Live rainfall blended for {len(live_rf)} city observations"
+                    )
+        except Exception as exc:
+            live_weather_status = {
+                "data_mode": "DEMO",
+                "is_live": False,
+                "fallback_reason": f"Live weather error: {exc}",
+            }
+            self._log_step("LIVE_WEATHER", "LiveDataManager", "FALLBACK", str(exc))
 
         self._log_step("DATA_LOAD", "Orchestrator", "COMPLETE",
                        f"{len(rainfall)} areas, {len(drains)} drains, {len(reports)} reports")
@@ -221,7 +284,11 @@ class AgentOrchestrator:
             "pipeline_log": self.pipeline_log[-20:],
             "elapsed_seconds": elapsed,
             "data_label": "DEMO/SIMULATED",
-            "last_updated": datetime.utcnow().isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            # Live weather intelligence
+            "live_weather_status":      live_weather_status,
+            "live_weather_records":     live_weather_records,
+            "live_weather_map_points":  live_weather_map_points,
         }
 
         self._log_step("PIPELINE_COMPLETE", "Orchestrator", "COMPLETE",
@@ -290,7 +357,7 @@ def _generate_alerts(
                 "Avoid low-lying areas. Move valuables to higher ground. Follow municipal instructions."
             ),
             "is_simulated": True,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         })
         counter += 1
 
@@ -308,7 +375,7 @@ def _generate_alerts(
                 "Pre-position response teams."
             ),
             "is_simulated": True,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         })
         counter += 1
 
@@ -326,7 +393,7 @@ def _generate_alerts(
                 "Human authorization required for emergency actions."
             ),
             "is_simulated": True,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
     return alerts

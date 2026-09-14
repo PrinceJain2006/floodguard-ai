@@ -4,7 +4,7 @@ Classifies post-flood damage from citizen images and incident reports.
 Generates structured damage assessments with human-verification disclaimer.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 try:
@@ -31,7 +31,7 @@ class DamageAssessmentAgent:
         self.activity_log: list[str] = []
 
     def _log(self, msg: str):
-        ts = datetime.utcnow().strftime("%H:%M:%S")
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         self.activity_log.append(f"[{ts}] {msg}")
         if len(self.activity_log) > 50:
             self.activity_log = self.activity_log[-50:]
@@ -115,11 +115,11 @@ class DamageAssessmentAgent:
                 "official damage assessment, insurance claims, or emergency allocations."
             ),
             "requires_field_verification": True,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         self._log(f"Assessment complete: {incident_id} → {damage_level} damage, {priority} priority")
-        self.last_run = datetime.utcnow().isoformat()
+        self.last_run = datetime.now(timezone.utc).isoformat()
         return report
 
     def batch_assess(self, incidents: list[dict]) -> dict:
@@ -152,7 +152,7 @@ class DamageAssessmentAgent:
         from collections import Counter
         top_infra = Counter(all_infra).most_common(3)
 
-        self.last_run = datetime.utcnow().isoformat()
+        self.last_run = datetime.now(timezone.utc).isoformat()
         return {
             "assessments": assessments,
             "summary": {
@@ -163,7 +163,7 @@ class DamageAssessmentAgent:
             },
             "is_preliminary": True,
             "disclaimer": "All assessments are AI-generated and require field verification.",
-            "assessed_at": datetime.utcnow().isoformat(),
+            "assessed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def get_status(self) -> dict:

@@ -11,7 +11,7 @@ emergency-response scores.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import uuid
 
@@ -123,16 +123,23 @@ def fuse_zone_evidence(
     drain_records: list[dict],
     area_reports: list[dict],
     historical_incidents: list[dict],
+    live_weather_record: dict | None = None,
 ) -> dict:
     """
     Fuse all available evidence for a single zone into a priority score.
 
+    Parameters:
+        live_weather_record: Optional live weather dict (from LiveDataManager).
+            When provided, the rainfall evidence is sourced from Open-Meteo
+            (labeled LIVE) rather than from synthetic data (labeled DEMO).
+
     Returns a structured evidence fusion result including:
     - priority_score (0–100)
     - priority_level (CRITICAL / HIGH / MEDIUM / LOW)
-    - contributing_factors (list of named factors with scores)
+    - contributing_factors (list of named factors with scores, each with data_source)
     - why_this_zone (explanation text)
     - evidence_breakdown (dict of normalised scores)
+    - evidence_sources (dict: factor_key → data_source label)
     """
     area = risk_prediction.get("area", "Unknown")
     city = risk_prediction.get("city", "Unknown")
@@ -140,8 +147,23 @@ def fuse_zone_evidence(
 
     # ── Normalise each evidence source ──
     ml_score,   ml_note   = _norm_ml_risk(risk_prediction)
-    rain_1h     = features.get("rainfall_1h", 0)
+
+    # Rainfall: prefer live weather when available for this city
+    city = risk_prediction.get("city", "Unknown")
+    if live_weather_record and live_weather_record.get("city") == city:
+        rain_1h = float(live_weather_record.get("rainfall_1h", 0))
+        rain_source = "Open-Meteo (LIVE)"
+        rain_is_live = True
+    else:
+        rain_1h = features.get("rainfall_1h", 0)
+        rain_source = "Synthetic DEMO"
+        rain_is_live = False
+
     rain_score,  rain_note = _norm_rainfall(rain_1h)
+    if rain_is_live:
+        rain_note += " [LIVE — Open-Meteo]"
+    else:
+        rain_note += " [DEMO — synthetic]"
 
     # Drain stats for this area
     area_drains = [d for d in drain_records if d.get("area") == area and d.get("city") == city]
@@ -186,6 +208,15 @@ def fuse_zone_evidence(
         "historical_vulnerability": hist_note,
         "water_level_proxy":      wl_note,
     }
+    # Evidence source labels — shown in the Decision Intelligence UI
+    evidence_sources = {
+        "ml_risk_score":            "FloodGuard ML Model",
+        "rainfall_intensity":       rain_source,
+        "drainage_status":          "Synthetic DEMO",
+        "citizen_reports":          "Synthetic DEMO",
+        "historical_vulnerability": "Synthetic DEMO",
+        "water_level_proxy":        "Estimated (DEMO)",
+    }
 
     fused_score = sum(
         raw_scores[k] * EVIDENCE_WEIGHTS[k]
@@ -208,6 +239,8 @@ def fuse_zone_evidence(
     for key, weight in EVIDENCE_WEIGHTS.items():
         raw = raw_scores[key]
         contribution = raw * weight
+        src = evidence_sources.get(key, "DEMO")
+        is_live_factor = "LIVE" in src.upper() or "OPEN-METEO" in src.upper()
         factors.append({
             "factor_key":   key,
             "label":        _factor_label(key),
@@ -216,6 +249,8 @@ def fuse_zone_evidence(
             "contribution": round(contribution, 2),
             "note":         notes[key],
             "significant":  raw >= 60,
+            "data_source":  src,
+            "is_live":      is_live_factor,
         })
     factors.sort(key=lambda x: x["contribution"], reverse=True)
 
@@ -231,10 +266,12 @@ def fuse_zone_evidence(
         "priority_color":  PRIORITY_LEVELS[priority_level]["color"],
         "priority_emoji":  PRIORITY_LEVELS[priority_level]["emoji"],
         "evidence_breakdown": raw_scores,
+        "evidence_sources": evidence_sources,
         "contributing_factors": factors,
         "why_this_zone":   why_this_zone,
         "notes":           notes,
-        "fused_at":        datetime.utcnow().isoformat(),
+        "fused_at":        datetime.now(timezone.utc).isoformat(),
+        "rainfall_is_live": rain_is_live,
         "data_label":      "DEMO/SIMULATED — Application decision-support priority score only",
     }
 
@@ -374,10 +411,23 @@ def fuse_all_zones(
     drain_records: list[dict],
     report_records: list[dict],
     incident_records: list[dict],
+    live_weather_records: list[dict] | None = None,
 ) -> list[dict]:
     """
     Run evidence fusion for all zones and return sorted list.
+
+    live_weather_records: optional list of live WeatherRecord dicts (one per city).
+        When provided, the rainfall evidence for each zone uses the live
+        observation for its city (labeled LIVE). Other evidence remains DEMO.
     """
+    # Build a city → live weather record lookup for fast per-zone lookup
+    live_by_city: dict[str, dict] = {}
+    if live_weather_records:
+        for rec in live_weather_records:
+            city_key = rec.get("city", "")
+            if city_key:
+                live_by_city[city_key] = rec
+
     results = []
     for pred in risk_predictions:
         area = pred.get("area", "")
@@ -385,7 +435,8 @@ def fuse_all_zones(
         area_drains    = [d for d in drain_records  if d.get("area") == area and d.get("city") == city]
         area_reports   = [r for r in report_records if r.get("area") == area and r.get("city") == city]
         area_incidents = [i for i in incident_records if i.get("area") == area and i.get("city") == city]
-        fusion = fuse_zone_evidence(pred, area_drains, area_reports, area_incidents)
+        live_rec = live_by_city.get(city)  # None if no live data for this city
+        fusion = fuse_zone_evidence(pred, area_drains, area_reports, area_incidents, live_rec)
         results.append(fusion)
 
     results.sort(key=lambda x: x["priority_score"], reverse=True)
@@ -597,7 +648,7 @@ def get_recommended_action(fusion_result: dict, risk_prediction: dict) -> dict:
         "human_decision":     None,
         "decided_by":         None,
         "decided_at":         None,
-        "created_at":         datetime.utcnow().isoformat(),
+        "created_at":         datetime.now(timezone.utc).isoformat(),
         "data_label":         "DEMO/SIMULATED",
     }
 
@@ -634,7 +685,7 @@ class AuditTrail:
             "human_decision":  human_decision,
             "decided_by":      decided_by,
             "modification_note": modification_note,
-            "timestamp":       datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "timestamp":       datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             "status":          "Demo Action Recorded",
             "data_label":      "DEMO/SIMULATED",
         }
