@@ -93,17 +93,9 @@ portal_card(col6, "🌧️", "What-If Simulator",
 portal_card(col7, "🔄", "Learning Loop",
             "Prediction vs outcome · Accuracy tracking",
             "7_learning_loop", "#a855f7")
-# Placeholder for future expansion
-col8.markdown("""
-<div style="background:#0f1117;border:1px dashed #2d3148;border-radius:10px;
-            padding:1.5rem;text-align:center;min-height:160px;
-            display:flex;flex-direction:column;align-items:center;justify-content:center;
-            opacity:0.5">
-    <div style="font-size:2.5rem;margin-bottom:0.5rem">🔧</div>
-    <div style="font-size:0.9rem;font-weight:600;color:#64748b;margin-bottom:0.4rem">More Features</div>
-    <div style="font-size:0.75rem;color:#475569">Coming in next release</div>
-</div>
-""", unsafe_allow_html=True)
+portal_card(col8, "🧭", "Decision Intelligence",
+            "Evidence fusion · Priority · Why? · Human approval · Audit",
+            "8_decision_intelligence", "#14b8a6")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -116,7 +108,7 @@ st.markdown("""
            letter-spacing:0.05em">🤖 MULTI-AGENT SYSTEM OVERVIEW</h3>
 """, unsafe_allow_html=True)
 
-cols = st.columns(7)
+cols = st.columns(8)
 agents = [
     ("🌊", "Flood Risk Agent",     "Predicts risk scores per area using ML + rainfall data"),
     ("🔧", "Drainage Agent",       "Prioritizes drain maintenance based on blockage & capacity"),
@@ -125,6 +117,7 @@ agents = [
     ("🎯", "Chief Response Agent", "Combines all agents into unified emergency action plan"),
     ("🔍", "Damage Agent",         "Assesses post-flood infrastructure damage"),
     ("🔄", "Learning Loop",        "Tracks Prediction → Incident → Response → Outcome cycles"),
+    ("🧭", "Decision Intelligence","Fuses evidence, explains WHY, enables human-in-the-loop approval"),
 ]
 for col, (emoji, name, desc) in zip(cols, agents):
     with col:

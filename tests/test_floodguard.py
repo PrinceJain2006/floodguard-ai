@@ -354,7 +354,8 @@ class TestOrchestrator:
     def test_get_agent_statuses(self):
         self.orch.run_pipeline("NORMAL")
         statuses = self.orch.get_agent_statuses()
-        assert len(statuses) == 6
+        # 6 agents + IBM Granite = 7
+        assert len(statuses) >= 6
         for s in statuses:
             assert "agent" in s
             assert "status" in s
@@ -495,3 +496,188 @@ class TestEndToEndDemo:
         print(f"  STEP 9 OK Data label: {state_heavy['data_label']}")
 
         print("\n  [PASS] End-to-end demo test PASSED")
+
+
+# ──────────────────────────────────────────────
+# 8. Evidence Fusion Tests
+# ──────────────────────────────────────────────
+class TestEvidenceFusion:
+    """Tests for the Evidence Fusion & Decision Intelligence layer."""
+
+    def setup_method(self):
+        from agents.evidence_fusion import (
+            fuse_zone_evidence, fuse_all_zones, build_why_now,
+            build_agent_decision_trace, get_recommended_action,
+            AuditTrail, EVIDENCE_WEIGHTS,
+        )
+        self.fuse_zone_evidence      = fuse_zone_evidence
+        self.fuse_all_zones          = fuse_all_zones
+        self.build_why_now           = build_why_now
+        self.build_agent_decision_trace = build_agent_decision_trace
+        self.get_recommended_action  = get_recommended_action
+        self.AuditTrail              = AuditTrail
+        self.EVIDENCE_WEIGHTS        = EVIDENCE_WEIGHTS
+
+    def _make_pred(self, risk_score=80, risk_level="CRITICAL"):
+        return {
+            "area": "Maninagar", "city": "Ahmedabad",
+            "risk_score": risk_score, "risk_level": risk_level,
+            "confidence": 0.85,
+            "input_features": {
+                "rainfall_1h": 75, "rainfall_6h": 400,
+                "drainage_capacity": 30, "water_level": 2.5,
+                "citizen_reports": 25,
+            },
+            "blocked_drains": 2,
+            "active_reports": 25,
+            "historical_incidents": 4,
+            "main_reasons": ["High rainfall", "Low drainage capacity"],
+            "recommended_action": "Deploy emergency response teams.",
+        }
+
+    def test_fuse_zone_evidence_score_bounds(self):
+        """Priority score must be 0-100."""
+        pred = self._make_pred(risk_score=85, risk_level="CRITICAL")
+        result = self.fuse_zone_evidence(pred, [], [], [])
+        assert 0 <= result["priority_score"] <= 100
+
+    def test_fuse_zone_evidence_level_mapping(self):
+        """Level must match score thresholds."""
+        pred_high = self._make_pred(risk_score=60, risk_level="HIGH")
+        result = self.fuse_zone_evidence(pred_high, [], [], [])
+        assert result["priority_level"] in ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+
+    def test_fuse_zone_evidence_has_factors(self):
+        """Must return contributing_factors list."""
+        pred = self._make_pred()
+        result = self.fuse_zone_evidence(pred, [], [], [])
+        assert "contributing_factors" in result
+        assert len(result["contributing_factors"]) == len(self.EVIDENCE_WEIGHTS)
+
+    def test_fuse_zone_evidence_has_why_this_zone(self):
+        """Must return non-empty why_this_zone."""
+        pred = self._make_pred()
+        result = self.fuse_zone_evidence(pred, [], [], [])
+        assert "why_this_zone" in result
+        assert len(result["why_this_zone"]) > 20
+
+    def test_fuse_zone_evidence_data_label(self):
+        """Must have DEMO data label."""
+        pred = self._make_pred()
+        result = self.fuse_zone_evidence(pred, [], [], [])
+        assert "DEMO" in result["data_label"].upper()
+
+    def test_evidence_weights_sum_to_one(self):
+        """Weights must sum to 1.0."""
+        total = sum(self.EVIDENCE_WEIGHTS.values())
+        assert abs(total - 1.0) < 1e-9, f"Weights sum to {total}, not 1.0"
+
+    def test_build_why_now_no_previous(self):
+        """Without previous fusion, must report insufficient data."""
+        pred = self._make_pred()
+        from agents.evidence_fusion import fuse_zone_evidence
+        current = fuse_zone_evidence(pred, [], [], [])
+        result  = self.build_why_now(current, None)
+        assert result["available"] is False
+        assert "Insufficient" in result["message"]
+
+    def test_build_why_now_with_previous(self):
+        """With previous fusion, must return numeric comparison."""
+        pred = self._make_pred(risk_score=70)
+        from agents.evidence_fusion import fuse_zone_evidence
+        previous = fuse_zone_evidence(self._make_pred(risk_score=40), [], [], [])
+        current  = fuse_zone_evidence(pred, [], [], [])
+        result   = self.build_why_now(current, previous)
+        assert result["available"] is True
+        assert "prev_score" in result
+        assert "curr_score" in result
+        assert isinstance(result["score_delta"], float)
+
+    def test_get_recommended_action_critical(self):
+        """CRITICAL zone must require approval."""
+        pred = self._make_pred()
+        from agents.evidence_fusion import fuse_zone_evidence
+        fusion = fuse_zone_evidence(pred, [], [], [])
+        # Force critical
+        fusion["priority_level"] = "CRITICAL"
+        fusion["priority_score"] = 85.0
+        action = self.get_recommended_action(fusion, pred)
+        assert action["requires_approval"] is True
+        assert "action_id" in action
+        assert action["data_label"] == "DEMO/SIMULATED"
+
+    def test_get_recommended_action_low(self):
+        """LOW zone must NOT require approval."""
+        pred_low = self._make_pred(risk_score=10, risk_level="LOW")
+        pred_low["input_features"]["rainfall_1h"] = 2
+        from agents.evidence_fusion import fuse_zone_evidence
+        fusion = fuse_zone_evidence(pred_low, [], [], [])
+        fusion["priority_level"] = "LOW"
+        fusion["priority_score"] = 10.0
+        action = self.get_recommended_action(fusion, pred_low)
+        assert action["requires_approval"] is False
+
+    def test_audit_trail_record(self):
+        """Audit trail must record and retrieve entries."""
+        trail  = self.AuditTrail()
+        action = {
+            "action_id": "EF-TEST001", "area": "Maninagar", "city": "Ahmedabad",
+            "priority_level": "CRITICAL", "priority_score": 85,
+            "title": "Test action",
+        }
+        entry = trail.record(action, "APPROVED", "test_officer")
+        assert entry["human_decision"] == "APPROVED"
+        assert entry["decided_by"] == "test_officer"
+        assert "DEMO" in entry["data_label"].upper()
+        entries = trail.get_all()
+        assert len(entries) == 1
+
+    def test_audit_trail_clear(self):
+        """Audit trail clear must empty entries."""
+        trail  = self.AuditTrail()
+        action = {"action_id": "X", "area": "A", "city": "B",
+                  "priority_level": "LOW", "priority_score": 10, "title": "T"}
+        trail.record(action, "REJECTED")
+        trail.clear()
+        assert len(trail.get_all()) == 0
+
+    def test_fuse_all_zones_returns_sorted(self):
+        """fuse_all_zones must return list sorted by score descending."""
+        from data.seed_generator import (
+            generate_rainfall_data, generate_drains,
+            generate_flood_incidents, generate_citizen_reports
+        )
+        from agents.orchestrator import AgentOrchestrator
+        orch = AgentOrchestrator()
+        state = orch.run_pipeline("HEAVY", "All")
+        fusions = self.fuse_all_zones(
+            risk_predictions  = state["risk_predictions"],
+            drain_records     = state["raw_drains"],
+            report_records    = state["raw_reports"],
+            incident_records  = state.get("drain_analysis", {}).get("scored_drains", []),
+        )
+        assert len(fusions) > 0
+        scores = [f["priority_score"] for f in fusions]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_agent_decision_trace_steps(self):
+        """Agent trace must include all expected agents."""
+        from agents.orchestrator import AgentOrchestrator
+        orch = AgentOrchestrator()
+        state = orch.run_pipeline("HEAVY", "All")
+        pred = state["risk_predictions"][0]
+        from agents.evidence_fusion import fuse_zone_evidence
+        fusion = fuse_zone_evidence(pred, state["raw_drains"], state["raw_reports"], [])
+        trace = self.build_agent_decision_trace(
+            fusion_result   = fusion,
+            risk_prediction = pred,
+            drain_analysis  = state["drain_analysis"],
+            report_analysis = state["report_analysis"],
+            response_plan   = state["response_plan"],
+            action_plan     = state["action_plan"],
+        )
+        agent_names = [t["agent"] for t in trace]
+        assert "Flood Risk Agent" in agent_names
+        assert "Drainage Agent" in agent_names
+        assert "Evidence Fusion Layer" in agent_names
+        assert "Final Decision" in agent_names
