@@ -27,18 +27,11 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-try:
-    from services.live_weather import (
-        fetch_city_weather,
-        WeatherFetchError,
-        GUJARAT_CITY_COORDS,
-    )
-except ImportError:
-    from live_weather import (
-        fetch_city_weather,
-        WeatherFetchError,
-        GUJARAT_CITY_COORDS,
-    )
+from services.live_weather import (
+    fetch_city_weather,
+    WeatherFetchError,
+    GUJARAT_CITY_COORDS,
+)
 
 # Ordered list for the location selector (most important cities first)
 GUJARAT_CITIES: list[str] = [

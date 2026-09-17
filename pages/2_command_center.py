@@ -783,7 +783,7 @@ with tab2:
                         hovertemplate="%{x}<br><b>%{y:.1f}&#176;C</b><extra></extra>",
                     ))
                     _fig_t.update_layout(
-                        **_cc_layout_base,
+                        _cc_layout_base,
                         height=220,
                         yaxis=dict(
                             color="#94a3b8",
@@ -840,7 +840,7 @@ with tab2:
                             yaxis="y2",
                         ))
                     _fig_p.update_layout(
-                        **_cc_layout_base,
+                        _cc_layout_base,
                         height=240,
                         barmode="overlay",
                         yaxis=dict(
@@ -894,7 +894,7 @@ with tab2:
                         hovertemplate="%{x}<br><b>%{y:.1f} km/h</b><extra></extra>",
                     ))
                     _fig_w.update_layout(
-                        **_cc_layout_base,
+                        _cc_layout_base,
                         height=220,
                         yaxis=dict(
                             color="#94a3b8",
