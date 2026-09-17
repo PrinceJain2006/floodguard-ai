@@ -64,13 +64,48 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 header("AI Agent Monitor", "Real-time view of multi-agent pipeline execution", "🤖")
 
+# Prototype note — honest disclosure at top of page
+st.markdown("""
+<div style="background:rgba(124,92,216,0.08);border:1px solid #7c3aed;border-radius:6px;
+            padding:0.5rem 0.9rem;margin-bottom:0.75rem;font-size:0.75rem;color:#c4b5fd;
+            display:flex;align-items:center;gap:0.6rem">
+    <span style="font-size:1rem">🔬</span>
+    <span><strong>Prototype Note:</strong> Some datasets are synthetic/demo data for hackathon demonstration.
+    Live layers are labelled LIVE; model-generated predictions are labelled MODEL;
+    infrastructure and team data are DEMO/SYNTHETIC.</span>
+</div>
+""", unsafe_allow_html=True)
+
 # ──────────────────────────────────────────────
-# Granite status
+# Granite status — probe actual generation once per session
 # ──────────────────────────────────────────────
 g_status = granite_status()
-g_available = g_status.get("available", False)
-granite_color = "#22c55e" if g_available else "#f97316"
-granite_label = "LIVE" if g_available else "FALLBACK MODE"
+g_available = g_status.get("available", False)  # IAM token obtained
+
+# Probe whether actual generation works. Cached in session so we only hit the API once.
+# This does NOT modify granite_service.py — it uses the existing _call_granite function.
+if "granite_generation_live" not in st.session_state:
+    if g_available:
+        try:
+            from agents.granite_service import _call_granite as _probe_granite
+            probe_result = _probe_granite("Reply with one word: OK", max_tokens=5)
+            st.session_state.granite_generation_live = probe_result is not None
+        except Exception:
+            st.session_state.granite_generation_live = False
+    else:
+        st.session_state.granite_generation_live = False
+
+granite_generation_live = st.session_state.granite_generation_live
+
+if granite_generation_live:
+    granite_color = "#22c55e"
+    granite_label = "LIVE"
+elif g_available:
+    granite_color = "#f97316"
+    granite_label = "UNAVAILABLE"
+else:
+    granite_color = "#94a3b8"
+    granite_label = "FALLBACK"
 
 st.markdown(f"""
 <div style="background:rgba(59,130,246,0.1);border:1px solid #3b82f6;border-radius:8px;
@@ -90,12 +125,23 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-if not g_available:
+if granite_generation_live:
+    pass  # LIVE — no warning needed
+elif g_available:
     st.markdown("""
     <div style="background:rgba(249,115,22,0.1);border:1px solid #f97316;border-radius:6px;
                 padding:0.5rem 0.8rem;font-size:0.8rem;color:#fdba74;margin-bottom:1rem">
-        ⚙️ <strong>Fallback Mode Active</strong> — Set <code>WATSONX_API_KEY</code> and <code>WATSONX_PROJECT_ID</code> 
-        in your <code>.env</code> file to enable live IBM Granite responses. 
+        ⚠️ <strong>WatsonX Unavailable</strong> — IAM credentials are configured but the
+        generation API request failed (check project membership or quota).
+        Rule-based responses are being used for all AI features.
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div style="background:rgba(249,115,22,0.1);border:1px solid #f97316;border-radius:6px;
+                padding:0.5rem 0.8rem;font-size:0.8rem;color:#fdba74;margin-bottom:1rem">
+        ⚙️ <strong>Fallback Mode Active</strong> — Set <code>WATSONX_API_KEY</code> and <code>WATSONX_PROJECT_ID</code>
+        in your <code>.env</code> file to enable live IBM Granite responses.
         Rule-based responses are being used for all AI features.
     </div>
     """, unsafe_allow_html=True)
@@ -103,7 +149,56 @@ if not g_available:
 # ──────────────────────────────────────────────
 # Agent Activity Panel (Feature 8 — enhanced)
 # ──────────────────────────────────────────────
-section_header("AGENT ACTIVITY PANEL", demo_badge())
+section_header("🤖 AGENT ACTIVITY",
+               '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">MODEL / APPLICATION PIPELINE</span>')
+
+# AI Recommendation → Human Approval → Civic Action flow
+_resp_plan   = (orch.current_state or {}).get("response_plan", {})
+_action_plan = (orch.current_state or {}).get("action_plan", {})
+_total_recs  = len(_resp_plan.get("top_recommendations", []))
+_need_appr   = _action_plan.get("approval_needed", 0)
+_incidents   = len(_resp_plan.get("incidents", []))
+st.markdown(f"""
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;
+            padding:0.75rem 1.2rem;margin-bottom:1rem">
+    <div style="font-size:0.72rem;font-weight:700;color:#94a3b8;text-transform:uppercase;
+                letter-spacing:0.07em;margin-bottom:0.6rem">
+        AI Decision Pipeline — Current Cycle
+    </div>
+    <div style="display:flex;align-items:center;gap:0;flex-wrap:nowrap;overflow-x:auto">
+        <div style="text-align:center;padding:0.5rem 0.9rem;background:#1e3a5f;border-radius:6px;
+                    border:1px solid #3b82f6;min-width:110px">
+            <div style="font-size:1.1rem">🤖</div>
+            <div style="font-size:0.68rem;font-weight:700;color:#93c5fd">AI RECOMMENDATIONS</div>
+            <div style="font-size:1rem;font-weight:800;color:#e2e8f0">{_total_recs}</div>
+        </div>
+        <div style="color:#475569;font-size:1rem;padding:0 0.4rem">→</div>
+        <div style="text-align:center;padding:0.5rem 0.9rem;background:#3a1a00;border-radius:6px;
+                    border:1px solid #f97316;min-width:110px">
+            <div style="font-size:1.1rem">🔐</div>
+            <div style="font-size:0.68rem;font-weight:700;color:#fdba74">HUMAN APPROVAL</div>
+            <div style="font-size:1rem;font-weight:800;color:#e2e8f0">{_need_appr} required</div>
+        </div>
+        <div style="color:#475569;font-size:1rem;padding:0 0.4rem">→</div>
+        <div style="text-align:center;padding:0.5rem 0.9rem;background:#14532d;border-radius:6px;
+                    border:1px solid #22c55e;min-width:110px">
+            <div style="font-size:1.1rem">🏙️</div>
+            <div style="font-size:0.68rem;font-weight:700;color:#86efac">CIVIC ACTION</div>
+            <div style="font-size:1rem;font-weight:800;color:#e2e8f0">{_incidents} incidents</div>
+        </div>
+        <div style="color:#475569;font-size:1rem;padding:0 0.4rem">→</div>
+        <div style="text-align:center;padding:0.5rem 0.9rem;background:#1a0f1f;border-radius:6px;
+                    border:1px solid #7c3aed;min-width:110px">
+            <div style="font-size:1.1rem">🔄</div>
+            <div style="font-size:0.68rem;font-weight:700;color:#c4b5fd">FEEDBACK LOOP</div>
+            <div style="font-size:0.65rem;color:#94a3b8">Prediction-Outcome</div>
+        </div>
+    </div>
+    <div style="font-size:0.65rem;color:#475569;margin-top:0.5rem">
+        Counts reflect current pipeline run · Human approval is simulated in demo · Feedback loop tracks prediction accuracy (no live model retraining)
+    </div>
+</div>
+""", unsafe_allow_html=True)
 agent_statuses = orch.get_agent_statuses()
 state = orch.current_state or {}
 
@@ -125,6 +220,16 @@ agent_descriptions = {
     "Damage Assessment Agent":     "Post-flood infrastructure assessment",
     "Chief Response Agent":        "Unified emergency action planning",
     "IBM Granite":                 "LLM reasoning & explanation layer",
+}
+
+agent_data_labels = {
+    "Flood Risk Agent":            '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🔵 MODEL</span>',
+    "Drainage Agent":              '<span style="background:#3a2e00;color:#fde68a;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🟡 DEMO INFRASTRUCTURE</span>',
+    "Citizen Report Agent":        '<span style="background:#3a1a00;color:#fdba74;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🟠 USER + MODEL</span>',
+    "Response Coordination Agent": '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🔵 MODEL</span>&nbsp;<span style="background:#3a2e00;color:#fde68a;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🟡 DEMO RESOURCES</span>',
+    "Damage Assessment Agent":     '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🔵 MODEL / DEMO</span>',
+    "Chief Response Agent":        '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🔵 MODEL DECISION SUPPORT</span>',
+    "IBM Granite":                 "",  # dynamic — set below
 }
 
 # KPI strip for agent panel
@@ -151,12 +256,28 @@ for i, agent in enumerate(agent_statuses):
         icon = agent_icons.get(name, "🤖")
         desc = agent_descriptions.get(name, "")
 
-        status_colors = {
-            "ACTIVE":    "#22c55e", "COMPLETE": "#22c55e",
-            "FALLBACK":  "#f97316", "INACTIVE": "#94a3b8", "UNKNOWN": "#64748b",
-        }
-        status_dot_anim = "animation:pulse 2s infinite;" if status in ("ACTIVE",) else ""
-        s_color = status_colors.get(status, "#94a3b8")
+        # For IBM Granite, override status with the probe-verified generation result.
+        # All other pipeline agents use execution status from the orchestrator.
+        if name == "IBM Granite":
+            if granite_generation_live:
+                status       = "LIVE"
+                s_color      = "#22c55e"
+                status_dot_anim = ""
+            elif g_available:
+                status       = "UNAVAILABLE"
+                s_color      = "#f97316"
+                status_dot_anim = ""
+            else:
+                status       = "FALLBACK"
+                s_color      = "#94a3b8"
+                status_dot_anim = ""
+        else:
+            status_colors = {
+                "ACTIVE":    "#22c55e", "COMPLETE": "#22c55e",
+                "FALLBACK":  "#f97316", "INACTIVE": "#94a3b8", "UNKNOWN": "#64748b",
+            }
+            status_dot_anim = "animation:pulse 2s infinite;" if status in ("ACTIVE",) else ""
+            s_color = status_colors.get(status, "#94a3b8")
 
         activities_html = ""
         for act in activity[-5:]:
@@ -183,8 +304,23 @@ for i, agent in enumerate(agent_statuses):
             n = state.get("action_plan", {}).get("total_actions", 0)
             output_summary = f"Created {n} action items"
         elif name == "IBM Granite":
-            g = granite_status()
-            output_summary = "LIVE (WatsonX)" if g["available"] else "Fallback mode — configure .env"
+            if granite_generation_live:
+                output_summary = "🟢 LIVE — generation verified"
+                agent_data_labels["IBM Granite"] = (
+                    '<span style="background:#14532d;color:#bbf7d0;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🟢 LIVE</span>'
+                )
+            elif g_available:
+                output_summary = "⚠ UNAVAILABLE — IAM OK but generation failed"
+                agent_data_labels["IBM Granite"] = (
+                    '<span style="background:#3a1a00;color:#fdba74;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">⚠ UNAVAILABLE</span>'
+                )
+            else:
+                output_summary = "⚪ FALLBACK — configure .env"
+                agent_data_labels["IBM Granite"] = (
+                    '<span style="background:#1a1d27;border:1px solid #475569;color:#94a3b8;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">⚪ FALLBACK</span>'
+                )
+
+        data_label_html = agent_data_labels.get(name, "")
 
         st.markdown(f"""
         <style>@keyframes pulse {{0%,100%{{opacity:1}}50%{{opacity:0.5}}}}</style>
@@ -195,8 +331,11 @@ for i, agent in enumerate(agent_statuses):
                     <div style="font-weight:700;color:#e2e8f0;font-size:0.88rem">{name}</div>
                     <div style="font-size:0.68rem;color:#64748b">{desc}</div>
                 </div>
-                <span style="background:{s_color};color:white;padding:2px 7px;
-                      border-radius:6px;font-size:0.68rem;font-weight:600;white-space:nowrap;{status_dot_anim}">{status}</span>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+                    <span style="background:{s_color};color:white;padding:2px 7px;
+                          border-radius:6px;font-size:0.68rem;font-weight:600;white-space:nowrap;{status_dot_anim}">{status}</span>
+                    {data_label_html}
+                </div>
             </div>
             <div style="background:#0f1117;border-radius:6px;padding:0.4rem 0.5rem;margin-bottom:0.4rem;font-size:0.7rem;color:#94a3b8;min-height:24px">
                 📊 {output_summary if output_summary else "Awaiting pipeline run"}
@@ -214,7 +353,7 @@ for i, agent in enumerate(agent_statuses):
 # Pipeline execution log
 # ──────────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)
-section_header("PIPELINE EXECUTION LOG", demo_badge())
+section_header("PIPELINE EXECUTION LOG")
 
 pipeline_log = orch.pipeline_log[-30:]
 if pipeline_log:
@@ -246,52 +385,113 @@ else:
     st.info("No pipeline log yet. Run a scenario.")
 
 # ──────────────────────────────────────────────
-# Architecture diagram
+# Architecture diagram — clean dark-theme SVG
 # ──────────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)
 section_header("AGENT ORCHESTRATION ARCHITECTURE")
 
 st.markdown("""
-<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:10px;padding:1.5rem;overflow-x:auto">
-<pre style="color:#94a3b8;font-size:0.78rem;line-height:1.8;margin:0">
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        FLOODGUARD AI — AGENT PIPELINE                   │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  DATA SOURCES                                                            │
-│  ├── Rainfall Records (1h/3h/6h/24h) ─── [DEMO/SYNTHETIC]              │
-│  ├── Drainage Infrastructure Database                                    │
-│  ├── Historical Flood Incidents                                          │
-│  ├── Citizen Reports (EN/HI/GU)                                         │
-│  └── Response Team Status                                                │
-│                          ↓                                               │
-│  ┌──────────────────────────────────────────────────────────┐           │
-│  │                   AGENT ORCHESTRATOR                      │           │
-│  │                                                          │           │
-│  │  ┌─────────────────┐    ┌──────────────────────┐        │           │
-│  │  │ 🌊 Flood Risk   │    │ 🔧 Drainage Agent    │        │           │
-│  │  │ Agent (ML+RF)   │    │ Maintenance Priority │        │           │
-│  │  └────────┬────────┘    └──────────┬───────────┘        │           │
-│  │           │                        │                     │           │
-│  │  ┌────────┴────────┐    ┌──────────┴───────────┐        │           │
-│  │  │ 📱 Citizen      │    │ ⚡ Response Coord.   │        │           │
-│  │  │ Report Agent    │────│ Agent (Priority Queue│        │           │
-│  │  └─────────────────┘    └──────────────────────┘        │           │
-│  │                                   │                      │           │
-│  │              ┌────────────────────┴──────────┐          │           │
-│  │              │  🧠 IBM Granite (WatsonX)      │          │           │
-│  │              │  Reasoning & Language Layer    │          │           │
-│  │              │  - Incident classification     │          │           │
-│  │              │  - Report generation           │          │           │
-│  │              │  - NL explanations             │          │           │
-│  │              └───────────────────────────────┘          │           │
-│  └──────────────────────────────────────────────────────────┘           │
-│                          ↓                                               │
-│  RECOMMENDATIONS → HUMAN APPROVAL → ACTION LOGGED                       │
-│                          ↓                                               │
-│  DASHBOARD + ALERTS + SITUATION REPORT                                   │
-└─────────────────────────────────────────────────────────────────────────┘
-</pre>
+<div style="background:#13151f;border:1px solid #2d3148;border-radius:10px;padding:1.5rem 1.5rem 1rem">
+
+  <!-- Row 0: DATA SOURCES -->
+  <div style="font-size:0.65rem;font-weight:700;color:#475569;text-transform:uppercase;
+              letter-spacing:0.1em;margin-bottom:0.5rem">Data Sources</div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
+    <span style="background:#0f2d1a;color:#6ee7b7;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #22c55e;white-space:nowrap">🟢 Rainfall (Open-Meteo LIVE)</span>
+    <span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #3b82f6;white-space:nowrap">🔵 Flood Risk (ML Model)</span>
+    <span style="background:#3a2e00;color:#fde68a;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #eab308;white-space:nowrap">🟡 Drainage Infrastructure (DEMO)</span>
+    <span style="background:#3a1a00;color:#fdba74;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #f97316;white-space:nowrap">🟠 Citizen Reports (USER SUBMITTED)</span>
+    <span style="background:#3a2e00;color:#fde68a;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #eab308;white-space:nowrap">🟡 Response Teams (DEMO)</span>
+  </div>
+
+  <!-- Arrow down -->
+  <div style="text-align:center;color:#2d3148;font-size:1.4rem;line-height:1;margin-bottom:0.5rem">▼</div>
+
+  <!-- Row 1: ORCHESTRATOR label -->
+  <div style="border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem;background:#1a1d27;margin-bottom:0.5rem">
+    <div style="font-size:0.65rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.6rem">
+      Agent Orchestrator — Sequential Pipeline
+    </div>
+
+    <!-- Row 1: specialist agents -->
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
+      <div style="background:#0f1117;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
+        <div style="font-size:0.78rem">🌊</div>
+        <div style="font-size:0.72rem;font-weight:700;color:#93c5fd">Flood Risk Agent</div>
+        <div style="font-size:0.62rem;color:#475569">ML · Random Forest · risk scores</div>
+      </div>
+      <div style="background:#0f1117;border:1px solid #eab308;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
+        <div style="font-size:0.78rem">🔧</div>
+        <div style="font-size:0.72rem;font-weight:700;color:#fde68a">Drainage Agent</div>
+        <div style="font-size:0.62rem;color:#475569">blockage priority · maintenance schedule</div>
+      </div>
+      <div style="background:#0f1117;border:1px solid #f97316;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
+        <div style="font-size:0.78rem">📱</div>
+        <div style="font-size:0.72rem;font-weight:700;color:#fdba74">Citizen Report Agent</div>
+        <div style="font-size:0.62rem;color:#475569">EN/HI/GU · classify · route</div>
+      </div>
+      <div style="background:#0f1117;border:1px solid #7c3aed;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
+        <div style="font-size:0.78rem">⚡</div>
+        <div style="font-size:0.72rem;font-weight:700;color:#c4b5fd">Response Coord. Agent</div>
+        <div style="font-size:0.62rem;color:#475569">incidents · priority queue · teams</div>
+      </div>
+      <div style="background:#0f1117;border:1px solid #94a3b8;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
+        <div style="font-size:0.78rem">🔍</div>
+        <div style="font-size:0.72rem;font-weight:700;color:#cbd5e1">Damage Assessment Agent</div>
+        <div style="font-size:0.62rem;color:#475569">post-flood infra impact scoring</div>
+      </div>
+    </div>
+
+    <!-- Arrow down -->
+    <div style="text-align:center;color:#2d3148;font-size:1.1rem;line-height:1;margin-bottom:0.5rem">▼</div>
+
+    <!-- Row 2: Chief + Granite side by side -->
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.35rem">
+      <div style="background:#0f1117;border:1px solid #22c55e;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:140px">
+        <div style="font-size:0.78rem">🎯</div>
+        <div style="font-size:0.72rem;font-weight:700;color:#86efac">Chief Response Agent</div>
+        <div style="font-size:0.62rem;color:#475569">unified action plan · resource allocation</div>
+      </div>
+      <div style="background:#0f1117;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:2;min-width:160px">
+        <div style="font-size:0.78rem">🧠</div>
+        <div style="font-size:0.72rem;font-weight:700;color:#93c5fd">IBM Granite (WatsonX)</div>
+        <div style="font-size:0.62rem;color:#475569">situation report · WHY explanations · NL query · incident classification</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow down -->
+  <div style="text-align:center;color:#2d3148;font-size:1.4rem;line-height:1;margin-bottom:0.5rem">▼</div>
+
+  <!-- Row 3: Decision flow -->
+  <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
+    <div style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">
+      <div style="font-size:0.68rem;font-weight:700;color:#93c5fd">🤖 AI Recommendations</div>
+    </div>
+    <div style="color:#475569;font-size:1rem">→</div>
+    <div style="background:#3a1a00;border:1px solid #f97316;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">
+      <div style="font-size:0.68rem;font-weight:700;color:#fdba74">🔐 Human Approval</div>
+    </div>
+    <div style="color:#475569;font-size:1rem">→</div>
+    <div style="background:#14532d;border:1px solid #22c55e;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">
+      <div style="font-size:0.68rem;font-weight:700;color:#86efac">🏙️ Civic Action Logged</div>
+    </div>
+    <div style="color:#475569;font-size:1rem">→</div>
+    <div style="background:#1a0f1f;border:1px solid #7c3aed;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:140px;text-align:center">
+      <div style="font-size:0.68rem;font-weight:700;color:#c4b5fd">🔄 Prediction–Outcome Feedback</div>
+    </div>
+  </div>
+
+  <!-- Row 4: Outputs -->
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">📊 Live Risk Map</span>
+    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">🔔 Alerts</span>
+    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">📋 Situation Report</span>
+    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">🌧️ Rainfall Data</span>
+    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">🚒 Response Teams</span>
+    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">📱 Citizen Reports</span>
+  </div>
+
 </div>
 """, unsafe_allow_html=True)
 
@@ -302,7 +502,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 section_header("🔍 NATURAL LANGUAGE COMMAND CENTER")
 st.markdown("""
 <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
-    Query the system using natural language. Answers are grounded in demo data — not hallucinated.
+    Query the system using natural language. Answers are grounded in FloodGuard AI application data — sources are labeled LIVE, MODEL, USER SUBMITTED or DEMO.
     <span style="background:#7c3aed;color:white;padding:1px 6px;border-radius:4px;font-size:0.7rem">IBM Granite powered</span>
 </div>
 """, unsafe_allow_html=True)
@@ -333,7 +533,7 @@ with col_q:
             </div>
             <div style="color:#e2e8f0;font-size:0.9rem;line-height:1.6">{answer}</div>
             <div style="font-size:0.7rem;color:#475569;margin-top:0.5rem">
-                Grounded in demo data | Not real-time government data
+                Grounded in FloodGuard AI application data · Sources: LIVE / MODEL / USER SUBMITTED / DEMO
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -354,7 +554,7 @@ with col_e:
 # IBM Granite WHY Explanation Panel
 # ──────────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)
-section_header("🧠 IBM GRANITE WHY EXPLANATION", demo_badge())
+section_header("🧠 IBM GRANITE WHY EXPLANATION")
 st.markdown("""
 <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
     Ask IBM Granite to explain WHY a zone is high-risk.
@@ -412,8 +612,8 @@ with why_col2:
                 <div>Scenario: {orch.current_scenario}</div>
             </div>
             <div style="font-size:0.65rem;color:#475569;margin-top:0.3rem">
-                🧠 IBM Granite {'(Live)' if granite_status()['available'] else '(Fallback)'} |
-                Based on demo data only — not real sensor/government readings
+                🧠 IBM Granite {'(🟢 LIVE — generation verified)' if granite_generation_live else '(⚪ Fallback — rule-based)'} ·
+                Uses only available application data — never invents real sensor or government readings
             </div>
         </div>
         """, unsafe_allow_html=True)

@@ -244,8 +244,9 @@ def ai_disclaimer():
     st.markdown("""
     <div style="background:rgba(124,58,237,0.1);border:1px solid #7c3aed;border-radius:8px;
                 padding:0.6rem 1rem;font-size:0.78rem;color:#a78bfa;margin-bottom:1rem">
-        🤖 <strong>AI Recommendations</strong> are decision-support suggestions and require 
-        authorized human verification before implementation. All data is DEMO/SIMULATED.
+        🤖 <strong>AI Recommendations</strong> are decision-support suggestions and require
+        authorized human verification before implementation.
+        HYBRID DATA: 🟢 Live Weather · 🔵 ML Predictions · 🟠 User Reports · 🟡 Demo Infrastructure
     </div>
     """, unsafe_allow_html=True)
 

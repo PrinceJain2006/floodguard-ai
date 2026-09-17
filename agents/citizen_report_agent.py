@@ -83,10 +83,15 @@ class CitizenReportAgent:
         user_id: int | None = None,
         image_path: str | None = None,
         existing_reports: list[dict] | None = None,
+        category_hint: str | None = None,
     ) -> dict:
         """
         Full pipeline for a single incoming citizen report.
         Returns enriched report dict ready for DB storage.
+
+        category_hint: when provided (e.g. from the form dropdown), this
+        overrides the AI-detected category so the user's explicit selection
+        is always honoured.
         """
         report_id = f"RPT-{uuid.uuid4().hex[:8].upper()}"
 
@@ -97,7 +102,18 @@ class CitizenReportAgent:
         # 2. AI classification via Granite
         ai_result = analyze_citizen_report(text, language)
 
+        # category_hint from the form dropdown overrides AI when supplied
         category = ai_result.get("category", "waterlogging")
+        if category_hint:
+            _hint_map = {
+                "Waterlogging":        "waterlogging",
+                "Drain Overflow":      "drain_overflow",
+                "Road Blockage":       "road_blockage",
+                "Traffic Disruption":  "traffic_disruption",
+                "Property Flooding":   "property_flooding",
+                "Emergency Situation": "emergency_situation",
+            }
+            category = _hint_map.get(category_hint, category)
         severity = ai_result.get("severity", "MEDIUM")
         summary = ai_result.get("summary", text[:100])
         location_hint = ai_result.get("location_hint", area)
@@ -138,6 +154,7 @@ class CitizenReportAgent:
         assigned_team = ROUTING_MAP.get(category, "Municipal Response Team")
 
         # 6. Build report
+        _now = datetime.utcnow().isoformat()
         report = {
             "report_id": report_id,
             "user_id": user_id,
@@ -159,7 +176,8 @@ class CitizenReportAgent:
             "assigned_team": assigned_team,
             "requires_immediate_action": requires_immediate,
             "routing_reason": f"Category '{category}' → {assigned_team}",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": _now,
+            "submitted_at": _now,
         }
 
         self.last_run = datetime.utcnow().isoformat()

@@ -1,7 +1,8 @@
 """
 FloodGuard AI — Page 7: Closed-Loop Learning & Analytics
 Feature 10: Store Prediction → Incident → Response → Outcome, show prediction vs outcome.
-All data is DEMO/SIMULATED.
+Learning cycles use DEMO/SIMULATED historical data.
+In production, connects to real prediction store and incident database.
 """
 import sys
 import os
@@ -11,7 +12,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
     simulated_badge, section_header, COLORS, ai_disclaimer
@@ -49,18 +50,19 @@ with st.sidebar:
                 orch.run_pipeline(scenario=sc_id)
             st.rerun()
     st.markdown("---")
-    st.markdown(f'<div style="font-size:0.75rem;color:#94a3b8">{demo_badge()} Synthetic data only</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:0.75rem;color:#94a3b8"><span style="background:#3a2e00;color:#fde68a;font-size:0.7rem;padding:2px 6px;border-radius:4px;font-weight:700">🟡 DEMO</span> Historical cycles are demonstration data</div>', unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
 # Header
 # ──────────────────────────────────────────────
 header("Closed-Loop Learning", "Prediction → Incident → Response → Outcome tracking", "🔄")
 
-st.markdown(f"""
-<div style="background:rgba(124,58,237,0.1);border:1px solid #7c3aed;border-radius:8px;
-            padding:0.5rem 0.9rem;margin-bottom:1rem;font-size:0.78rem;color:#a78bfa">
-    {simulated_badge()} All cycles are <strong>DEMO/SIMULATED</strong> data generated from the current scenario.
-    In production, this would store real prediction → outcome data for continuous model improvement.
+st.markdown("""
+<div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:0.9rem;
+            font-size:0.75rem;color:#94a3b8">
+    <span style="background:#3a2e00;color:#fde68a;padding:2px 7px;border-radius:4px;
+                 font-weight:700;font-size:0.68rem;white-space:nowrap">🟡 DEMO HISTORICAL CYCLES</span>
+    Demonstration prediction → outcome data. Production: replace with real prediction store.
 </div>
 """, unsafe_allow_html=True)
 
@@ -105,7 +107,7 @@ tab1, tab2, tab3 = st.tabs([
 
 # ── Tab 1: Prediction vs Outcome ─────────────
 with tab1:
-    section_header("PREDICTION VS ACTUAL OUTCOME", simulated_badge())
+    section_header("PREDICTION VS ACTUAL OUTCOME")
 
     col_chart, col_stats = st.columns([1.4, 1])
 
@@ -194,7 +196,7 @@ with tab1:
 
 # ── Tab 2: Cycle Log ─────────────────────────
 with tab2:
-    section_header("LEARNING CYCLE LOG", simulated_badge())
+    section_header("LEARNING CYCLE LOG")
     st.markdown("""
     <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
         Each row represents one complete cycle: prediction made → incident detected → response deployed → outcome recorded.
@@ -222,13 +224,13 @@ with tab2:
         st.download_button(
             "📥 Download Cycle Log (CSV)",
             data=csv_data,
-            file_name=f"floodguard_learning_cycles_{datetime.utcnow().strftime('%Y%m%d')}.csv",
+            file_name=f"floodguard_learning_cycles_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv",
             mime="text/csv",
         )
 
 # ── Tab 3: Model Feedback ────────────────────
 with tab3:
-    section_header("MODEL FEEDBACK SUMMARY", simulated_badge())
+    section_header("MODEL FEEDBACK SUMMARY")
 
     col_fb1, col_fb2 = st.columns([1, 1])
 
@@ -309,9 +311,9 @@ with tab3:
 # Footer
 # ──────────────────────────────────────────────
 st.markdown("---")
-st.markdown(f"""
-<div style="text-align:center;color:#475569;font-size:0.72rem;padding-bottom:1rem">
-    FloodGuard AI | Closed-Loop Learning | {simulated_badge()} All data is DEMO/SIMULATED.<br>
-    In production: connects to real prediction store and incident database for continuous improvement.
+st.markdown("""
+<div style="text-align:center;color:#475569;font-size:0.7rem;padding-bottom:0.75rem">
+    FloodGuard AI · 🔄 Closed-Loop Learning ·
+    <span style="background:#3a2e00;color:#fde68a;font-size:0.63rem;padding:1px 5px;border-radius:3px;font-weight:700">🟡 DEMO HISTORICAL CYCLES</span>
 </div>
 """, unsafe_allow_html=True)

@@ -4,7 +4,8 @@ FloodGuard AI — Page 8: Decision Intelligence Center
 Evidence Fusion · Zone Priority · Why This Zone · Why Now
 Agent Decision Trace · Human-in-the-Loop Approval · Audit Trail
 
-All data is DEMO/SIMULATED.
+HYBRID INPUTS: Live Weather (Open-Meteo) · ML Predictions (Random Forest) ·
+User Reports (Citizen Portal) · Demo Infrastructure (drainage/teams/incidents).
 Priority scores are application decision-support scores — NOT scientifically
 validated emergency-response scores.
 """
@@ -17,7 +18,7 @@ from datetime import datetime
 
 from frontend.ui_utils import (
     apply_global_css, header, metric_card,
-    demo_badge, simulated_badge, section_header, COLORS, risk_badge
+    demo_badge, simulated_badge, hybrid_badge, model_badge, section_header, COLORS, risk_badge
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.evidence_fusion import (
@@ -100,12 +101,16 @@ st.markdown(f"""
                 Why Now &nbsp;·&nbsp; Agent Trace &nbsp;·&nbsp; Human-in-the-Loop &nbsp;·&nbsp; Audit
             </div>
         </div>
-        <div>
-            {demo_badge()}
-            &nbsp;
+        <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
+            <div style="font-size:0.72rem;color:#94a3b8">
+                <span style="background:#14532d;color:#bbf7d0;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">🟢 LIVE</span> Weather &nbsp;
+                <span style="background:#1e3a5f;color:#93c5fd;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">🔵 MODEL</span> Predictions &nbsp;
+                <span style="background:#3a1a00;color:#fdba74;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">🟠 USER</span> Reports &nbsp;
+                <span style="background:#3a2e00;color:#fde68a;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">🟡 DEMO</span> Infrastructure
+            </div>
             <span style="background:#1a1d27;border:1px solid #7c3aed;color:#a78bfa;
                          padding:3px 10px;border-radius:6px;font-size:0.78rem;font-weight:600">
-                Application Priority Score — Not a validated emergency score
+                Decision-support layer — Not a validated emergency score
             </span>
         </div>
     </div>
@@ -203,7 +208,8 @@ tab_priority, tab_why, tab_trace, tab_hitl, tab_audit = st.tabs([
 # TAB 1 — ZONE PRIORITY
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_priority:
-    section_header("ZONE PRIORITY SCORES", demo_badge())
+    section_header("ZONE PRIORITY SCORES",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 DECISION SUPPORT</span>')
     st.markdown("""
     <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
         Evidence-fused decision-support priority scores for all monitored zones.
@@ -325,7 +331,8 @@ with tab_priority:
 # TAB 2 — WHY THIS ZONE / WHY NOW
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_why:
-    section_header("WHY THIS ZONE? — ZONE EXPLANATION", demo_badge())
+    section_header("WHY THIS ZONE? — ZONE EXPLANATION",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 DECISION SUPPORT</span>')
 
     if not fusions:
         st.info("Run a scenario to see zone explanations.")
@@ -347,7 +354,8 @@ with tab_why:
         wl_col, wr_col = st.columns([1.3, 1])
 
         with wl_col:
-            section_header("WHY THIS ZONE?", simulated_badge())
+            section_header("WHY THIS ZONE?",
+                           '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 DECISION SUPPORT</span>')
             factors = fusion["contributing_factors"]
             significant = [f for f in factors if f["significant"]]
 
@@ -404,14 +412,16 @@ with tab_why:
             st.markdown(f"""
             <div style="font-size:0.7rem;color:#475569;margin-top:0.5rem;
                         border-top:1px solid #2d3148;padding-top:0.4rem">
-                ⚠ Application decision-support priority score based on DEMO/SIMULATED data.
+                ⚠ Application decision-support priority score. Inputs combine LIVE weather, MODEL predictions,
+                USER SUBMITTED reports and DEMO infrastructure data.
                 Not a validated emergency-response score. Fused at {fusion['fused_at'][:19]} UTC.
             </div>
             """, unsafe_allow_html=True)
 
         with wr_col:
             # ── WHY NOW card ──
-            section_header("WHY NOW?", simulated_badge())
+            section_header("WHY NOW?",
+                           '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 DECISION SUPPORT</span>')
             prev_key = f"{area}_{city}"
             prev_fusion = st.session_state.di_prev_fusions.get(prev_key)
             why_now = build_why_now(fusion, prev_fusion)
@@ -500,7 +510,8 @@ with tab_why:
 # TAB 3 — AGENT DECISION TRACE
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_trace:
-    section_header("AGENT DECISION TRACE", demo_badge())
+    section_header("AGENT DECISION TRACE",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">MODEL / APPLICATION PIPELINE</span>')
     st.markdown("""
     <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
         See which agents contributed to a zone's priority score, and how each piece of evidence
@@ -596,8 +607,8 @@ with tab_trace:
                     border-radius:8px;padding:0.6rem 1rem;font-size:0.75rem;color:#a78bfa;margin-top:0.5rem">
             ↓ FINAL PRIORITY: <strong style="color:{fusion_t['priority_color']}">{fusion_t['priority_level']}</strong>
             &nbsp;|&nbsp; Score: {fusion_t['priority_score']:.0f}/100
-            &nbsp;|&nbsp; All agents are deterministic/rule-based on DEMO data.
-            No real sensor data or government systems were queried.
+            &nbsp;|&nbsp; Inputs: LIVE weather evidence + MODEL predictions + USER SUBMITTED reports + DEMO infrastructure.
+            No real sensor or government emergency systems were queried.
         </div>
         """, unsafe_allow_html=True)
 
@@ -606,7 +617,8 @@ with tab_trace:
 # TAB 4 — HUMAN-IN-THE-LOOP
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_hitl:
-    section_header("HUMAN-IN-THE-LOOP APPROVAL", demo_badge())
+    section_header("🔐 HUMAN-IN-THE-LOOP APPROVAL",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">Decision-support demonstration</span>')
     st.markdown("""
     <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);
                 border-radius:8px;padding:0.6rem 1rem;font-size:0.78rem;color:#fca5a5;margin-bottom:1rem">
@@ -784,7 +796,8 @@ with tab_hitl:
 # TAB 5 — AUDIT TRAIL
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_audit:
-    section_header("ACTION AUDIT TRAIL", demo_badge())
+    section_header("ACTION AUDIT TRAIL",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">APPLICATION DECISION LOG</span>')
     st.markdown("""
     <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
         A record of every human decision made in this session.
@@ -860,7 +873,7 @@ with tab_audit:
 st.markdown("---")
 st.markdown(f"""
 <div style="text-align:center;color:#475569;font-size:0.72rem;padding-bottom:1rem">
-    FloodGuard AI — Decision Intelligence Center &nbsp;|&nbsp; {demo_badge()} All data is DEMO/SIMULATED.<br>
+    FloodGuard AI — Decision Intelligence Center &nbsp;|&nbsp; HYBRID DATA: LIVE weather · MODEL predictions · USER SUBMITTED reports · DEMO infrastructure<br>
     Application priority scores are <strong>NOT</strong> scientifically validated emergency-response scores.<br>
     All AI recommendations require authorized human verification before any real-world implementation.
 </div>

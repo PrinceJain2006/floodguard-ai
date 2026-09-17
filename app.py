@@ -39,8 +39,8 @@ st.markdown("""
     </p>
     <p style="font-size:0.9rem;color:#64748b;margin-bottom:2rem">
         Ahmedabad &amp; Surat, Gujarat, India &nbsp;|&nbsp;
-        <span style="background:#7c3aed;color:white;padding:2px 8px;border-radius:4px;font-size:0.8rem;font-weight:600">DEMO MODE</span>
-        &nbsp; Synthetic data — not real government data
+        <span style="background:#0f4c2a;color:#6ee7b7;padding:2px 8px;border-radius:4px;font-size:0.8rem;font-weight:600">HYBRID MODE</span>
+        &nbsp; Live Weather · ML Flood Risk · IBM Granite · User Reports · Demo Infrastructure Data
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -150,8 +150,11 @@ st.markdown("""
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align:center;color:#475569;font-size:0.75rem;padding-bottom:1rem">
-    ⚠️ FloodGuard AI uses <strong>synthetic demo data</strong> for Ahmedabad &amp; Surat. 
-    It does not represent real government operational data or guarantee flood prediction accuracy.<br>
+    <strong style="color:#64748b">DATA TRANSPARENCY</strong><br>
+    FloodGuard AI combines live weather intelligence (Open-Meteo), ML-based flood-risk predictions,
+    IBM Granite reasoning, user-submitted citizen reports and clearly labelled demonstration datasets.
+    Drainage infrastructure, response-team status and flood incidents without a verified live municipal
+    source remain <strong>DEMO</strong> data.<br>
     AI recommendations require authorized human verification before implementation.
 </div>
 """, unsafe_allow_html=True)

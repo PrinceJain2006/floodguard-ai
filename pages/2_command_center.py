@@ -20,6 +20,8 @@ from frontend.ui_utils import (
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from frontend.map_component import build_flood_map
 from streamlit_folium import st_folium
+from services.report_store import get_user_reports, count_open as _user_open_count
+from services.weather_dashboard import get_weather_for_city, cache_age_seconds, GUJARAT_CITIES
 
 st.set_page_config(
     page_title="Command Center — FloodGuard AI",
@@ -118,7 +120,16 @@ alerts = state.get("alerts", [])
 teams = state.get("teams", [])
 rainfall_data = state.get("rainfall_data", [])
 raw_drains = state.get("raw_drains", [])
-raw_reports = state.get("raw_reports", [])
+# ── Merge demo seed reports with persisted USER SUBMITTED reports ─────────
+# user_reports is read fresh from disk on every rerun — no caching — so that
+# reports submitted from the Citizen Portal page appear here immediately.
+_demo_reports = state.get("raw_reports", [])
+_user_reports = get_user_reports()
+# Tag demo reports with source label if not already set
+for _r in _demo_reports:
+    if not _r.get("source"):
+        _r["source"] = "DEMO/SYNTHETIC"
+raw_reports = _user_reports + _demo_reports
 live_weather_status      = state.get("live_weather_status",      {"data_mode": "DEMO", "is_live": False, "fallback_reason": "Pipeline not yet run"})
 live_weather_records     = state.get("live_weather_records",     [])
 live_weather_map_points  = state.get("live_weather_map_points",  [])
@@ -141,7 +152,10 @@ medium   = sum(1 for p in predictions if p["risk_level"] == "MEDIUM")
 total_zones = len(predictions)
 
 critical_drains = drain_analysis.get("priority_summary", {}).get("CRITICAL", 0)
-open_reports = report_analysis.get("open_reports", 0)
+# Open reports = demo open count + all persisted user-submitted open reports
+_demo_open  = report_analysis.get("open_reports", 0)
+_user_open  = _user_open_count()
+open_reports = _demo_open + _user_open
 incidents = response_plan.get("incidents", [])
 available_teams = sum(1 for t in teams if t.get("status") == "AVAILABLE")
 avg_rain = sum(r.get("rainfall_1h", 0) for r in rainfall_data) / max(len(rainfall_data), 1)
@@ -161,8 +175,9 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ──────────────────────────────────────────────
 # Tabs
 # ──────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🗺️ Live Risk Map",
+    "🌦️ Live Weather",
     "⚡ Incidents",
     "🤖 AI Recommendations",
     "🔧 Drainage",
@@ -231,7 +246,7 @@ with tab1:
         # Alerts
         if alerts:
             st.markdown("---")
-            section_header("ACTIVE ALERTS", simulated_badge())
+            section_header("ACTIVE ALERTS", model_badge())
             for alert in alerts[:4]:
                 level = alert.get("alert_level", "INFO")
                 cls = {"CRITICAL": "alert-critical", "HIGH": "alert-high"}.get(level, "alert-info")
@@ -239,13 +254,14 @@ with tab1:
                 <div class="{cls}" style="font-size:0.8rem">
                     <b>{alert.get('title','')}</b><br>
                     <span style="color:#cbd5e1">{alert.get('message','')[:120]}</span>
-                    <div style="font-size:0.68rem;color:#64748b;margin-top:0.2rem">⚙ SIMULATED</div>
+                    <div style="font-size:0.68rem;color:#64748b;margin-top:0.2rem">🔵 MODEL GENERATED</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-# ── Tab 2: Incidents ──────────────────────────
-with tab2:
-    section_header("ACTIVE INCIDENTS", demo_badge())
+# ── Tab 3: Incidents ──────────────────────────
+with tab3:
+    section_header("ACTIVE INCIDENTS",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL + 🟡 DEMO DATA</span>')
     if not incidents:
         st.info("No active incidents for current scenario.")
     else:
@@ -295,9 +311,9 @@ with tab2:
                             st.session_state.rejected_recs.add(inc["incident_id"])
                             st.warning(f"Actions rejected for {inc['incident_id']} [DEMO — logged]")
 
-# ── Tab 3: AI Recommendations ─────────────────
-with tab3:
-    section_header("AI RECOMMENDATIONS", demo_badge())
+# ── Tab 4: AI Recommendations ─────────────────
+with tab4:
+    section_header("AI RECOMMENDATIONS", model_badge())
     ai_disclaimer()
 
     recs = response_plan.get("top_recommendations", [])
@@ -355,7 +371,8 @@ with tab3:
 
     # Situation report
     st.markdown("---")
-    section_header("📋 AI SITUATION REPORT", simulated_badge())
+    section_header("📋 AI SITUATION REPORT",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL / GRANITE</span>')
     situation_report = state.get("situation_report", "")
     if situation_report:
         st.markdown(f"""
@@ -372,8 +389,8 @@ with tab3:
         ):
             pass
 
-# ── Tab 4: Drainage ───────────────────────────
-with tab4:
+# ── Tab 5: Drainage ───────────────────────────
+with tab5:
     section_header("DRAINAGE STATUS", demo_badge())
     scored_drains = drain_analysis.get("scored_drains", [])
     priority_summary = drain_analysis.get("priority_summary", {})
@@ -429,21 +446,42 @@ with tab4:
                 </div>
                 """, unsafe_allow_html=True)
 
-# ── Tab 5: Citizen Reports ────────────────────
-with tab5:
-    section_header("CITIZEN FLOOD REPORTS", demo_badge())
+# ── Tab 6: Citizen Reports ────────────────────
+with tab6:
+    section_header("CITIZEN FLOOD REPORTS",
+                   '<span style="background:#3a1a00;color:#fdba74;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🟠 USER SUBMITTED + 🟡 DEMO/SYNTHETIC</span>')
+
+    # ── Refresh button — triggers a rerun which re-reads the file store ──
+    _rr_col, _rr_info = st.columns([1, 4])
+    with _rr_col:
+        if st.button("🔄 Refresh Reports", key="refresh_reports"):
+            st.rerun()
+    with _rr_info:
+        st.markdown(
+            f'<div style="font-size:0.75rem;color:#94a3b8;padding-top:0.4rem">'
+            f'🟠 <b>{len(_user_reports)}</b> USER SUBMITTED &nbsp;·&nbsp; '
+            f'🟡 <b>{len(_demo_reports)}</b> DEMO/SYNTHETIC &nbsp;·&nbsp; '
+            f'📋 <b>{len(raw_reports)}</b> total</div>',
+            unsafe_allow_html=True,
+        )
 
     col_r1, col_r2 = st.columns([1, 1.5])
     with col_r1:
-        # Summary metrics
+        # Summary metrics — use merged counts
         ra = report_analysis
+        _total_merged  = len(raw_reports)
+        _open_merged   = open_reports  # already includes user-submitted open count
+        _critical_merged = ra.get("critical_count", 0) + sum(
+            1 for r in _user_reports if r.get("severity") == "CRITICAL"
+        )
+        _dupes_merged  = ra.get("duplicate_count", 0)
         mc1, mc2 = st.columns(2)
         with mc1:
-            metric_card("Total Reports", str(ra.get("total_reports", 0)), color="#3b82f6")
-            metric_card("Critical Reports", str(ra.get("critical_count", 0)), color="#ef4444", icon="🚨")
+            metric_card("Total Reports", str(_total_merged), color="#3b82f6")
+            metric_card("Critical Reports", str(_critical_merged), color="#ef4444", icon="🚨")
         with mc2:
-            metric_card("Open Reports", str(ra.get("open_reports", 0)), color="#f97316")
-            metric_card("Duplicates Filtered", str(ra.get("duplicate_count", 0)), color="#94a3b8")
+            metric_card("Open Reports", str(_open_merged), color="#f97316")
+            metric_card("Duplicates Filtered", str(_dupes_merged), color="#94a3b8")
 
         st.markdown("---")
         # Category breakdown
@@ -480,19 +518,38 @@ with tab5:
                 </div>
                 """, unsafe_allow_html=True)
 
+        # If there are user-submitted reports, show them first in a dedicated block
+        if _user_reports:
+            st.markdown("---")
+            section_header("🟠 USER SUBMITTED REPORTS")
+            df_usr = pd.DataFrame(_user_reports[:10])
+            if not df_usr.empty:
+                _ucols = ["report_id", "area", "city", "category", "severity", "status", "submitted_at"]
+                _ucols_avail = [c for c in _ucols if c in df_usr.columns]
+                df_usr_disp = df_usr[_ucols_avail].copy()
+                df_usr_disp["category"] = df_usr_disp["category"].str.replace("_", " ").str.title()
+                if "submitted_at" in df_usr_disp.columns:
+                    df_usr_disp["submitted_at"] = pd.to_datetime(df_usr_disp["submitted_at"]).dt.strftime("%b %d %H:%M")
+                st.dataframe(df_usr_disp, use_container_width=True, hide_index=True, height=200)
+
         st.markdown("---")
-        # Reports table
+        # Full merged reports table (user first, then demo)
         if raw_reports:
-            df_r = pd.DataFrame(raw_reports[:30])
+            section_header("ALL REPORTS (Merged)")
+            df_r = pd.DataFrame(raw_reports[:40])
             if not df_r.empty:
-                cols_to_show = ["report_id", "city", "area", "category", "severity", "language", "status"]
+                # Ensure source column exists
+                if "source" not in df_r.columns:
+                    df_r["source"] = "DEMO/SYNTHETIC"
+                df_r["source"] = df_r["source"].fillna("DEMO/SYNTHETIC")
+                cols_to_show = ["report_id", "city", "area", "category", "severity", "status", "source"]
                 cols_avail = [c for c in cols_to_show if c in df_r.columns]
                 df_display = df_r[cols_avail].copy()
                 df_display["category"] = df_display["category"].str.replace("_", " ").str.title()
                 st.dataframe(df_display, use_container_width=True, hide_index=True, height=280)
 
-# ── Tab 6: Response Teams ─────────────────────
-with tab6:
+# ── Tab 7: Response Teams ─────────────────────
+with tab7:
     section_header("RESPONSE TEAMS", demo_badge())
 
     # Status overview
@@ -516,9 +573,11 @@ with tab6:
         df_teams_display["team_type"] = df_teams_display["team_type"].str.replace("_", " ").str.title()
         st.dataframe(df_teams_display, use_container_width=True, hide_index=True, height=400)
 
-# ── Tab 7: Rainfall ───────────────────────────
-with tab7:
-    section_header("RAINFALL DATA", demo_badge())
+# ── Tab 8: Rainfall ───────────────────────────
+with tab8:
+    _rain_is_live_cc = state.get("live_weather_status", {}).get("is_live", False)
+    section_header("RAINFALL DATA",
+                   live_badge() if _rain_is_live_cc else demo_badge())
     if rainfall_data:
         col_chart, col_table = st.columns([1.3, 1])
         with col_chart:
@@ -530,6 +589,384 @@ with tab7:
             df_rain_sorted = df_rain[cols_rain].sort_values("rainfall_1h", ascending=False).head(20)
             df_rain_sorted.columns = ["City", "Area", "1h mm", "3h mm", "6h mm", "24h mm"]
             st.dataframe(df_rain_sorted, use_container_width=True, hide_index=True, height=380)
+
+# ── Tab 2: Live Weather ──────────────────────
+with tab2:
+    from datetime import datetime as _wx_dt
+    from services.live_weather import wmo_emoji as _cc_wmo_emoji
+
+    section_header("LIVE WEATHER & FORECAST", live_badge())
+    st.caption(
+        "Real-time weather for Gujarat cities via Open-Meteo API (no API key required). "
+        "Select a city, view hourly and 7-day forecasts, and refresh live data below."
+    )
+
+    # ── Session state ──────────────────────────────────────────────────────
+    if "cc_wx_city" not in st.session_state:
+        st.session_state.cc_wx_city = "Ahmedabad"
+    if "cc_wx_force" not in st.session_state:
+        st.session_state.cc_wx_force = False
+
+    # ── Controls row: city selector · refresh · cache status ───────────────
+    _wx_col_sel, _wx_col_btn, _wx_col_info = st.columns([1.2, 0.7, 2.5])
+    with _wx_col_sel:
+        _cc_city_sel = st.selectbox(
+            "Select City",
+            GUJARAT_CITIES,
+            index=GUJARAT_CITIES.index(st.session_state.cc_wx_city)
+                  if st.session_state.cc_wx_city in GUJARAT_CITIES else 0,
+            key="cc_wx_city_select",
+        )
+        if _cc_city_sel != st.session_state.cc_wx_city:
+            st.session_state.cc_wx_city = _cc_city_sel
+            st.rerun()
+    with _wx_col_btn:
+        st.markdown("<div style='margin-top:1.6rem'>", unsafe_allow_html=True)
+        if st.button("🔄 Refresh", key="cc_wx_refresh", use_container_width=True):
+            st.session_state.cc_wx_force = True
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+    with _wx_col_info:
+        _cc_age = cache_age_seconds(st.session_state.cc_wx_city)
+        _cc_age_str = f"{int(_cc_age)}s ago" if _cc_age is not None else "not fetched yet"
+        st.markdown(
+            f'<div style="padding-top:1.8rem;font-size:0.72rem;color:#64748b">'
+            f'<span style="background:#14532d;color:#bbf7d0;padding:1px 6px;'
+            f'border-radius:3px;font-size:0.7rem;font-weight:700">🟢 LIVE</span>'
+            f'&nbsp; Open-Meteo API &nbsp;|&nbsp; Cache: {_cc_age_str}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Fetch ──────────────────────────────────────────────────────────────
+    _cc_force = st.session_state.cc_wx_force
+    if _cc_force:
+        st.session_state.cc_wx_force = False
+    _cc_wx, _cc_wx_err = get_weather_for_city(
+        st.session_state.cc_wx_city, force_refresh=_cc_force
+    )
+
+    # ── Error / warning state ──────────────────────────────────────────────
+    if _cc_wx_err and _cc_wx is None:
+        st.error(
+            f"Live weather data temporarily unavailable "
+            f"for {st.session_state.cc_wx_city}: {_cc_wx_err}"
+        )
+    else:
+        if _cc_wx_err:
+            st.warning(_cc_wx_err)
+
+        if _cc_wx:
+            # ── Extract current-conditions fields ──────────────────────────
+            _cc_temp   = _cc_wx.get("temperature", "--")
+            _cc_cond   = _cc_wx.get("condition", "--")
+            _cc_emoji  = _cc_wx.get("condition_emoji", "")
+            _cc_rain   = _cc_wx.get("rainfall_1h", 0)
+            _cc_humid  = _cc_wx.get("humidity", "--")
+            _cc_wind   = _cc_wx.get("wind_speed", "--")
+            _cc_wdir   = _cc_wx.get("wind_direction_label", "--")
+            _cc_wdeg   = _cc_wx.get("wind_direction", "--")
+            _cc_prob   = _cc_wx.get("precipitation_probability", 0)
+            _cc_rain6h = _cc_wx.get("rainfall_6h", 0)
+            _cc_rec    = str(_cc_wx.get("recorded_at", ""))[:16].replace("T", " ")
+            _cc_rain_c = (
+                "#ef4444" if _cc_rain >= 40 else "#f97316" if _cc_rain >= 20
+                else "#eab308" if _cc_rain >= 5 else "#22c55e"
+            )
+
+            # ── Current conditions hero card ───────────────────────────────
+            st.markdown(f"""
+            <div style="background:#1a1d27;border:1px solid #22c55e;border-radius:12px;
+                        padding:1rem 1.25rem;margin:.5rem 0 1rem">
+              <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
+                <span style="font-size:2rem">{_cc_emoji}</span>
+                <div>
+                  <div style="font-size:1rem;font-weight:800;color:#e2e8f0">
+                    {st.session_state.cc_wx_city} &mdash; {_cc_cond}</div>
+                  <div style="font-size:0.68rem;color:#475569">
+                    Observed: {_cc_rec} IST &nbsp;|&nbsp;
+                    <span style="color:#6ee7b7">&#128994; LIVE</span>
+                    &nbsp; Open-Meteo
+                  </div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:0.55rem">
+                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+                  <div style="font-size:1.35rem;font-weight:800;color:#f97316">{_cc_temp}&#176;C</div>
+                  <div style="font-size:0.62rem;color:#94a3b8">TEMPERATURE</div>
+                </div>
+                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+                  <div style="font-size:1.35rem;font-weight:800;color:{_cc_rain_c}">{_cc_rain} mm</div>
+                  <div style="font-size:0.62rem;color:#94a3b8">RAIN / HR</div>
+                </div>
+                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+                  <div style="font-size:1.35rem;font-weight:800;color:#3b82f6">{_cc_humid}%</div>
+                  <div style="font-size:0.62rem;color:#94a3b8">HUMIDITY</div>
+                </div>
+                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+                  <div style="font-size:1.35rem;font-weight:800;color:#14b8a6">{_cc_wind} km/h</div>
+                  <div style="font-size:0.62rem;color:#94a3b8">WIND SPEED</div>
+                </div>
+                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+                  <div style="font-size:1.35rem;font-weight:800;color:#a78bfa">{_cc_wdir}</div>
+                  <div style="font-size:0.62rem;color:#94a3b8">WIND DIR</div>
+                </div>
+                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+                  <div style="font-size:1.35rem;font-weight:800;color:#64748b">{int(_cc_prob)}%</div>
+                  <div style="font-size:0.62rem;color:#94a3b8">PRECIP PROB</div>
+                </div>
+                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+                  <div style="font-size:1.35rem;font-weight:800;color:#22d3ee">{_cc_rain6h} mm</div>
+                  <div style="font-size:0.62rem;color:#94a3b8">RAIN NEXT 6H</div>
+                </div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # ── Shared helper for time label ───────────────────────────────
+            def _cc_fmt_t(t):
+                try:
+                    return _wx_dt.strptime(t, "%Y-%m-%dT%H:%M").strftime("%H:%M")
+                except Exception:
+                    return t[:5]
+
+            # ── Hourly arrays (48 h from API) ──────────────────────────────
+            _cc_h_times   = _cc_wx.get("hourly_times",       [])
+            _cc_h_temp    = _cc_wx.get("hourly_temp",        [])
+            _cc_h_precip  = _cc_wx.get("hourly_precip",      [])
+            _cc_h_prob    = _cc_wx.get("hourly_precip_prob", [])
+            _cc_h_wind    = _cc_wx.get("hourly_windspeed",   [])
+            _cc_h_winddir = _cc_wx.get("hourly_winddir",     [])
+
+            # Show 48 h for hourly views
+            _cc_n   = min(48, len(_cc_h_times))
+            _cc_lbl = [_cc_fmt_t(t) for t in _cc_h_times[:_cc_n]]
+
+            # ── Three view tabs: Temperature · Precipitation · Wind ─────────
+            _wx_tab_t, _wx_tab_p, _wx_tab_w = st.tabs([
+                "🌡️ Temperature",
+                "🌧️ Precipitation",
+                "💨 Wind",
+            ])
+
+            # Shared chart base settings — defined once, no yaxis key here
+            _cc_layout_base = dict(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#94a3b8", size=10),
+                margin=dict(t=10, b=35, l=40, r=10),
+                xaxis=dict(
+                    color="#64748b",
+                    gridcolor="#1e2030",
+                    nticks=12,
+                    tickangle=-45,
+                ),
+                hovermode="x unified",
+            )
+
+            # ── Temperature tab ────────────────────────────────────────────
+            with _wx_tab_t:
+                section_header(
+                    "HOURLY TEMPERATURE (48 h)",
+                    '<span style="background:#14532d;color:#bbf7d0;font-size:0.65rem;'
+                    'padding:1px 6px;border-radius:3px;font-weight:700">LIVE</span>',
+                )
+                if _cc_h_temp and _cc_lbl:
+                    _fig_t = go.Figure(go.Scatter(
+                        x=_cc_lbl, y=_cc_h_temp[:_cc_n],
+                        mode="lines+markers",
+                        line=dict(color="#f97316", width=2),
+                        marker=dict(size=3, color="#f97316"),
+                        fill="tozeroy",
+                        fillcolor="rgba(249,115,22,0.08)",
+                        name="Temperature",
+                        hovertemplate="%{x}<br><b>%{y:.1f}&#176;C</b><extra></extra>",
+                    ))
+                    _fig_t.update_layout(
+                        **_cc_layout_base,
+                        height=220,
+                        yaxis=dict(
+                            color="#94a3b8",
+                            gridcolor="#1e2030",
+                            title="&#176;C",
+                        ),
+                    )
+                    st.plotly_chart(_fig_t, use_container_width=True,
+                                    config={"displayModeBar": False})
+                    # Current + daily summary metrics
+                    _t_col1, _t_col2, _t_col3 = st.columns(3)
+                    with _t_col1:
+                        metric_card("Current", f"{_cc_temp}°C", color="#f97316", icon="🌡️")
+                    with _t_col2:
+                        _d_max = _cc_wx.get("daily_temp_max", [None])
+                        _dmax_v = f"{_d_max[0]:.0f}°C" if _d_max and _d_max[0] is not None else "--"
+                        metric_card("Today Max", _dmax_v, color="#ef4444", icon="⬆️")
+                    with _t_col3:
+                        _d_min = _cc_wx.get("daily_temp_min", [None])
+                        _dmin_v = f"{_d_min[0]:.0f}°C" if _d_min and _d_min[0] is not None else "--"
+                        metric_card("Today Min", _dmin_v, color="#3b82f6", icon="⬇️")
+                else:
+                    st.info("Hourly temperature data not available.")
+
+            # ── Precipitation tab ──────────────────────────────────────────
+            with _wx_tab_p:
+                section_header(
+                    "HOURLY PRECIPITATION & PROBABILITY (48 h)",
+                    '<span style="background:#14532d;color:#bbf7d0;font-size:0.65rem;'
+                    'padding:1px 6px;border-radius:3px;font-weight:700">LIVE</span>',
+                )
+                if _cc_h_precip and _cc_lbl:
+                    _fig_p = go.Figure()
+                    # Precipitation bars — primary y-axis
+                    _fig_p.add_trace(go.Bar(
+                        x=_cc_lbl, y=_cc_h_precip[:_cc_n],
+                        name="Precipitation (mm)",
+                        marker_color=[
+                            "#ef4444" if v >= 40 else "#f97316" if v >= 20
+                            else "#eab308" if v >= 5 else "#3b82f6"
+                            for v in _cc_h_precip[:_cc_n]
+                        ],
+                        hovertemplate="%{x}<br><b>%{y:.2f} mm</b><extra></extra>",
+                        yaxis="y",
+                    ))
+                    # Probability line — secondary y-axis
+                    if _cc_h_prob:
+                        _fig_p.add_trace(go.Scatter(
+                            x=_cc_lbl, y=_cc_h_prob[:_cc_n],
+                            mode="lines",
+                            line=dict(color="#a78bfa", width=1.5, dash="dot"),
+                            name="Precip Prob (%)",
+                            hovertemplate="%{x}<br><b>%{y:.0f}%</b><extra></extra>",
+                            yaxis="y2",
+                        ))
+                    _fig_p.update_layout(
+                        **_cc_layout_base,
+                        height=240,
+                        barmode="overlay",
+                        yaxis=dict(
+                            color="#94a3b8",
+                            gridcolor="#1e2030",
+                            title="mm",
+                        ),
+                        yaxis2=dict(
+                            title="%",
+                            overlaying="y",
+                            side="right",
+                            range=[0, 100],
+                            color="#a78bfa",
+                            showgrid=False,
+                        ),
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            font=dict(color="#94a3b8", size=9),
+                        ),
+                    )
+                    st.plotly_chart(_fig_p, use_container_width=True,
+                                    config={"displayModeBar": False})
+                    _p_col1, _p_col2, _p_col3 = st.columns(3)
+                    with _p_col1:
+                        metric_card("Now (1h)", f"{_cc_rain} mm", color="#3b82f6", icon="🌧️")
+                    with _p_col2:
+                        metric_card("Next 6h", f"{_cc_rain6h} mm", color="#3b82f6", icon="🌊")
+                    with _p_col3:
+                        metric_card("Precip Prob", f"{int(_cc_prob)}%", color="#a78bfa", icon="📊")
+                else:
+                    st.info("Hourly precipitation data not available.")
+
+            # ── Wind tab ───────────────────────────────────────────────────
+            with _wx_tab_w:
+                section_header(
+                    "HOURLY WIND SPEED (48 h)",
+                    '<span style="background:#14532d;color:#bbf7d0;font-size:0.65rem;'
+                    'padding:1px 6px;border-radius:3px;font-weight:700">LIVE</span>',
+                )
+                if _cc_h_wind and _cc_lbl:
+                    _fig_w = go.Figure(go.Scatter(
+                        x=_cc_lbl, y=_cc_h_wind[:_cc_n],
+                        mode="lines+markers",
+                        line=dict(color="#14b8a6", width=2),
+                        marker=dict(size=3, color="#14b8a6"),
+                        fill="tozeroy",
+                        fillcolor="rgba(20,184,166,0.08)",
+                        name="Wind Speed",
+                        hovertemplate="%{x}<br><b>%{y:.1f} km/h</b><extra></extra>",
+                    ))
+                    _fig_w.update_layout(
+                        **_cc_layout_base,
+                        height=220,
+                        yaxis=dict(
+                            color="#94a3b8",
+                            gridcolor="#1e2030",
+                            title="km/h",
+                        ),
+                    )
+                    st.plotly_chart(_fig_w, use_container_width=True,
+                                    config={"displayModeBar": False})
+                    _w_col1, _w_col2, _w_col3 = st.columns(3)
+                    with _w_col1:
+                        metric_card("Speed", f"{_cc_wind} km/h", color="#14b8a6", icon="💨")
+                    with _w_col2:
+                        metric_card("Direction", f"{_cc_wdir}", color="#a78bfa", icon="🧭")
+                    with _w_col3:
+                        metric_card("Degrees", f"{_cc_wdeg}°", color="#64748b", icon="📐")
+                else:
+                    st.info("Hourly wind data not available.")
+
+            # ── 7-day forecast ─────────────────────────────────────────────
+            _cc_d_times  = _cc_wx.get("daily_times",          [])
+            _cc_d_tmax   = _cc_wx.get("daily_temp_max",       [])
+            _cc_d_tmin   = _cc_wx.get("daily_temp_min",       [])
+            _cc_d_precip = _cc_wx.get("daily_precip_sum",     [])
+            _cc_d_prob   = _cc_wx.get("daily_precip_prob_max",[])
+            _cc_d_wcode  = _cc_wx.get("daily_weathercode",    [])
+
+            if _cc_d_times:
+                st.markdown("---")
+                section_header("7-DAY FORECAST", live_badge())
+
+                def _cc_day_lbl(d):
+                    try:
+                        return _wx_dt.strptime(d, "%Y-%m-%d").strftime("%a %d")
+                    except Exception:
+                        return d
+
+                _cc_dcols = st.columns(min(7, len(_cc_d_times)))
+                for _di, (_dcol, _dday) in enumerate(zip(_cc_dcols, _cc_d_times[:7])):
+                    with _dcol:
+                        _dtmax  = _cc_d_tmax[_di]  if _di < len(_cc_d_tmax)  else None
+                        _dtmin  = _cc_d_tmin[_di]  if _di < len(_cc_d_tmin)  else None
+                        _dprec  = _cc_d_precip[_di] if _di < len(_cc_d_precip) else 0
+                        _dprob  = _cc_d_prob[_di]   if _di < len(_cc_d_prob)   else 0
+                        _dwc    = _cc_d_wcode[_di]  if _di < len(_cc_d_wcode)  else 0
+                        _dem    = _cc_wmo_emoji(_dwc)
+                        _tmax_s = f"{_dtmax:.0f}&#176;" if _dtmax is not None else "--"
+                        _tmin_s = f"{_dtmin:.0f}&#176;" if _dtmin is not None else "--"
+                        st.markdown(f"""
+                        <div style="background:#111827;border:1px solid #2d3148;
+                                    border-radius:8px;padding:.5rem .3rem;text-align:center">
+                          <div style="font-size:1.1rem">{_dem}</div>
+                          <div style="font-size:0.68rem;font-weight:700;color:#e2e8f0">
+                            {_cc_day_lbl(_dday)}</div>
+                          <div style="font-size:0.75rem;color:#f97316;font-weight:700">
+                            {_tmax_s}</div>
+                          <div style="font-size:0.65rem;color:#64748b">{_tmin_s}</div>
+                          <div style="font-size:0.62rem;color:#3b82f6">{_dprec:.1f}mm</div>
+                          <div style="font-size:0.6rem;color:#a78bfa">{int(_dprob)}%</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # ── Footer note ────────────────────────────────────────────────
+            st.markdown(
+                '<div style="margin-top:.75rem;font-size:0.68rem;color:#475569">'
+                '&#128994; LIVE = Open-Meteo real-time data &nbsp;|&nbsp; '
+                '&#128309; MODEL = ML flood-risk prediction &nbsp;|&nbsp; '
+                '&#128993; DEMO/SYNTHETIC = drainage / reports / teams seed data'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
 
 # ──────────────────────────────────────────────
 # Live Data Intelligence section

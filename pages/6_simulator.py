@@ -44,12 +44,14 @@ state = orch.current_state or {}
 # Header
 # ──────────────────────────────────────────────
 header("What-If Flood Simulator & Forecast Timeline",
-       "Adjust parameters and see simulated risk impact — 100% synthetic demo data", "🌧️")
+       "Adjust parameters and see simulated risk impact — mathematical model on demo infrastructure data", "🌧️")
 
 st.markdown(f"""
 <div style="background:rgba(59,130,246,0.1);border:1px solid #3b82f6;border-radius:8px;
             padding:0.5rem 0.9rem;margin-bottom:1rem;font-size:0.78rem;color:#93c5fd">
-    {simulated_badge()} This simulator uses a <strong>mathematical model</strong> built on demo data. 
+    {simulated_badge()} This simulator uses a <strong>mathematical model</strong>.
+    <span style="color:#22c55e">Live weather inputs (where available)</span> are combined with
+    <span style="color:#eab308">demo infrastructure data</span> (drainage, elevation, area metadata).
     Outputs are illustrative only and do not represent real flood forecasts or government predictions.
     Never use for real emergency decisions.
 </div>
@@ -537,7 +539,7 @@ with tab3:
 st.markdown("---")
 st.markdown(f"""
 <div style="text-align:center;color:#475569;font-size:0.72rem;padding-bottom:1rem">
-    FloodGuard AI | Simulator & Resource Optimization | {simulated_badge()} All outputs are DEMO/SIMULATED mathematical models.<br>
-    Not real meteorological forecasts. Not for operational emergency use.
+    FloodGuard AI | Simulator & Resource Optimization | {simulated_badge()} Mathematical model outputs.<br>
+    Not real meteorological forecasts. Infrastructure inputs are DEMO data. Not for operational emergency use.
 </div>
 """, unsafe_allow_html=True)

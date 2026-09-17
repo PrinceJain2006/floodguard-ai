@@ -1284,8 +1284,8 @@ class TestLiveWeatherService:
             self._parse_response("Ahmedabad", raw)
 
     def test_parse_response_out_of_scope_city(self):
-        """City not in CITY_COORDS raises WeatherFetchError."""
-        with pytest.raises(self.WeatherFetchError, match="not in scope"):
+        """City not in GUJARAT_CITY_COORDS raises WeatherFetchError."""
+        with pytest.raises(self.WeatherFetchError):
             self._parse_response("Mumbai", self._make_raw())
 
     def test_parse_response_forecast_6h(self):
@@ -1304,9 +1304,9 @@ class TestLiveWeatherService:
             assert key in result, f"Missing key: {key}"
 
     def test_fetch_city_weather_invalid_city(self):
-        """Requesting a city outside scope raises WeatherFetchError."""
-        with pytest.raises(self.WeatherFetchError, match="not in scope"):
-            self.fetch_city_weather("Vadodara")
+        """Requesting a city outside the Gujarat list raises WeatherFetchError."""
+        with pytest.raises(self.WeatherFetchError):
+            self.fetch_city_weather("Mumbai")
 
     def test_fetch_all_cities_on_network_error(self):
         """

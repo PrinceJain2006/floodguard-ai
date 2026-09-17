@@ -12,15 +12,15 @@ intelligence are associated only with Ahmedabad or Surat.
 Basemap: OpenStreetMap (no API key required).
 No CartoDB dependency.
 
-Layer structure:
-  • Predicted Flood Risk      (DEMO / ML-predicted)
-  • Weather Evidence          (DEMO / synthetic rainfall)
-  • Drainage Status           (DEMO / synthetic)
-  • Citizen Reports           (DEMO / synthetic)
-  • Response Teams            (DEMO / synthetic)
+Source taxonomy (used consistently in layers, legend, and popups):
+  • 🌊 Predicted Flood Risk  — MODEL       (ML/risk pipeline output)
+  • 🌧️ Weather Evidence      — LIVE / DEMO (Open-Meteo API or synthetic fallback)
+  • 🔧 Drainage Infrastructure — DEMO      (seeded synthetic data)
+  • 📱 Citizen Reports        — USER / DEMO (USER SUBMITTED = persisted portal reports;
+                                             DEMO/SYNTHETIC = seeded demonstration data)
+  • 🚒 Response Teams         — DEMO       (seeded synthetic data)
 
 City markers for Ahmedabad and Surat always visible.
-All data is DEMO/SIMULATED — clearly labeled.
 """
 from __future__ import annotations
 
@@ -181,12 +181,17 @@ def build_flood_map(
     if city in ("All", "Surat"):
         _city_marker(21.1702, 72.8311, "📍 Surat").add_to(m)
 
-    # ── Layer groups — named to clearly distinguish live vs demo ─────────
-    risk_layer    = folium.FeatureGroup(name="🌊 Predicted Flood Risk [MODEL/DEMO]", show=True)
-    weather_layer = folium.FeatureGroup(name="🌧️ Live Weather Evidence",             show=True)
-    drain_layer   = folium.FeatureGroup(name="🔧 Drainage Status [DEMO]",            show=False)
-    report_layer  = folium.FeatureGroup(name="📱 Citizen Reports [DEMO]",            show=False)
-    team_layer    = folium.FeatureGroup(name="🚒 Response Teams [DEMO]",             show=False)
+    # ── Layer groups — named using the standard source taxonomy ──────────
+    # Show report layer by default so user-submitted markers are immediately visible
+    _has_user_reports = any(
+        str(r.get("source", "")).upper() == "USER SUBMITTED" for r in report_data
+    )
+    _wx_layer_name = "🌧️ Weather Evidence — LIVE" if is_live else "🌧️ Weather Evidence — DEMO"
+    risk_layer    = folium.FeatureGroup(name="🌊 Predicted Flood Risk — MODEL", show=True)
+    weather_layer = folium.FeatureGroup(name=_wx_layer_name,                    show=True)
+    drain_layer   = folium.FeatureGroup(name="🔧 Drainage Infrastructure — DEMO", show=False)
+    report_layer  = folium.FeatureGroup(name="📱 Citizen Reports — USER / DEMO", show=_has_user_reports)
+    team_layer    = folium.FeatureGroup(name="🚒 Response Teams — DEMO",         show=False)
 
     # Collect valid latlons from risk + drain markers for fit_bounds
     bounds_latlons: list[list[float]] = []
@@ -248,10 +253,12 @@ def build_flood_map(
             continue
         lat, lon = float(lat), float(lon)
 
-        rain  = wp.get("rainfall_1h", 0)
-        cond  = wp.get("condition", "Rain")
-        src   = wp.get("source", "DEMO")
-        is_live = str(src).upper() not in ("DEMO", "SYNTHETIC", "SIMULATED")
+        rain       = wp.get("rainfall_1h", 0)
+        cond       = wp.get("condition", "Rain")
+        src        = wp.get("source", "DEMO")
+        # Use per-point source to determine live status for this individual marker;
+        # rename to _wp_is_live to avoid shadowing the function-level is_live parameter.
+        _wp_is_live = str(src).upper() not in ("DEMO", "SYNTHETIC", "SIMULATED")
 
         w_color = (
             "#ef4444" if rain >= 80 else
@@ -259,8 +266,8 @@ def build_flood_map(
             "#eab308" if rain >= 15 else
             "#22c55e"
         )
-        badge   = "LIVE" if is_live else "DEMO"
-        badge_c = "#22c55e" if is_live else "#7c3aed"
+        badge   = "LIVE" if _wp_is_live else "DEMO"
+        badge_c = "#22c55e" if _wp_is_live else "#7c3aed"
 
         w_icon = (
             f'<div style="'
@@ -276,7 +283,7 @@ def build_flood_map(
         )
         folium.Marker(
             location=[lat, lon],
-            popup=folium.Popup(_weather_popup(wp, is_live), max_width=240),
+            popup=folium.Popup(_weather_popup(wp, _wp_is_live), max_width=240),
             tooltip=f"{wp.get('city','?')} | Rain: {rain:.0f} mm/hr | {badge}",
             icon=folium.DivIcon(html=w_icon, icon_size=(64, 20), icon_anchor=(32, 10)),
         ).add_to(weather_layer)
@@ -312,6 +319,7 @@ def build_flood_map(
         ).add_to(drain_layer)
 
     # ── Citizen reports ───────────────────────────────────────────────────
+    # USER SUBMITTED reports get a distinct 🟠 pin; demo/synthetic get 📍
     sev_colors = {
         "CRITICAL": "#ef4444", "HIGH": "#f97316",
         "MEDIUM":   "#eab308", "LOW":  "#22c55e",
@@ -327,14 +335,17 @@ def build_flood_map(
         lat, lon = float(lat), float(lon)
         sev   = report.get("severity", "MEDIUM")
         color = sev_colors.get(sev, "#94a3b8")
+        is_user_submitted = str(report.get("source", "")).upper() == "USER SUBMITTED"
+        pin_emoji = "🟠" if is_user_submitted else "📍"
         pin_html = (
-            f'<div style="font-size:13px;line-height:1;'
-            f'filter:drop-shadow(0 0 2px {color})">📍</div>'
+            f'<div style="font-size:{"14" if is_user_submitted else "13"}px;line-height:1;'
+            f'filter:drop-shadow(0 0 3px {color})">{pin_emoji}</div>'
         )
+        source_label = "USER SUBMITTED" if is_user_submitted else "DEMO/SYNTHETIC"
         folium.Marker(
             location=[lat, lon],
             popup=folium.Popup(_report_popup(report), max_width=240),
-            tooltip=f"{report.get('category','?').replace('_',' ').title()} — {sev}",
+            tooltip=f"[{source_label}] {report.get('category','?').replace('_',' ').title()} — {sev}",
             icon=folium.DivIcon(html=pin_html, icon_size=(16, 16), icon_anchor=(8, 14)),
         ).add_to(report_layer)
 
@@ -367,40 +378,43 @@ def build_flood_map(
             icon=folium.DivIcon(html=t_html, icon_size=(18, 18), icon_anchor=(9, 9)),
         ).add_to(team_layer)
 
-    # ── Compact legend — top-left, clear of the OSM attribution bar ──────
-    _wx_label   = "LIVE" if is_live else "DEMO"
-    _wx_color   = "#6ee7b7" if is_live else "#c4b5fd"
+    # ── Compact legend — top-left, clear of zoom controls and OSM attribution ─
+    # Rendered inside Folium's iframe body so position:fixed is relative to the
+    # iframe viewport.  Values are deliberately small to avoid covering markers.
+    _wx_label = "LIVE" if is_live else "DEMO"
+    _wx_color = "#6ee7b7" if is_live else "#c4b5fd"
     legend_html = f"""
-    <div style="position:fixed;top:10px;left:10px;z-index:998;
-                background:rgba(10,11,18,0.90);border:1px solid #2d3148;
-                border-radius:8px;padding:8px 11px;font-family:sans-serif;
-                font-size:10px;line-height:1.6;max-width:160px">
-        <div style="color:#94a3b8;font-weight:700;margin-bottom:4px;
-                    letter-spacing:0.05em;font-size:9px">FLOOD RISK</div>
-        <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
+    <div style="position:fixed;top:8px;left:8px;z-index:998;
+                background:rgba(10,11,18,0.88);border:1px solid #2d3148;
+                border-radius:6px;padding:5px 8px;font-family:sans-serif;
+                font-size:9px;line-height:1.55;max-width:138px;
+                pointer-events:none">
+        <div style="color:#94a3b8;font-weight:700;letter-spacing:0.05em;
+                    font-size:8px;margin-bottom:3px">FLOOD RISK</div>
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:1px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
             <span style="color:#e2e8f0">CRITICAL</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#f97316;flex-shrink:0"></div>
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:1px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#f97316;flex-shrink:0"></div>
             <span style="color:#e2e8f0">HIGH</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#eab308;flex-shrink:0"></div>
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:1px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#eab308;flex-shrink:0"></div>
             <span style="color:#e2e8f0">MEDIUM</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#22c55e;flex-shrink:0"></div>
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0"></div>
             <span style="color:#e2e8f0">LOW</span>
         </div>
-        <div style="border-top:1px solid #2d3148;margin:5px 0 4px"></div>
-        <div style="color:#94a3b8;font-weight:700;margin-bottom:4px;
-                    letter-spacing:0.05em;font-size:9px">LAYERS &amp; SOURCES</div>
-        <div style="font-size:9px;color:{_wx_color};margin-bottom:2px">🌧️ Weather — <b>{_wx_label}</b></div>
-        <div style="font-size:9px;color:#93c5fd;margin-bottom:2px">🌊 Flood Risk — <b>MODEL</b></div>
-        <div style="font-size:9px;color:#c4b5fd;margin-bottom:2px">🔧 Drainage — <b>DEMO</b></div>
-        <div style="font-size:9px;color:#c4b5fd;margin-bottom:2px">📱 Reports — <b>DEMO</b></div>
-        <div style="font-size:9px;color:#c4b5fd">🚒 Teams — <b>DEMO</b></div>
+        <div style="border-top:1px solid #2d3148;margin:3px 0"></div>
+        <div style="color:#94a3b8;font-weight:700;letter-spacing:0.05em;
+                    font-size:8px;margin-bottom:3px">LAYERS &amp; SOURCES</div>
+        <div style="color:{_wx_color};margin-bottom:1px">🌧️ Weather — <b>{_wx_label}</b></div>
+        <div style="color:#93c5fd;margin-bottom:1px">🌊 Flood Risk — <b>MODEL</b></div>
+        <div style="color:#c4b5fd;margin-bottom:1px">🔧 Drainage — <b>DEMO</b></div>
+        <div style="color:#fdba74;margin-bottom:1px">🟠 Reports — <b>USER / DEMO</b></div>
+        <div style="color:#c4b5fd">🚒 Teams — <b>DEMO</b></div>
     </div>
     """
     m.get_root().html.add_child(folium.Element(legend_html))
@@ -501,7 +515,7 @@ def _risk_popup(pred: dict) -> str:
         f'<ul style="margin:2px 0;padding-left:14px">{reasons_html}</ul></div>'
         f'<div style="background:rgba(255,255,255,0.05);padding:3px 5px;'
         f'border-radius:3px;font-size:10px">{action}</div>'
-        f'<div style="color:#a78bfa;font-size:9px;margin-top:3px">⚙ ML MODEL PREDICTION — DEMO DATA</div>'
+        f'<div style="color:#93c5fd;font-size:9px;margin-top:3px">🌊 FLOOD RISK — MODEL</div>'
         f'</div></div>'
     )
 
@@ -517,6 +531,7 @@ def _weather_popup(wp: dict, is_live: bool) -> str:
     badge  = "🟢 LIVE" if is_live else "⚙ DEMO"
     b_col  = "#22c55e" if is_live else "#a78bfa"
 
+    src_tag = "🌧️ WEATHER — LIVE" if is_live else "🌧️ WEATHER — DEMO"
     return (
         f'<div style="font-family:sans-serif;font-size:12px;min-width:200px;max-width:240px">'
         f'<div style="background:#1e3a5f;color:#93c5fd;padding:5px 9px;'
@@ -528,7 +543,7 @@ def _weather_popup(wp: dict, is_live: bool) -> str:
         f'<div><b>Condition:</b> {cond}</div>'
         f'<div><b>Source:</b> {src}</div>'
         f'<div><b>Recorded:</b> {str(rec)[:19]}</div>'
-        f'<div style="color:{b_col};font-size:9px;margin-top:3px">{badge}</div>'
+        f'<div style="color:{b_col};font-size:9px;margin-top:3px;font-weight:700">{src_tag}</div>'
         f'</div></div>'
     )
 
@@ -552,7 +567,7 @@ def _drain_popup(drain: dict) -> str:
         f'<div><b>Blockages/yr:</b> {drain.get("blockage_frequency",0)}</div>'
         f'<div style="font-size:10px;color:#f97316;margin-top:3px">'
         f'{drain.get("recommended_action","")}</div>'
-        f'<div style="color:#a78bfa;font-size:9px;margin-top:2px">⚙ DEMO DATA</div>'
+        f'<div style="color:#c4b5fd;font-size:9px;margin-top:2px;font-weight:700">🔧 DRAINAGE — DEMO</div>'
         f'</div></div>'
     )
 
@@ -563,7 +578,18 @@ def _report_popup(report: dict) -> str:
     color     = sev_c.get(sev, "#94a3b8")
     txt_color = "black" if sev in ("MEDIUM", "LOW") else "white"
     txt       = report.get("original_text", "")[:80]
+    # Distinguish actual user-submitted reports from demo/synthetic seed data
+    src            = str(report.get("source", "")).upper()
+    is_user        = src == "USER SUBMITTED"
+    src_color      = "#fdba74" if is_user else "#c4b5fd"
+    src_label      = "🟠 USER SUBMITTED" if is_user else "🟡 DEMO/SYNTHETIC"
+    submitted_at   = report.get("submitted_at", report.get("created_at", ""))[:16].replace("T", " ")
 
+    # Derive the standard popup source tag from the already-computed src_label
+    popup_tag = (
+        "🟠 CITIZEN REPORT — USER SUBMITTED" if is_user
+        else "📍 CITIZEN REPORT — DEMO/SYNTHETIC"
+    )
     return (
         f'<div style="font-family:sans-serif;font-size:12px;min-width:190px;max-width:240px">'
         f'<div style="background:{color};color:{txt_color};padding:5px 9px;'
@@ -571,9 +597,11 @@ def _report_popup(report: dict) -> str:
         f'{report.get("category","").replace("_"," ").title()} — {sev}</div>'
         f'<div style="padding:7px 9px;background:#1a1d27;color:#e2e8f0;border-radius:0 0 5px 5px">'
         f'<div><b>Zone:</b> {report.get("area","")}, {report.get("city","")}</div>'
+        f'<div><b>Report ID:</b> {report.get("report_id","")}</div>'
         f'<div><b>Language:</b> {report.get("language","").title()}</div>'
-        f'<div><b>Status:</b> {report.get("status","")}</div>'
+        f'<div><b>Status:</b> {report.get("status","OPEN")}</div>'
+        f'<div><b>Time:</b> {submitted_at}</div>'
         f'<div style="font-size:10px;font-style:italic;color:#94a3b8;margin-top:3px">"{txt}…"</div>'
-        f'<div style="color:#a78bfa;font-size:9px;margin-top:2px">⚙ DEMO DATA</div>'
+        f'<div style="color:{src_color};font-size:9px;font-weight:700;margin-top:2px">{popup_tag}</div>'
         f'</div></div>'
     )

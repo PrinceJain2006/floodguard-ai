@@ -1,7 +1,8 @@
 """
 FloodGuard AI — Page 5: Emergency War Room
 Unified command view: risk, incidents, agents, resources, recommendations and approvals.
-All data is DEMO/SIMULATED.
+HYBRID DATA: Live Weather (Open-Meteo) · ML Predictions (Random Forest) ·
+User Reports (Citizen Portal) · Demo Infrastructure (drainage/teams).
 """
 import sys
 import os
@@ -12,12 +13,13 @@ import plotly.graph_objects as go
 from datetime import datetime
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, ai_disclaimer, demo_badge,
-    simulated_badge, section_header, COLORS, risk_badge
+    simulated_badge, hybrid_badge, model_badge, section_header, COLORS, risk_badge
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.granite_service import explain_why_zone_risky
 from frontend.map_component import build_flood_map
 from streamlit_folium import st_folium
+from services.report_store import get_user_reports
 
 st.set_page_config(
     page_title="War Room — FloodGuard AI",
@@ -53,6 +55,7 @@ orch = get_orch()
 # ──────────────────────────────────────────────
 state = orch.current_state or {}
 scenario = state.get("scenario", "NORMAL")
+_lws_is_live = state.get("live_weather_status", {}).get("is_live", False)
 
 # Blinking red dot for CRITICAL/EXTREME scenarios
 dot_color = "#ef4444" if scenario in ("EXTREME", "EMERGENCY") else "#f97316" if scenario == "HEAVY" else "#22c55e"
@@ -92,7 +95,10 @@ st.markdown(f"""
                 {'🚨 EMERGENCY ACTIVE' if scenario in ('EXTREME','EMERGENCY') else '⚠️ ELEVATED ALERT' if scenario == 'HEAVY' else '✅ MONITORING'}
             </span>
         </div>
-        <div style="font-size:0.7rem;color:#475569;margin-top:0.3rem">{demo_badge()} DEMO/SIMULATED DATA</div>
+        <div style="font-size:0.7rem;color:#475569;margin-top:0.3rem">
+            <span style="background:#0f4c2a;color:#6ee7b7;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">HYBRID DATA</span>
+            &nbsp;{'🟢 Weather LIVE' if _lws_is_live else '🟡 Weather DEMO'} · 🔵 Risk MODEL · 🟡 Drainage/Teams DEMO
+        </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -162,21 +168,34 @@ col_left, col_mid, col_right = st.columns([1.2, 1.4, 1])
 
 # ── LEFT: Live Map ───────────────────────────
 with col_left:
-    section_header("DIGITAL TWIN MAP", demo_badge())
+    section_header("DIGITAL TWIN MAP", hybrid_badge())
+
+    # Resolve live weather map points — already produced by the orchestrator
+    # pipeline and stored in state; pass them through so the legend accurately
+    # shows LIVE instead of DEMO when Open-Meteo data was successfully fetched.
+    _war_wx_points = state.get("live_weather_map_points", []) or None
+
+    # Merge persisted USER SUBMITTED reports with the demo seed reports so
+    # the map shows real citizen pins alongside synthetic ones.
+    _war_user_reports = get_user_reports()
+    _war_report_data  = (_war_user_reports + raw_reports)[:80]
+
     m = build_flood_map(
         risk_predictions=predictions,
         drain_data=raw_drains[:60],
-        report_data=raw_reports[:60],
+        report_data=_war_report_data,
         team_data=teams,
         city=state.get("city", "All"),
         zoom=10,
+        weather_data=_war_wx_points,
+        is_live=_lws_is_live,
     )
     st_folium(m, width="100%", height=420, key="war_map")
 
     # Active alerts
     if alerts:
         st.markdown("---")
-        section_header("🔔 ACTIVE ALERTS", simulated_badge())
+        section_header("🔔 ACTIVE ALERTS", model_badge())
         for alert in alerts[:3]:
             level = alert.get("alert_level", "INFO")
             cls = {"CRITICAL": "alert-critical", "HIGH": "alert-high"}.get(level, "alert-warning")
@@ -189,7 +208,8 @@ with col_left:
 
 # ── MIDDLE: Chief Response Action Plan ───────
 with col_mid:
-    section_header("🤖 CHIEF RESPONSE AGENT — ACTION PLAN", demo_badge())
+    section_header("🤖 CHIEF RESPONSE AGENT — ACTION PLAN",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL DECISION SUPPORT</span>')
     ai_disclaimer()
 
     if action_plan:
@@ -265,7 +285,9 @@ with col_mid:
 # ── RIGHT: Resource Status + Agents ──────────
 with col_right:
     # Resource recommendations
-    section_header("💼 RESOURCE RECOMMENDATIONS", simulated_badge())
+    section_header("💼 RESOURCE RECOMMENDATIONS",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL</span>'
+                   '&nbsp;<span style="background:#3a2e00;color:#fde68a;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🟡 DEMO RESOURCES</span>')
     if resource_recs:
         for rec in resource_recs[:5]:
             level = rec["risk_level"]
@@ -291,7 +313,8 @@ with col_right:
 
     st.markdown("---")
     # Agent activity panel
-    section_header("🤖 AGENT ACTIVITY", demo_badge())
+    section_header("🤖 AGENT ACTIVITY",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">MODEL / APPLICATION PIPELINE</span>')
     agent_statuses = orch.get_agent_statuses()
     agent_icons = {
         "Flood Risk Agent": "🌊", "Drainage Agent": "🔧",
@@ -327,7 +350,8 @@ st.markdown("---")
 bot_col1, bot_col2, bot_col3 = st.columns([1, 1, 1])
 
 with bot_col1:
-    section_header("🧠 IBM GRANITE WHY EXPLANATION", simulated_badge())
+    section_header("🧠 IBM GRANITE WHY EXPLANATION",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL DECISION SUPPORT</span>')
     st.markdown("""
     <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.5rem">
         Select a risk zone to get an AI explanation of why it's high-risk.<br>
@@ -352,7 +376,7 @@ with bot_col1:
                 <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:0.3rem">🧠 IBM Granite WHY Analysis</div>
                 <div style="color:#e2e8f0">{st.session_state.why_cache.get(cache_key,'')}</div>
                 <div style="font-size:0.65rem;color:#475569;margin-top:0.4rem">
-                    ⚙ Based on demo data only — not real sensor/government readings
+                    Inputs combine LIVE weather, MODEL predictions, USER SUBMITTED reports and DEMO infrastructure data.
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -360,7 +384,8 @@ with bot_col1:
         st.info("Run a scenario to load risk zones.")
 
 with bot_col2:
-    section_header("🚒 RESPONSE TEAMS STATUS", demo_badge())
+    section_header("🚒 RESPONSE TEAMS STATUS",
+                   '<span style="background:#3a2e00;color:#fde68a;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🟡 DEMO DATA</span>')
     if teams:
         status_groups = {}
         for t in teams:
@@ -387,7 +412,8 @@ with bot_col2:
         st.info("No team data available.")
 
 with bot_col3:
-    section_header("⚡ TOP ACTIVE INCIDENTS", demo_badge())
+    section_header("⚡ TOP ACTIVE INCIDENTS",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL + 🟡 DEMO DATA</span>')
     incidents = response_plan.get("incidents", [])
     if incidents:
         for inc in sorted(incidents, key=lambda x: x.get("risk_score", 0), reverse=True)[:6]:
@@ -415,9 +441,10 @@ with bot_col3:
 # Footer
 # ──────────────────────────────────────────────
 st.markdown("---")
+_footer_wx = "🟢 Live Weather (LIVE)" if _lws_is_live else "🟡 Weather (DEMO)"
 st.markdown(f"""
 <div style="text-align:center;color:#475569;font-size:0.72rem;padding-bottom:1rem">
-    FloodGuard AI — Emergency War Room | {demo_badge()} All data is DEMO/SIMULATED.<br>
+    FloodGuard AI — Emergency War Room | HYBRID DATA: {_footer_wx} · 🔵 ML Flood Risk (MODEL) · 🟠 User Reports (USER SUBMITTED) · 🟡 Drainage/Teams (DEMO)<br>
     AI actions require authorized human verification. Not for real operational emergency use.
 </div>
 """, unsafe_allow_html=True)

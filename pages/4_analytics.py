@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import random
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
-    simulated_badge, section_header, COLORS
+    simulated_badge, hybrid_badge, model_badge, live_badge, section_header, COLORS
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.damage_assessment_agent import get_damage_agent
@@ -62,18 +62,22 @@ header("Analytics & Impact Dashboard",
        "Flood trends, agent performance, response metrics, and damage assessment",
        "📊")
 
-st.markdown(f"""
+st.markdown("""
 <div style="background:rgba(124,58,237,0.1);border:1px solid #7c3aed;border-radius:8px;
             padding:0.5rem 0.8rem;margin-bottom:1rem;font-size:0.78rem;color:#a78bfa">
-    {simulated_badge()} All metrics are DEMO/SIMULATED data representing a hypothetical scenario for Ahmedabad & Surat.
-    These do not represent real government operational data.
+    <strong>HYBRID ANALYTICS</strong> — Metrics may combine
+    <span style="color:#22c55e">🟢 LIVE</span> weather,
+    <span style="color:#3b82f6">🔵 MODEL</span> flood-risk predictions,
+    <span style="color:#f97316">🟠 USER SUBMITTED</span> citizen reports and
+    <span style="color:#eab308">🟡 DEMO</span> infrastructure data.
+    Data-source labels distinguish each category throughout this page.
 </div>
 """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
 # Impact Metrics Strip
 # ──────────────────────────────────────────────
-section_header("IMPACT METRICS", simulated_badge())
+section_header("IMPACT METRICS", model_badge())
 
 predictions = state.get("risk_predictions", [])
 drain_analysis = state.get("drain_analysis", {})
@@ -119,7 +123,7 @@ with tab1:
     col1, col2 = st.columns([1.5, 1])
 
     with col1:
-        section_header("FLOOD RISK BY AREA", demo_badge())
+        section_header("FLOOD RISK BY AREA", model_badge())
         if predictions:
             df_pred = pd.DataFrame(predictions[:20])
             df_pred["label"] = df_pred["area"] + ", " + df_pred["city"]
@@ -172,35 +176,82 @@ with tab1:
         )
         st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
 
-        # Simulated trend line
+        # Simulated risk trend — meaningful variation seeded from scenario + current counts
         st.markdown("---")
-        section_header("SIMULATED RISK TREND")
-        hours = list(range(-12, 1))
-        base_critical = high_risk_zones
-        trend = [max(0, base_critical - 8 + i + random.randint(-1,1)) for i in hours]
+        section_header("SIMULATED RISK TREND",
+                       '<span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;'
+                       'padding:1px 6px;border-radius:3px;font-weight:700">🟡 DEMO/SIMULATED</span>')
+
+        # Scenario-aware baselines so each scenario produces a distinct, non-flat shape.
+        # All values are purely illustrative — not real sensor readings.
+        _scenario_floor = {
+            "NORMAL": 1, "HEAVY": 4, "EXTREME": 10,
+            "CITIZEN_SURGE": 3, "EMERGENCY": 9,
+        }
+        _scenario_peak_add = {
+            "NORMAL": 3, "HEAVY": 6, "EXTREME": 12,
+            "CITIZEN_SURGE": 5, "EMERGENCY": 14,
+        }
+        _floor = _scenario_floor.get(orch.current_scenario, max(1, high_risk_zones))
+        _peak_add = _scenario_peak_add.get(orch.current_scenario, 4)
+
+        # Use a fixed seed derived from scenario name so chart is stable across reruns
+        _rng = random.Random(abs(hash(orch.current_scenario)) % 9999)
+
+        # Build a realistic wave: ramp up over first 6 h, plateau, then ease toward now
+        _hours = list(range(-12, 1))   # -12 h ago … now (13 points)
+        _hour_labels = [f"{abs(h)}h ago" if h < 0 else "Now" for h in _hours]
+        _trend_crit = []
+        _trend_high = []
+        for _h in _hours:
+            # progress 0.0 (12 h ago) → 1.0 (now)
+            _progress = (_h + 12) / 12.0
+            # bell-ish curve: rises fast, peaks ~60%, then stays elevated
+            _shape = min(1.0, _progress * 1.8) if _progress < 0.6 else (0.7 + _progress * 0.3)
+            _crit_val = _floor + _shape * _peak_add + _rng.uniform(-0.6, 0.6)
+            _high_val = _floor * 2 + _shape * (_peak_add * 1.5) + _rng.uniform(-0.8, 0.8)
+            _trend_crit.append(max(0, round(_crit_val, 1)))
+            _trend_high.append(max(0, round(_high_val, 1)))
 
         fig_trend = go.Figure()
         fig_trend.add_trace(go.Scatter(
-            x=hours, y=trend,
+            x=_hour_labels, y=_trend_high,
+            mode="lines",
+            line=dict(color="#f97316", width=1.5, dash="dot"),
+            fill="tozeroy",
+            fillcolor="rgba(249,115,22,0.07)",
+            name="High Risk Zones",
+        ))
+        fig_trend.add_trace(go.Scatter(
+            x=_hour_labels, y=_trend_crit,
             mode="lines+markers",
             line=dict(color="#ef4444", width=2),
             fill="tozeroy",
-            fillcolor="rgba(239,68,68,0.1)",
+            fillcolor="rgba(239,68,68,0.12)",
+            marker=dict(size=4),
             name="Critical Zones",
         ))
         fig_trend.update_layout(
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(color="#94a3b8", title="Hours Ago"),
-            yaxis=dict(color="#94a3b8", title="Critical Zones"),
-            height=200, margin=dict(t=10, b=10, l=10, r=10),
-            showlegend=False,
+            xaxis=dict(color="#94a3b8", tickangle=-30, tickfont=dict(size=9)),
+            yaxis=dict(color="#94a3b8", title="Zones", rangemode="tozero"),
+            legend=dict(font=dict(color="#e2e8f0", size=9), orientation="h",
+                        x=0, y=1.1, bgcolor="rgba(0,0,0,0)"),
+            height=200, margin=dict(t=20, b=30, l=10, r=10),
         )
         st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
-        st.markdown(f'<div style="font-size:0.7rem;color:#64748b">⚙ SIMULATED trend data</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="font-size:0.68rem;color:#64748b;margin-top:-0.3rem">'
+            '🟡 DEMO/SIMULATED — Illustrative trend shape derived from current scenario. '
+            'Not real sensor data.</div>',
+            unsafe_allow_html=True,
+        )
 
 # ── Tab 2: Rainfall ───────────────────────────
 with tab2:
-    section_header("RAINFALL DISTRIBUTION", demo_badge())
+    _rain_is_live = state.get("live_weather_status", {}).get("is_live", False)
+    section_header("RAINFALL DISTRIBUTION",
+                   live_badge() if _rain_is_live else demo_badge())
     rainfall_data = state.get("rainfall_data", [])
 
     if rainfall_data:
@@ -269,7 +320,8 @@ with tab2:
 
 # ── Tab 3: Report Analytics ───────────────────
 with tab3:
-    section_header("CITIZEN REPORT ANALYTICS", demo_badge())
+    section_header("CITIZEN REPORT ANALYTICS",
+                   '<span style="background:#3a1a00;color:#fdba74;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🟠 USER + MODEL</span>')
     col_ra, col_rb = st.columns([1, 1])
 
     with col_ra:
@@ -341,7 +393,7 @@ with tab3:
 
 # ── Tab 4: Damage Assessment ──────────────────
 with tab4:
-    section_header("POST-FLOOD DAMAGE ASSESSMENT", demo_badge())
+    section_header("POST-FLOOD DAMAGE ASSESSMENT", model_badge())
     st.markdown("""
     <div style="background:rgba(249,115,22,0.1);border:1px solid #f97316;border-radius:6px;
                 padding:0.5rem 0.8rem;font-size:0.78rem;color:#fdba74;margin-bottom:1rem">
@@ -447,7 +499,8 @@ with tab5:
 st.markdown("---")
 st.markdown(f"""
 <div style="text-align:center;color:#475569;font-size:0.72rem;padding-bottom:1rem">
-    FloodGuard AI v1.0 | Analytics Dashboard | {demo_badge()} All metrics are synthetic demo data.<br>
+    FloodGuard AI v1.0 | Analytics Dashboard | HYBRID DATA<br>
+    Data-source labels distinguish LIVE, MODEL, USER SUBMITTED and DEMO information.
     For real operational deployment, connect to live IoT sensors and municipal databases.
 </div>
 """, unsafe_allow_html=True)
