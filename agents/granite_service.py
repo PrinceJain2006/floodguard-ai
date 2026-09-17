@@ -6,65 +6,204 @@ Falls back gracefully to rule-based responses when unavailable.
 import json
 import time
 import re
-from typing import Any
+from typing import Any, NamedTuple
 import httpx
 
-try:
-    from backend.config import (
-        WATSONX_API_KEY, WATSONX_PROJECT_ID, WATSONX_URL,
-        GRANITE_MODEL_ID, DEMO_MODE
-    )
-except ImportError:
-    from config import (
-        WATSONX_API_KEY, WATSONX_PROJECT_ID, WATSONX_URL,
-        GRANITE_MODEL_ID, DEMO_MODE
-    )
+# ── Lazy credential access ────────────────────────────────────────────────────
+# config.py module-level variables are evaluated at first import, which on
+# Streamlit Cloud happens before st.secrets is populated.  We therefore call
+# the _secret() resolver at *call time* via thin helpers so the most-recently
+# resolved values are always used.
 
-_iam_token_cache: dict = {"token": None, "expires_at": 0}
+def _cfg():
+    """Return the backend.config module (or plain config as fallback)."""
+    try:
+        import backend.config as _c
+        return _c
+    except ImportError:
+        import config as _c          # type: ignore[import]
+        return _c
+
+
+def _api_key() -> str:
+    return _cfg()._secret("WATSONX_API_KEY")
+
+
+def _project_id() -> str:
+    return _cfg()._secret("WATSONX_PROJECT_ID")
+
+
+def _watsonx_url() -> str:
+    return _cfg()._secret("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
+
+
+def _model_id() -> str:
+    return _cfg()._secret("GRANITE_MODEL_ID", "ibm/granite-3-8b-instruct")
+
+
+# ── Internal result type ──────────────────────────────────────────────────────
+class _GraniteResult(NamedTuple):
+    """Carries either the generated text or a structured failure diagnostic."""
+    text:           str | None   # generated text on success, None on failure
+    http_status:    int | None   # HTTP status code of the generation response
+    ibm_error_code: str | None   # IBM error code from the response body, if any
+    ibm_error_msg:  str | None   # IBM error message, safe to display (no secrets)
+    failure_reason: str | None   # human-readable summary of the failure
+
+
+_OK = _GraniteResult(None, None, None, None, None)  # placeholder; callers always check .text
+
+
+# ── IAM token cache ───────────────────────────────────────────────────────────
+# Keyed by api_key so a credential change automatically busts the cache.
+_iam_token_cache: dict = {"key": None, "token": None, "expires_at": 0}
+
+# ── 429 backoff state ─────────────────────────────────────────────────────────
+# When WatsonX returns 429 (consumption_limit_reached), we record the time and
+# stop hitting the API for _429_BACKOFF_SECONDS.  This prevents the app from
+# making the congestion worse (more concurrent requests = more 429s).
+# The backoff is module-level so it applies to ALL callers in the same process,
+# including the granite_status() probe.
+_429_BACKOFF_SECONDS = 120          # wait 2 minutes before retrying after a 429
+_rate_limit_state: dict = {
+    "hit_at":    0.0,               # time.time() when 429 was last received
+    "result":    None,              # the _GraniteResult from that 429 response
+}
+
+_IAM_URL = "https://iam.cloud.ibm.com/identity/token"
+_PLACEHOLDER_KEY = "your_watsonx_api_key_here"
+_PLACEHOLDER_PID = "your_project_id_here"
 
 
 def _get_iam_token() -> str | None:
-    """Obtain WatsonX IAM bearer token, cached for 55 minutes."""
-    if not WATSONX_API_KEY or WATSONX_API_KEY == "your_watsonx_api_key_here":
+    """
+    Obtain a WatsonX IAM bearer token, cached for 55 minutes.
+    Returns None (and logs a safe diagnostic) if the API key is missing or
+    if the IAM endpoint returns an error.
+    """
+    api_key = _api_key()
+    if not api_key or api_key == _PLACEHOLDER_KEY:
         return None
 
     now = time.time()
-    if _iam_token_cache["token"] and now < _iam_token_cache["expires_at"]:
+    # Bust cache if the credential has changed (e.g. different deployment)
+    if (
+        _iam_token_cache["key"] == api_key
+        and _iam_token_cache["token"]
+        and now < _iam_token_cache["expires_at"]
+    ):
         return _iam_token_cache["token"]
 
     try:
         resp = httpx.post(
-            "https://iam.cloud.ibm.com/identity/token",
-            data={"grant_type": "urn:ibm:params:oauth:grant-type:apikey", "apikey": WATSONX_API_KEY},
+            _IAM_URL,
+            data={
+                "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
+                "apikey": api_key,
+            },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=15,
+            timeout=20,
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            # Log the HTTP status but never the key value
+            print(
+                f"[Granite] IAM token request failed: HTTP {resp.status_code} "
+                f"— check that WATSONX_API_KEY is valid and not expired."
+            )
+            return None
         token = resp.json()["access_token"]
+        _iam_token_cache["key"] = api_key
         _iam_token_cache["token"] = token
         _iam_token_cache["expires_at"] = now + 55 * 60
         return token
-    except Exception as e:
-        print(f"[Granite] IAM token error: {e}")
+    except httpx.TimeoutException:
+        print("[Granite] IAM token request timed out — network issue or IAM endpoint unreachable.")
+        return None
+    except Exception as exc:
+        # Safe: exc may reference httpx internals but never the key value
+        print(f"[Granite] IAM token error ({type(exc).__name__}) — credentials could not be exchanged.")
         return None
 
 
 def _call_granite(prompt: str, max_tokens: int = 600, temperature: float = 0.3) -> str | None:
-    """Call Granite via WatsonX REST API."""
+    """
+    Call the WatsonX text-generation REST endpoint.
+
+    Public-facing wrapper: returns the generated text string on success,
+    or None on any failure.  Use _call_granite_full() when the caller
+    needs structured error details (e.g. granite_status probe).
+    """
+    result = _call_granite_full(prompt, max_tokens=max_tokens, temperature=temperature)
+    return result.text
+
+
+def _call_granite_full(
+    prompt: str, max_tokens: int = 600, temperature: float = 0.3
+) -> _GraniteResult:
+    """
+    Call the WatsonX text-generation REST endpoint.
+
+    Returns a _GraniteResult carrying either the generated text or a fully
+    structured failure diagnostic (HTTP status, IBM error code/message, reason).
+    No API key, IAM token, or project ID is ever included in the diagnostic.
+
+    If the previous call received a 429, returns the cached result immediately
+    for _429_BACKOFF_SECONDS without making any network request.
+    """
+    # ── 429 backoff gate ──────────────────────────────────────────────────────
+    now = time.time()
+    if _rate_limit_state["hit_at"] and _rate_limit_state["result"] is not None:
+        elapsed  = now - _rate_limit_state["hit_at"]
+        remaining = _429_BACKOFF_SECONDS - elapsed
+        if remaining > 0:
+            cached: _GraniteResult = _rate_limit_state["result"]
+            # Return a fresh result with an updated reason showing the backoff countdown
+            mins, secs = divmod(int(remaining), 60)
+            wait_str   = f"{mins}m {secs}s" if mins else f"{secs}s"
+            return _GraniteResult(
+                text=None,
+                http_status=429,
+                ibm_error_code=cached.ibm_error_code,
+                ibm_error_msg=cached.ibm_error_msg,
+                failure_reason=(
+                    f"HTTP 429 rate limit active — backing off for {wait_str} "
+                    "before retrying. Rule-based fallback is in use."
+                ),
+            )
+        else:
+            # Backoff expired — clear state and allow next real request through
+            _rate_limit_state["hit_at"]  = 0.0
+            _rate_limit_state["result"]  = None
+
     token = _get_iam_token()
     if not token:
-        return None
+        return _GraniteResult(
+            text=None, http_status=None,
+            ibm_error_code=None, ibm_error_msg=None,
+            failure_reason="IAM token not available — check WATSONX_API_KEY",
+        )
 
-    url = f"{WATSONX_URL}/ml/v1/text/generation?version=2023-05-29"
+    project_id = _project_id()
+    if not project_id or project_id == _PLACEHOLDER_PID:
+        return _GraniteResult(
+            text=None, http_status=None,
+            ibm_error_code=None, ibm_error_msg=None,
+            failure_reason="WATSONX_PROJECT_ID is not configured",
+        )
+
+    base_url = _watsonx_url().rstrip("/")
+    model_id = _model_id()
+    url      = f"{base_url}/ml/v1/text/generation?version=2024-05-31"
+
     payload = {
-        "model_id": GRANITE_MODEL_ID,
-        "project_id": WATSONX_PROJECT_ID,
-        "input": prompt,
+        "model_id":   model_id,
+        "project_id": project_id,
+        "input":      prompt,
         "parameters": {
             "decoding_method": "greedy",
-            "max_new_tokens": max_tokens,
-            "temperature": temperature,
-            "stop_sequences": ["<|endoftext|>"],
+            "max_new_tokens":  max_tokens,
+            "temperature":     temperature,
+            "stop_sequences":  ["<|endoftext|>"],
         },
     }
 
@@ -72,18 +211,215 @@ def _call_granite(prompt: str, max_tokens: int = 600, temperature: float = 0.3) 
         resp = httpx.post(
             url,
             json=payload,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            timeout=30,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type":  "application/json",
+                "Accept":        "application/json",
+            },
+            timeout=45,
         )
-        resp.raise_for_status()
-        return resp.json()["results"][0]["generated_text"].strip()
-    except Exception as e:
-        print(f"[Granite] Generation error: {e}")
-        return None
+    except httpx.TimeoutException:
+        reason = f"Request to {url.split('?')[0]} timed out (>45s) — WatsonX endpoint slow or unreachable"
+        print(f"[Granite] {reason}")
+        return _GraniteResult(text=None, http_status=None,
+                              ibm_error_code=None, ibm_error_msg=None,
+                              failure_reason=reason)
+    except Exception as exc:
+        reason = f"Network error ({type(exc).__name__}) reaching {url.split('?')[0]}"
+        print(f"[Granite] {reason}")
+        return _GraniteResult(text=None, http_status=None,
+                              ibm_error_code=None, ibm_error_msg=None,
+                              failure_reason=reason)
+
+    if resp.status_code == 200:
+        try:
+            text = resp.json()["results"][0]["generated_text"].strip()
+            return _GraniteResult(text=text, http_status=200,
+                                  ibm_error_code=None, ibm_error_msg=None,
+                                  failure_reason=None)
+        except (KeyError, IndexError, ValueError) as exc:
+            reason = f"HTTP 200 but unexpected response shape ({type(exc).__name__})"
+            print(f"[Granite] {reason}: {str(resp.text)[:120]}")
+            return _GraniteResult(text=None, http_status=200,
+                                  ibm_error_code=None, ibm_error_msg=None,
+                                  failure_reason=reason)
+
+    # Non-200: parse IBM error body safely and build structured diagnostic
+    return _parse_error_response(resp, url, model_id)
+
+
+def _parse_error_response(resp: httpx.Response, url: str, model_id: str) -> _GraniteResult:
+    """
+    Parse a non-200 WatsonX response into a _GraniteResult with safe diagnostics.
+    Never includes API key, IAM token, project ID, or Authorization header.
+    """
+    code = resp.status_code
+    endpoint_path = url.split("?")[0]  # strip version query param — no credentials here
+
+    # Extract IBM error code and message from the JSON body
+    ibm_error_code = None
+    ibm_error_msg  = None
+    try:
+        body = resp.json()
+        # WatsonX error shape: {"errors": [{"code": "...", "message": "..."}]}
+        # or {"error": "...", "description": "..."}
+        errors = body.get("errors") or []
+        if errors and isinstance(errors, list):
+            ibm_error_code = errors[0].get("code", "")
+            ibm_error_msg  = errors[0].get("message", "")
+        if not ibm_error_msg:
+            ibm_error_msg = body.get("error", "") or body.get("description", "")
+        if not ibm_error_code:
+            ibm_error_code = body.get("status_code", "")
+    except Exception:
+        ibm_error_msg = resp.text[:300]
+
+    # Build a human-readable reason keyed on HTTP status
+    if code == 400:
+        reason = (
+            f"HTTP 400 Bad Request on POST {endpoint_path} — "
+            f"model_id='{model_id}' or request payload rejected. "
+            f"IBM: {ibm_error_msg!r}"
+        )
+        _iam_token_cache["token"] = None   # may have been a stale token shape issue
+        _iam_token_cache["expires_at"] = 0
+    elif code == 401:
+        reason = (
+            f"HTTP 401 Unauthorized on POST {endpoint_path} — "
+            "IAM token rejected by WatsonX. Token refreshed; retry should recover."
+        )
+        _iam_token_cache["token"] = None
+        _iam_token_cache["expires_at"] = 0
+    elif code == 403:
+        reason = (
+            f"HTTP 403 Forbidden on POST {endpoint_path} — "
+            f"project does not have access to model '{model_id}' in this region. "
+            "Verify WATSONX_PROJECT_ID, that the model is enabled in the project, "
+            "and that the API key has Watson Machine Learning Editor/Admin role. "
+            f"IBM: {ibm_error_msg!r}"
+        )
+    elif code == 404:
+        reason = (
+            f"HTTP 404 Not Found on POST {endpoint_path} — "
+            f"model_id='{model_id}' not found in this region. "
+            "Try 'ibm/granite-3-8b-instruct' or check WATSONX_URL. "
+            f"IBM: {ibm_error_msg!r}"
+        )
+    elif code == 429:
+        reason = (
+            f"HTTP 429 consumption_limit_reached on POST {endpoint_path} — "
+            f"free-tier concurrent request limit reached for model '{model_id}'. "
+            f"Backing off for {_429_BACKOFF_SECONDS}s. IBM: {ibm_error_msg!r}"
+        )
+    elif code >= 500:
+        reason = (
+            f"HTTP {code} Server Error on POST {endpoint_path} — "
+            f"WatsonX service-side error. IBM: {ibm_error_msg!r}"
+        )
+    else:
+        reason = (
+            f"HTTP {code} on POST {endpoint_path}. IBM: {ibm_error_msg!r}"
+        )
+
+    result = _GraniteResult(
+        text=None,
+        http_status=code,
+        ibm_error_code=str(ibm_error_code) if ibm_error_code else None,
+        ibm_error_msg=ibm_error_msg or None,
+        failure_reason=reason,
+    )
+
+    # Arm the backoff state on 429 so subsequent calls skip the network
+    if code == 429:
+        _rate_limit_state["hit_at"]  = time.time()
+        _rate_limit_state["result"]  = result
+
+    print(f"[Granite] {reason}")
+    return result
 
 
 # ──────────────────────────────────────────────
-# Public API
+# Public status check
+# ──────────────────────────────────────────────
+
+def granite_status() -> dict:
+    """
+    Return a status dict that accurately reflects Granite connectivity.
+
+    Fields:
+      api_key_configured  — True if a non-placeholder key is present
+      project_configured  — True if a non-placeholder project ID is present
+      iam_ok              — True if an IAM token was successfully obtained
+      available           — True only when a real generation call succeeds
+      rate_limited        — True when the last failure was a 429
+      model               — the model ID in use
+      endpoint            — generation endpoint path (no credentials)
+      http_status         — HTTP status of the probe generation call, or None
+      ibm_error_code      — IBM error code string from the response, or None
+      ibm_error_msg       — IBM error message string, safe to display, or None
+      error               — full human-readable failure reason, or None
+    """
+    api_key    = _api_key()
+    project_id = _project_id()
+    model      = _model_id()
+    base_url   = _watsonx_url().rstrip("/")
+    endpoint   = f"{base_url}/ml/v1/text/generation"
+
+    key_ok = bool(api_key and api_key != _PLACEHOLDER_KEY)
+    pid_ok = bool(project_id and project_id != _PLACEHOLDER_PID)
+
+    _base = {
+        "api_key_configured": key_ok,
+        "project_configured": pid_ok,
+        "iam_ok":             False,
+        "available":          False,
+        "rate_limited":       False,
+        "model":              model,
+        "endpoint":           endpoint,
+        "http_status":        None,
+        "ibm_error_code":     None,
+        "ibm_error_msg":      None,
+        "error":              None,
+    }
+
+    if not key_ok:
+        return {**_base, "error": "WATSONX_API_KEY not configured"}
+
+    if not pid_ok:
+        return {**_base, "error": "WATSONX_PROJECT_ID not configured"}
+
+    # Attempt to obtain IAM token
+    token = _get_iam_token()
+    if not token:
+        return {**_base, "error": "IAM token exchange failed — check WATSONX_API_KEY validity"}
+
+    # Probe an actual generation call with a minimal prompt.
+    # If the backoff gate is active this returns immediately without a network call.
+    probe = _call_granite_full("Reply with the single word: OK", max_tokens=5)
+
+    if probe.text is not None:
+        return {
+            **_base,
+            "iam_ok":         True,
+            "available":      True,
+            "http_status":    200,
+        }
+
+    # Generation failed — surface full structured diagnostic
+    return {
+        **_base,
+        "iam_ok":         True,
+        "available":      False,
+        "rate_limited":   probe.http_status == 429,
+        "http_status":    probe.http_status,
+        "ibm_error_code": probe.ibm_error_code,
+        "ibm_error_msg":  probe.ibm_error_msg,
+        "error":          probe.failure_reason,
+    }
+
+
+# ──────────────────────────────────────────────
+# Public generation API
 # ──────────────────────────────────────────────
 
 def analyze_citizen_report(text: str, language: str, context: dict | None = None) -> dict:
@@ -113,14 +449,12 @@ Extract the following and respond as JSON:
     response = _call_granite(prompt, max_tokens=250)
     if response:
         try:
-            # Extract JSON from response
             match = re.search(r'\{.*\}', response, re.DOTALL)
             if match:
                 return json.loads(match.group())
         except Exception:
             pass
 
-    # Fallback rule-based
     return _fallback_report_analysis(text, language)
 
 
@@ -130,15 +464,15 @@ def explain_flood_risk(area: str, city: str, risk_data: dict) -> str:
     Uses Granite if available; otherwise rule-based.
     IMPORTANT: Only uses provided risk_data — never invents real sensor/govt data.
     """
-    reasons = risk_data.get("main_reasons", [])
-    score = risk_data.get("risk_score", 0)
-    level = risk_data.get("risk_level", "UNKNOWN")
-    features = risk_data.get("input_features", {})
-    rainfall = features.get("rainfall_1h", risk_data.get("rainfall_1h", 0))
-    drainage = features.get("drainage_capacity", risk_data.get("drainage_capacity", 50))
-    blocked = features.get("blocked_drains", 0)
-    elevation = features.get("elevation", "unknown")
-    density = features.get("population_density", "unknown")
+    reasons    = risk_data.get("main_reasons", [])
+    score      = risk_data.get("risk_score", 0)
+    level      = risk_data.get("risk_level", "UNKNOWN")
+    features   = risk_data.get("input_features", {})
+    rainfall   = features.get("rainfall_1h", risk_data.get("rainfall_1h", 0))
+    drainage   = features.get("drainage_capacity", risk_data.get("drainage_capacity", 50))
+    blocked    = features.get("blocked_drains", 0)
+    elevation  = features.get("elevation", "unknown")
+    density    = features.get("population_density", "unknown")
     confidence = risk_data.get("confidence", 0.8)
 
     prompt = f"""You are the FloodGuard AI assistant for {city} Municipal Corporation.
@@ -162,7 +496,6 @@ Keep it professional and under 80 words."""
     if response:
         return response
 
-    # Fallback — built from provided data only
     reason_str = "; ".join(reasons[:3]) if reasons else "multiple compounding risk factors"
     action = risk_data.get("recommended_action", "Monitor closely and pre-position response teams.")
     return (
@@ -183,12 +516,10 @@ def explain_why_zone_risky(zone_prediction: dict) -> str:
 
 
 def generate_situation_report(city: str, scenario: str, summary_data: dict) -> str:
-    """
-    Generate a comprehensive municipal flood situation report.
-    """
-    critical = summary_data.get("critical_zones", 0)
-    high = summary_data.get("high_zones", 0)
-    reports = summary_data.get("citizen_reports", 0)
+    """Generate a comprehensive municipal flood situation report."""
+    critical    = summary_data.get("critical_zones", 0)
+    high        = summary_data.get("high_zones", 0)
+    reports     = summary_data.get("citizen_reports", 0)
     avg_rainfall = summary_data.get("avg_rainfall_1h", 0)
     top_actions = summary_data.get("top_actions", [])
 
@@ -213,7 +544,6 @@ Note: This is AI-generated preliminary assessment. Requires authorized human ver
     if response:
         return response
 
-    # Fallback template
     return f"""FLOODGUARD AI — FLOOD SITUATION REPORT
 City: {city} | Scenario: {scenario} | Generated: AI-Preliminary
 
@@ -253,7 +583,6 @@ Provide a concise, factual answer based only on the data above. If the answer ca
     if response:
         return response
 
-    # Fallback using context
     return _fallback_query_answer(question, context_data)
 
 
@@ -318,25 +647,25 @@ Classify the damage and respond as JSON only:
 # ──────────────────────────────────────────────
 
 _CATEGORY_KEYWORDS = {
-    "waterlogging": ["water", "pani", "पानी", "પાણી", "waterlog", "jala", "flood"],
-    "drain_overflow": ["drain", "nala", "नाला", "ગટર", "gutter", "overflow", "sewage"],
-    "road_blockage": ["road", "rasta", "रास्ता", "રસ્તો", "block", "chowk", "traffic"],
-    "property_flooding": ["house", "ghar", "घर", "ઘર", "home", "property", "inside"],
-    "emergency_situation": ["emergency", "stranded", "stuck", "help", "urgent", "फंस", "ફસ"],
+    "waterlogging":       ["water", "pani", "पानी", "પાણી", "waterlog", "jala", "flood"],
+    "drain_overflow":     ["drain", "nala", "नाला", "ગટર", "gutter", "overflow", "sewage"],
+    "road_blockage":      ["road", "rasta", "रास्ता", "રસ્તો", "block", "chowk", "traffic"],
+    "property_flooding":  ["house", "ghar", "घर", "ઘર", "home", "property", "inside"],
+    "emergency_situation":["emergency", "stranded", "stuck", "help", "urgent", "फंस", "ફસ"],
     "traffic_disruption": ["traffic", "car", "vehicle", "jam", "stuck"],
 }
 
 _SEVERITY_KEYWORDS = {
     "CRITICAL": ["emergency", "emer", "stranded", "life", "critical", "phns", "ife", "ফসা"],
-    "HIGH": ["high", "heavy", "lots", "bahut", "zyada", "ghanu", "bhari", "unch"],
-    "MEDIUM": ["some", "thodi", "medium", "par", "road", "overflow"],
-    "LOW": ["small", "little", "thoda", "halku"],
+    "HIGH":     ["high", "heavy", "lots", "bahut", "zyada", "ghanu", "bhari", "unch"],
+    "MEDIUM":   ["some", "thodi", "medium", "par", "road", "overflow"],
+    "LOW":      ["small", "little", "thoda", "halku"],
 }
 
 
 def _fallback_report_analysis(text: str, language: str) -> dict:
     text_lower = text.lower()
-    category = "waterlogging"
+    category   = "waterlogging"
     for cat, keywords in _CATEGORY_KEYWORDS.items():
         if any(kw in text_lower for kw in keywords):
             category = cat
@@ -349,11 +678,11 @@ def _fallback_report_analysis(text: str, language: str) -> dict:
             break
 
     return {
-        "category": category,
-        "severity": severity,
-        "language_detected": language,
-        "summary": f"Flood-related report: {category.replace('_', ' ')} detected.",
-        "location_hint": None,
+        "category":               category,
+        "severity":               severity,
+        "language_detected":      language,
+        "summary":                f"Flood-related report: {category.replace('_', ' ')} detected.",
+        "location_hint":          None,
         "requires_immediate_action": severity in ("HIGH", "CRITICAL"),
     }
 
@@ -361,7 +690,7 @@ def _fallback_report_analysis(text: str, language: str) -> dict:
 def _fallback_query_answer(question: str, context: dict) -> str:
     q = question.lower()
     if "critical" in q or "risky" in q or "worst" in q:
-        preds = context.get("predictions", [])
+        preds    = context.get("predictions", [])
         critical = [p for p in preds if p.get("risk_level") == "CRITICAL"]
         if critical:
             areas = [f"{p['area']}, {p['city']}" for p in critical[:3]]
@@ -369,13 +698,13 @@ def _fallback_query_answer(question: str, context: dict) -> str:
         return "No critical risk zones currently identified."
 
     if "drain" in q:
-        drains = context.get("drains", [])
+        drains     = context.get("drains", [])
         crit_drains = [d for d in drains if d.get("maintenance_priority") == "CRITICAL"]
         return f"{len(crit_drains)} drains require immediate maintenance (CRITICAL priority)."
 
     if "report" in q or "complaint" in q:
         reports = context.get("reports", [])
-        open_r = [r for r in reports if r.get("status") == "OPEN"]
+        open_r  = [r for r in reports if r.get("status") == "OPEN"]
         return f"There are {len(open_r)} open citizen flood reports (out of {len(reports)} total)."
 
     if "rainfall" in q or "rain" in q:
@@ -390,14 +719,3 @@ def _fallback_query_answer(question: str, context: dict) -> str:
         "rainfall data, and response recommendations for Ahmedabad and Surat. "
         "Please ask a more specific question."
     )
-
-
-def granite_status() -> dict:
-    """Check Granite connectivity."""
-    token = _get_iam_token()
-    return {
-        "available": token is not None,
-        "model": GRANITE_MODEL_ID,
-        "api_key_configured": bool(WATSONX_API_KEY and WATSONX_API_KEY != "your_watsonx_api_key_here"),
-        "project_configured": bool(WATSONX_PROJECT_ID and WATSONX_PROJECT_ID != "your_project_id_here"),
-    }

@@ -77,35 +77,42 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
-# Granite status — probe actual generation once per session
+# Granite status — granite_status() now probes real generation internally
+# Result is cached per session to avoid hitting the API on every rerun.
 # ──────────────────────────────────────────────
-g_status = granite_status()
-g_available = g_status.get("available", False)  # IAM token obtained
+if "granite_status_cache" not in st.session_state:
+    st.session_state.granite_status_cache = granite_status()
 
-# Probe whether actual generation works. Cached in session so we only hit the API once.
-# This does NOT modify granite_service.py — it uses the existing _call_granite function.
-if "granite_generation_live" not in st.session_state:
-    if g_available:
-        try:
-            from agents.granite_service import _call_granite as _probe_granite
-            probe_result = _probe_granite("Reply with one word: OK", max_tokens=5)
-            st.session_state.granite_generation_live = probe_result is not None
-        except Exception:
-            st.session_state.granite_generation_live = False
-    else:
-        st.session_state.granite_generation_live = False
+g_status        = st.session_state.granite_status_cache
+g_available     = g_status.get("available", False)      # True = real generation confirmed
+g_iam_ok        = g_status.get("iam_ok", False)         # True = IAM token obtained
+g_key_ok        = g_status.get("api_key_configured", False)
+g_pid_ok        = g_status.get("project_configured", False)
+g_rate_limited  = g_status.get("rate_limited", False)   # True = 429 backoff active
+g_error         = g_status.get("error") or ""
 
-granite_generation_live = st.session_state.granite_generation_live
-
-if granite_generation_live:
+if g_available:
     granite_color = "#22c55e"
-    granite_label = "LIVE"
-elif g_available:
+    granite_label = "CONNECTED"
+elif g_rate_limited:
+    # 429 — credentials and IAM are fine, just rate-limited
+    granite_color = "#eab308"
+    granite_label = "RATE LIMITED"
+elif g_iam_ok:
+    # IAM worked but generation failed for another reason
     granite_color = "#f97316"
-    granite_label = "UNAVAILABLE"
+    granite_label = "DEGRADED"
+elif g_key_ok or g_pid_ok:
+    # Credentials present but IAM exchange failed
+    granite_color = "#ef4444"
+    granite_label = "AUTH ERROR"
 else:
     granite_color = "#94a3b8"
     granite_label = "FALLBACK"
+
+# Credential display: show CONFIGURED only for keys, never imply CONNECTED
+_key_badge = "✅ Configured" if g_key_ok else "❌ Not set"
+_pid_badge = "✅ Configured" if g_pid_ok else "❌ Not set"
 
 st.markdown(f"""
 <div style="background:rgba(59,130,246,0.1);border:1px solid #3b82f6;border-radius:8px;
@@ -114,8 +121,9 @@ st.markdown(f"""
     <div style="flex:1">
         <div style="font-weight:700;color:#e2e8f0">IBM Granite — {g_status.get('model','')}</div>
         <div style="font-size:0.8rem;color:#94a3b8">
-            WatsonX API Key: {'✅ Configured' if g_status.get('api_key_configured') else '❌ Not configured (using fallback)'} &nbsp;|&nbsp;
-            Project ID: {'✅ Configured' if g_status.get('project_configured') else '❌ Not configured'}
+            API Key: {_key_badge} &nbsp;|&nbsp;
+            Project ID: {_pid_badge} &nbsp;|&nbsp;
+            IAM: {'✅ OK' if g_iam_ok else '❌ Failed'}
         </div>
     </div>
     <div>
@@ -125,23 +133,80 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-if granite_generation_live:
-    pass  # LIVE — no warning needed
-elif g_available:
-    st.markdown("""
+if g_available:
+    pass  # CONNECTED — no banner needed
+elif g_rate_limited:
+    # 429 — show a distinct yellow rate-limit banner; no misleading "check project" advice
+    _imsg  = g_status.get("ibm_error_msg") or ""
+    _endpt = g_status.get("endpoint", "/ml/v1/text/generation")
+    st.markdown(f"""
+    <div style="background:rgba(234,179,8,0.08);border:1px solid #ca8a04;border-radius:6px;
+                padding:0.6rem 0.9rem;font-size:0.8rem;color:#fef08a;margin-bottom:1rem">
+        🚦 <strong>WatsonX Rate Limited</strong> — HTTP 429
+        <code>consumption_limit_reached</code><br>
+        <div style="margin:0.3rem 0 0.15rem;color:#fde68a;font-size:0.78rem">
+            {_imsg[:240] if _imsg else g_error[:240]}
+        </div>
+        <div style="color:#fef08a">{g_error[:300]}</div>
+        <div style="margin-top:0.3rem;color:#94a3b8;font-size:0.75rem">
+            Endpoint: <code>{_endpt}</code><br>
+            The free-tier concurrent request limit for
+            <code>{g_status.get('model','')}</code> is temporarily exhausted.
+            The app is automatically backing off and will retry after the
+            cooldown window. Rule-based fallback is active in the meantime.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+elif g_iam_ok:
+    # IAM OK but generation failed for a non-429 reason — show full diagnostic
+    _http   = g_status.get("http_status")
+    _icode  = g_status.get("ibm_error_code") or ""
+    _imsg   = g_status.get("ibm_error_msg")  or ""
+    _endpt  = g_status.get("endpoint", "/ml/v1/text/generation")
+
+    # Build safe detail line — only code, IBM fields, and endpoint path (no secrets)
+    _detail_parts = []
+    if _http:
+        _detail_parts.append(f"HTTP {_http}")
+    if _icode:
+        _detail_parts.append(f"IBM code: <code>{_icode}</code>")
+    if _imsg:
+        _detail_parts.append(f"IBM message: <em>{_imsg[:200]}</em>")
+    _detail_parts.append(f"Endpoint: <code>{_endpt}</code>")
+    _detail_html = " &nbsp;·&nbsp; ".join(_detail_parts)
+
+    st.markdown(f"""
     <div style="background:rgba(249,115,22,0.1);border:1px solid #f97316;border-radius:6px;
-                padding:0.5rem 0.8rem;font-size:0.8rem;color:#fdba74;margin-bottom:1rem">
-        ⚠️ <strong>WatsonX Unavailable</strong> — IAM credentials are configured but the
-        generation API request failed (check project membership or quota).
+                padding:0.6rem 0.9rem;font-size:0.8rem;color:#fdba74;margin-bottom:1rem">
+        ⚠️ <strong>WatsonX Generation Unavailable</strong> — IAM authentication succeeded
+        but the text-generation request failed.<br>
+        <div style="margin:0.35rem 0 0.2rem;color:#fcd34d;font-size:0.78rem">{_detail_html}</div>
+        <div style="color:#fdba74">{g_error}</div>
+        <div style="margin-top:0.3rem;color:#94a3b8;font-size:0.75rem">
+            Check: (1) project has <code>{g_status.get('model','')}</code> enabled,
+            (2) WATSONX_URL region matches the project,
+            (3) API key has Watson Machine Learning Editor/Admin role.
+            Rule-based responses are active.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+elif g_key_ok:
+    st.markdown(f"""
+    <div style="background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:6px;
+                padding:0.5rem 0.8rem;font-size:0.8rem;color:#fca5a5;margin-bottom:1rem">
+        🔑 <strong>Authentication Failed</strong> — API key is set but IAM token exchange failed.<br>
+        <span style="color:#fcd34d">{g_error}</span><br>
+        Verify that <code>WATSONX_API_KEY</code> is current and not expired.
         Rule-based responses are being used for all AI features.
     </div>
     """, unsafe_allow_html=True)
 else:
     st.markdown("""
-    <div style="background:rgba(249,115,22,0.1);border:1px solid #f97316;border-radius:6px;
-                padding:0.5rem 0.8rem;font-size:0.8rem;color:#fdba74;margin-bottom:1rem">
-        ⚙️ <strong>Fallback Mode Active</strong> — Set <code>WATSONX_API_KEY</code> and <code>WATSONX_PROJECT_ID</code>
-        in your <code>.env</code> file to enable live IBM Granite responses.
+    <div style="background:rgba(148,163,184,0.08);border:1px solid #475569;border-radius:6px;
+                padding:0.5rem 0.8rem;font-size:0.8rem;color:#94a3b8;margin-bottom:1rem">
+        ⚙️ <strong>Fallback Mode Active</strong> — IBM Granite is not configured.<br>
+        Set <code>WATSONX_API_KEY</code> and <code>WATSONX_PROJECT_ID</code>
+        in Streamlit Cloud → App settings → Secrets (or in a local <code>.env</code> file).
         Rule-based responses are being used for all AI features.
     </div>
     """, unsafe_allow_html=True)
@@ -257,19 +322,24 @@ for i, agent in enumerate(agent_statuses):
         desc = agent_descriptions.get(name, "")
 
         # For IBM Granite, override status with the probe-verified generation result.
-        # All other pipeline agents use execution status from the orchestrator.
+        # g_available is True only when a real generation call succeeded (set above).
+        granite_generation_live = g_available  # alias used by output_summary branch below
         if name == "IBM Granite":
             if granite_generation_live:
-                status       = "LIVE"
-                s_color      = "#22c55e"
+                status          = "LIVE"
+                s_color         = "#22c55e"
                 status_dot_anim = ""
-            elif g_available:
-                status       = "UNAVAILABLE"
-                s_color      = "#f97316"
+            elif g_rate_limited:
+                status          = "RATE LIMITED"
+                s_color         = "#eab308"
+                status_dot_anim = ""
+            elif g_iam_ok:
+                status          = "UNAVAILABLE"
+                s_color         = "#f97316"
                 status_dot_anim = ""
             else:
-                status       = "FALLBACK"
-                s_color      = "#94a3b8"
+                status          = "FALLBACK"
+                s_color         = "#94a3b8"
                 status_dot_anim = ""
         else:
             status_colors = {
@@ -309,13 +379,18 @@ for i, agent in enumerate(agent_statuses):
                 agent_data_labels["IBM Granite"] = (
                     '<span style="background:#14532d;color:#bbf7d0;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🟢 LIVE</span>'
                 )
-            elif g_available:
+            elif g_rate_limited:
+                output_summary = "🚦 RATE LIMITED — backing off, fallback active"
+                agent_data_labels["IBM Granite"] = (
+                    '<span style="background:#422006;color:#fef08a;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">🚦 RATE LIMITED</span>'
+                )
+            elif g_iam_ok:
                 output_summary = "⚠ UNAVAILABLE — IAM OK but generation failed"
                 agent_data_labels["IBM Granite"] = (
                     '<span style="background:#3a1a00;color:#fdba74;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">⚠ UNAVAILABLE</span>'
                 )
             else:
-                output_summary = "⚪ FALLBACK — configure .env"
+                output_summary = "⚪ FALLBACK — configure credentials"
                 agent_data_labels["IBM Granite"] = (
                     '<span style="background:#1a1d27;border:1px solid #475569;color:#94a3b8;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700">⚪ FALLBACK</span>'
                 )
