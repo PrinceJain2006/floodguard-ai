@@ -4,7 +4,7 @@ Analyzes drainage infrastructure to identify high-risk drains
 and generate prioritized maintenance schedules.
 """
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -21,7 +21,7 @@ class DrainageAgent:
         self.activity_log: list[str] = []
 
     def _log(self, msg: str):
-        ts = datetime.utcnow().strftime("%H:%M:%S")
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         self.activity_log.append(f"[{ts}] {msg}")
         if len(self.activity_log) > 50:
             self.activity_log = self.activity_log[-50:]
@@ -50,7 +50,7 @@ class DrainageAgent:
         if last_cleaned_str:
             try:
                 last_cleaned = datetime.fromisoformat(last_cleaned_str)
-                days_dirty = (datetime.utcnow() - last_cleaned).days
+                days_dirty = (datetime.now(timezone.utc) - last_cleaned).days
             except Exception:
                 pass
 
@@ -120,7 +120,7 @@ class DrainageAgent:
             "priority_reasons": reasons[:4],
             "recommended_action": action_map[priority],
             "days_since_cleaned": days_dirty,
-            "assessed_at": datetime.utcnow().isoformat(),
+            "assessed_at": datetime.now(timezone.utc).isoformat(),
         })
         return scored
 
@@ -158,7 +158,7 @@ class DrainageAgent:
         top5 = scored_drains[:5]
         self._log(f"Prioritization complete: {by_priority['CRITICAL']} CRITICAL, {by_priority['HIGH']} HIGH drains")
         self._log(f"Top priority drain: {top5[0]['drain_id']} in {top5[0]['area']} (score: {top5[0]['computed_risk_score']:.0f})")
-        self.last_run = datetime.utcnow().isoformat()
+        self.last_run = datetime.now(timezone.utc).isoformat()
 
         return {
             "scored_drains": scored_drains,
@@ -169,7 +169,7 @@ class DrainageAgent:
                 d["drain_id"] for d in scored_drains if d["maintenance_priority"] == "CRITICAL"
             ],
             "maintenance_schedule": _generate_schedule(scored_drains),
-            "assessed_at": datetime.utcnow().isoformat(),
+            "assessed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def get_status(self) -> dict:
@@ -184,7 +184,7 @@ class DrainageAgent:
 def _generate_schedule(drains: list[dict]) -> list[dict]:
     """Generate a simple maintenance schedule from scored drains."""
     schedule = []
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
     for drain in drains:
         priority = drain["maintenance_priority"]
         if priority == "CRITICAL":

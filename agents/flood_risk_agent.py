@@ -4,7 +4,7 @@ Analyzes rainfall, drainage, historical data, and citizen reports
 to calculate per-area flood risk scores and classifications.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 try:
@@ -55,7 +55,7 @@ class FloodRiskAgent:
             self._log(f"ML model load failed: {e} — using rule-based fallback")
 
     def _log(self, msg: str):
-        ts = datetime.utcnow().strftime("%H:%M:%S")
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         self.activity_log.append(f"[{ts}] {msg}")
         if len(self.activity_log) > 50:
             self.activity_log = self.activity_log[-50:]
@@ -166,13 +166,13 @@ class FloodRiskAgent:
             "blocked_drains": blocked_drains,
             "active_reports": report_count,
             "historical_incidents": hist_freq,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "model_version": "v1.0-synthetic",
             "data_label": "DEMO/SIMULATED",
         }
 
         self._log(f"Analyzed {area}, {city} → {risk_level} ({risk_score:.0f})")
-        self.last_run = datetime.utcnow().isoformat()
+        self.last_run = datetime.now(timezone.utc).isoformat()
         return result
 
     def analyze_all_areas(

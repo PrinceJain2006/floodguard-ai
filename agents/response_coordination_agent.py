@@ -5,7 +5,7 @@ to generate prioritized incident response plans.
 Includes human approval workflow for emergency actions.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 try:
@@ -30,7 +30,7 @@ class ResponseCoordinationAgent:
         self.activity_log: list[str] = []
 
     def _log(self, msg: str):
-        ts = datetime.utcnow().strftime("%H:%M:%S")
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         self.activity_log.append(f"[{ts}] {msg}")
         if len(self.activity_log) > 50:
             self.activity_log = self.activity_log[-50:]
@@ -88,7 +88,7 @@ class ResponseCoordinationAgent:
             # Generate action list
             actions = _generate_actions(area, area_city, risk_level, rainfall, nearby_drain, area_reports, available_teams)
 
-            incident_id = f"INC-{datetime.utcnow().strftime('%Y%m%d')}-{incident_counter:03d}"
+            incident_id = f"INC-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{incident_counter:03d}"
             incident = {
                 "incident_id": incident_id,
                 "city": area_city,
@@ -101,7 +101,7 @@ class ResponseCoordinationAgent:
                 "recommended_actions": actions,
                 "requires_human_approval": risk_level == "CRITICAL",
                 "status": "PENDING_APPROVAL" if risk_level == "CRITICAL" else "ACTIVE",
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
                 "latitude": area_pred.get("latitude"),
                 "longitude": area_pred.get("longitude"),
             }
@@ -126,7 +126,7 @@ class ResponseCoordinationAgent:
         }
 
         self._log(f"Generated {len(incidents)} incidents, {len(top_recommendations)} recommendations")
-        self.last_run = datetime.utcnow().isoformat()
+        self.last_run = datetime.now(timezone.utc).isoformat()
 
         return {
             "city": city,
@@ -136,7 +136,7 @@ class ResponseCoordinationAgent:
             "available_teams": len(available_teams),
             "total_teams": len(response_teams),
             "critical_drain_count": len(critical_drains),
-            "coordinated_at": datetime.utcnow().isoformat(),
+            "coordinated_at": datetime.now(timezone.utc).isoformat(),
             "requires_emergency_protocol": any(inc["risk_level"] == "CRITICAL" for inc in incidents),
         }
 
@@ -153,7 +153,7 @@ class ResponseCoordinationAgent:
             "action_index": action_idx,
             "approval_status": "APPROVED",
             "approved_by": approver,
-            "approved_at": datetime.utcnow().isoformat(),
+            "approved_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def reject_action(self, incident_id: str, action_idx: int, approver: str, reason: str) -> dict:
@@ -166,7 +166,7 @@ class ResponseCoordinationAgent:
             "approval_status": "REJECTED",
             "rejected_by": approver,
             "rejection_reason": reason,
-            "rejected_at": datetime.utcnow().isoformat(),
+            "rejected_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def get_status(self) -> dict:
@@ -317,7 +317,7 @@ def _generate_system_recommendations(
     })
 
     for r in recs:
-        r["created_at"] = datetime.utcnow().isoformat()
+        r["created_at"] = datetime.now(timezone.utc).isoformat()
         r["approval_status"] = "PENDING"
     return recs
 

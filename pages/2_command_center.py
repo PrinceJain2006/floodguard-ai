@@ -384,7 +384,7 @@ with tab4:
         if st.download_button(
             "📥 Download Situation Report",
             data=situation_report,
-            file_name=f"flood_situation_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.txt",
+            file_name=f"flood_situation_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.txt",
             mime="text/plain",
         ):
             pass

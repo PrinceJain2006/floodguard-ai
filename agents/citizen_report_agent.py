@@ -5,7 +5,7 @@ Handles classification, severity detection, deduplication, and routing.
 """
 import uuid
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -68,7 +68,7 @@ class CitizenReportAgent:
         self._seen_fingerprints: dict[str, str] = {}   # fingerprint → report_id
 
     def _log(self, msg: str):
-        ts = datetime.utcnow().strftime("%H:%M:%S")
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         self.activity_log.append(f"[{ts}] {msg}")
         if len(self.activity_log) > 50:
             self.activity_log = self.activity_log[-50:]
@@ -154,7 +154,7 @@ class CitizenReportAgent:
         assigned_team = ROUTING_MAP.get(category, "Municipal Response Team")
 
         # 6. Build report
-        _now = datetime.utcnow().isoformat()
+        _now = datetime.now(timezone.utc).isoformat()
         report = {
             "report_id": report_id,
             "user_id": user_id,
@@ -180,7 +180,7 @@ class CitizenReportAgent:
             "submitted_at": _now,
         }
 
-        self.last_run = datetime.utcnow().isoformat()
+        self.last_run = datetime.now(timezone.utc).isoformat()
         if not is_duplicate:
             self._log(f"Report {report_id}: {category}/{severity} in {area}, {city} → {assigned_team}")
         return report
@@ -224,7 +224,7 @@ class CitizenReportAgent:
         ]
 
         self._log(f"Batch complete: {open_count} open, {duplicate_count} duplicates, {len(hotspots)} hotspots")
-        self.last_run = datetime.utcnow().isoformat()
+        self.last_run = datetime.now(timezone.utc).isoformat()
 
         return {
             "total_reports": len(reports),
@@ -236,7 +236,7 @@ class CitizenReportAgent:
             "hotspot_areas": hotspots,
             "critical_count": by_severity.get("CRITICAL", 0),
             "high_count": by_severity.get("HIGH", 0),
-            "analyzed_at": datetime.utcnow().isoformat(),
+            "analyzed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def get_status(self) -> dict:

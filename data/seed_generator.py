@@ -6,7 +6,7 @@ All data is clearly labeled DEMO/SYNTHETIC and does not represent real governmen
 import json
 import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 random.seed(42)
@@ -63,7 +63,7 @@ SEVERITY_LEVELS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
 
 def _rnd_date(days_back=90):
-    return (datetime.utcnow() - timedelta(days=random.randint(0, days_back))).isoformat()
+    return (datetime.now(timezone.utc) - timedelta(days=random.randint(0, days_back))).isoformat()
 
 
 def _jitter(lat, lon, scale=0.005):
@@ -90,7 +90,7 @@ def generate_rainfall_data(scenario="NORMAL"):
                 "rainfall_3h":  round(base_1h * random.uniform(2.5, 3.5), 1),
                 "rainfall_6h":  round(base_1h * random.uniform(5.0, 7.0), 1),
                 "rainfall_24h": round(base_1h * random.uniform(14, 22), 1),
-                "recorded_at":  datetime.utcnow().isoformat(),
+                "recorded_at":  datetime.now(timezone.utc).isoformat(),
                 "data_source":  "DEMO",
             })
     return records
@@ -124,7 +124,7 @@ def generate_drains():
                 priority = "CRITICAL" if risk_score >= 75 else "HIGH" if risk_score >= 50 else "MEDIUM" if risk_score >= 25 else "LOW"
 
                 days_since_clean = random.randint(30, 365)
-                last_cleaned = (datetime.utcnow() - timedelta(days=days_since_clean)).isoformat()
+                last_cleaned = (datetime.now(timezone.utc) - timedelta(days=days_since_clean)).isoformat()
 
                 drains.append({
                     "drain_id": f"D-{drain_counter:03d}",
@@ -430,7 +430,7 @@ def generate_risk_predictions(scenario="NORMAL"):
                     "elevation": round(random.uniform(0.05, 0.12), 3),
                 },
                 "scenario": scenario,
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
             })
             pred_counter += 1
     return predictions

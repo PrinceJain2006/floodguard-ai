@@ -15,7 +15,7 @@ import plotly.express as px
 import pandas as pd
 import random
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
     simulated_badge, section_header, COLORS, ai_disclaimer
@@ -357,7 +357,7 @@ with tab2:
 
         with col_summary:
             section_header("TIME-STEP SUMMARY")
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             for i, (minutes, label) in enumerate(zip(time_slots, time_labels)):
                 t_stamp = (now + timedelta(minutes=minutes)).strftime("%H:%M")
                 # Count projected levels

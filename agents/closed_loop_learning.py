@@ -5,7 +5,7 @@ and provides prediction vs outcome comparison.
 All data is DEMO/SIMULATED — not real operational data.
 """
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -35,7 +35,7 @@ class ClosedLoopLearning:
         weights = outcome_weights.get(scenario, [0.3, 0.25, 0.15, 0.25, 0.05])
         response_types = ["Pump deployed", "Drain cleared", "Road closed", "Team dispatched", "Shelter opened"]
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for i, pred in enumerate(risk_predictions[:15]):
             t_pred = now - timedelta(hours=random.randint(1, 48))

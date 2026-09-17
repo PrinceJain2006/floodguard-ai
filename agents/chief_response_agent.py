@@ -5,7 +5,7 @@ with human approval gate for critical actions.
 All outputs are DEMO/SIMULATED.
 """
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -35,7 +35,7 @@ class ChiefResponseAgent:
         self._activity_log: list[str] = []
 
     def _log(self, msg: str):
-        self._activity_log.append(f"{datetime.utcnow().strftime('%H:%M:%S')} — {msg}")
+        self._activity_log.append(f"{datetime.now(timezone.utc).strftime('%H:%M:%S')} — {msg}")
         if len(self._activity_log) > 30:
             self._activity_log = self._activity_log[-30:]
 
@@ -202,7 +202,7 @@ class ChiefResponseAgent:
             f"Immediate focus: {critical_zones[0]['area'] if critical_zones else 'No critical zones'}."
         )
 
-        self._last_run = datetime.utcnow().isoformat()
+        self._last_run = datetime.now(timezone.utc).isoformat()
         self._status = "COMPLETE"
         self._log(f"Plan complete: {len(actions)} actions, {approval_needed} need approval")
 

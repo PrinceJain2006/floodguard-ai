@@ -14,7 +14,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timezone
 
 from frontend.ui_utils import (
     apply_global_css, header, metric_card,
@@ -739,7 +739,7 @@ with tab_hitl:
                 with btn_col1:
                     if st.button("✅ APPROVE", key=f"di_app_{action_id}", type="primary",
                                  use_container_width=True):
-                        ts = datetime.utcnow().strftime("%H:%M UTC")
+                        ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
                         st.session_state.di_approved_actions[action_id] = {
                             "decision": "APPROVED", "note": "Human operator approved.",
                             "timestamp": ts,
@@ -749,7 +749,7 @@ with tab_hitl:
                 with btn_col2:
                     if st.button("🔄 MODIFY", key=f"di_mod_{action_id}",
                                  use_container_width=True):
-                        ts = datetime.utcnow().strftime("%H:%M UTC")
+                        ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
                         st.session_state.di_approved_actions[action_id] = {
                             "decision": "MODIFIED",
                             "note": "Human operator modified recommendation.",
@@ -761,7 +761,7 @@ with tab_hitl:
                 with btn_col3:
                     if st.button("❌ REJECT", key=f"di_rej_{action_id}",
                                  use_container_width=True):
-                        ts = datetime.utcnow().strftime("%H:%M UTC")
+                        ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
                         st.session_state.di_approved_actions[action_id] = {
                             "decision": "REJECTED", "note": "Human operator rejected.",
                             "timestamp": ts,
