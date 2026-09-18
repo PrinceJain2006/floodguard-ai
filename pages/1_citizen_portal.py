@@ -243,6 +243,45 @@ with col_form:
                 if image_upload:
                     st.image(image_upload, caption="Uploaded photo preview (not stored to disk)", width=200)
 
+                # ── Citizen → AI → Command Center flow trace ─────────────
+                if not is_dup:
+                    lang_det = report.get("language", "english").title()
+                    ai_summary = report.get("ai_summary", report.get("summary", ""))
+                    granite_used = report.get("granite_used", False)
+                    proc_label = "🤖 IBM GRANITE" if granite_used else "⚙ FALLBACK (rule-based)"
+                    st.markdown(f"""
+                    <div style="background:#0d1020;border:1px solid #2d3148;border-radius:8px;
+                                padding:0.8rem 1rem;margin-top:0.5rem">
+                        <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;
+                                    letter-spacing:0.05em;margin-bottom:0.5rem">
+                            REPORT PROCESSING PIPELINE
+                        </div>
+                        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;font-size:0.75rem">
+                            <span style="background:#3a1a00;color:#fdba74;padding:2px 6px;border-radius:4px;font-weight:700">
+                                📱 CITIZEN REPORT
+                            </span>
+                            <span style="color:#475569">→</span>
+                            <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">
+                                🔍 CITIZEN REPORT AGENT
+                            </span>
+                            <span style="color:#475569">→</span>
+                            <span style="background:#1a1d27;color:#c4b5fd;padding:2px 6px;border-radius:4px;font-weight:700;border:1px solid #7c3aed">
+                                {proc_label}
+                            </span>
+                            <span style="color:#475569">→</span>
+                            <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">
+                                🖥️ COMMAND CENTER
+                            </span>
+                        </div>
+                        <div style="margin-top:0.5rem;font-size:0.75rem;color:#94a3b8">
+                            Language detected: <strong>{lang_det}</strong> &nbsp;·&nbsp;
+                            Category: <strong>{cat_display}</strong> &nbsp;·&nbsp;
+                            Routed to: <strong>{report.get('assigned_team', 'N/A')}</strong>
+                        </div>
+                        {f'<div style="font-size:0.75rem;color:#a78bfa;margin-top:0.2rem">AI Summary: {ai_summary}</div>' if ai_summary else ''}
+                    </div>
+                    """, unsafe_allow_html=True)
+
     # ── Quick stats ─────────────────────────────────────────────────────────
     st.markdown("---")
     # Merge demo seed reports with user-submitted for accurate stats

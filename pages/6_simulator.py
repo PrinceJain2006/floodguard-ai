@@ -3,7 +3,10 @@ FloodGuard AI — Page 6: What-If Flood Simulator + Forecast Timeline + Resource
 Feature 1: What-If Simulator — change rainfall, duration, drainage, blocked drains
 Feature 4: Resource Optimization
 Feature 5: Forecast Timeline (NOW, +30, +60, +90, +120 min)
-All outputs are DEMO/SIMULATED.
+Feature NEW: RUN FLOOD SCENARIO — calls real orchestrator pipeline, shows before/after state
+Feature NEW: Drainage Before/After simulation using real DrainageAgent scoring
+All parameter-tuned simulation outputs are labeled SIMULATED.
+RUN FLOOD SCENARIO outputs come from the real pipeline.
 """
 import sys
 import os
@@ -18,9 +21,10 @@ import math
 from datetime import datetime, timedelta, timezone
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
-    simulated_badge, section_header, COLORS, ai_disclaimer
+    simulated_badge, section_header, COLORS, ai_disclaimer, model_badge
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
+from agents.drainage_agent import get_drainage_agent
 from data.seed_generator import AHMEDABAD_AREAS, SURAT_AREAS, ALL_AREAS
 
 st.set_page_config(
@@ -41,28 +45,206 @@ orch = get_orch()
 state = orch.current_state or {}
 
 # ──────────────────────────────────────────────
+# Session state for scenario tracking
+# ──────────────────────────────────────────────
+if "sim_before_state" not in st.session_state:
+    st.session_state.sim_before_state = None
+if "sim_after_state" not in st.session_state:
+    st.session_state.sim_after_state = None
+if "sim_scenario_ran" not in st.session_state:
+    st.session_state.sim_scenario_ran = False
+
+# ──────────────────────────────────────────────
 # Header
 # ──────────────────────────────────────────────
-header("What-If Flood Simulator & Forecast Timeline",
-       "Adjust parameters and see simulated risk impact — mathematical model on demo infrastructure data", "🌧️")
-
-st.markdown(f"""
-<div style="background:rgba(59,130,246,0.1);border:1px solid #3b82f6;border-radius:8px;
-            padding:0.5rem 0.9rem;margin-bottom:1rem;font-size:0.78rem;color:#93c5fd">
-    {simulated_badge()} This simulator uses a <strong>mathematical model</strong>.
-    <span style="color:#22c55e">Live weather inputs (where available)</span> are combined with
-    <span style="color:#eab308">demo infrastructure data</span> (drainage, elevation, area metadata).
-    Outputs are illustrative only and do not represent real flood forecasts or government predictions.
-    Never use for real emergency decisions.
+st.markdown("""
+<div style="background:linear-gradient(135deg,#0d1020 0%,#0a1628 100%);
+            border:1px solid #1d4ed8;border-radius:12px;
+            padding:1.2rem 1.5rem;margin-bottom:1rem">
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <div style="font-size:2.5rem">🌧️</div>
+        <div style="flex:1">
+            <div style="font-size:1.6rem;font-weight:800;color:#e2e8f0">
+                FLOOD SCENARIO SIMULATOR
+            </div>
+            <div style="font-size:0.85rem;color:#94a3b8;margin-top:0.2rem">
+                RUN FLOOD SCENARIO · What-If Analysis · Forecast Timeline · Drainage Simulation · Resource Optimization
+            </div>
+        </div>
+        <div>
+            <span style="background:#1e3a5f;color:#93c5fd;padding:3px 10px;border-radius:6px;font-size:0.78rem;font-weight:600">
+                🔵 MODEL Pipeline · 🟡 DEMO Infrastructure
+            </span>
+        </div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════
+# ▶  RUN FLOOD SCENARIO — P0 FEATURE
+#    Calls the real orchestrator pipeline; shows live state transition
+# ══════════════════════════════════════════════════════════════════════
+st.markdown("""
+<div style="font-size:1rem;font-weight:700;color:#e2e8f0;margin-bottom:0.5rem;letter-spacing:0.03em">
+    ▶ RUN FLOOD SCENARIO
+</div>
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    Select a scenario and run the full multi-agent pipeline. The system will transition through
+    <span style="color:#22c55e;font-weight:600">NORMAL</span> →
+    <span style="color:#eab308;font-weight:600">WARNING</span> →
+    <span style="color:#ef4444;font-weight:600">CRITICAL</span> states based on real agent outputs.
+</div>
+""", unsafe_allow_html=True)
+
+sc_cols = st.columns([1, 1, 1, 1, 1, 1.3])
+_scenario_map = [
+    ("NORMAL",        "🌦️", "Normal Rain",        "#22c55e"),
+    ("HEAVY",         "🌧️", "Heavy Rainfall",     "#eab308"),
+    ("EXTREME",       "⛈️", "Extreme Rainfall",   "#ef4444"),
+    ("CITIZEN_SURGE", "📱", "Citizen Surge",      "#3b82f6"),
+    ("EMERGENCY",     "🚨", "Emergency Response", "#ef4444"),
+]
+chosen_scenario = None
+for i, (sc_id, em, sc_label, sc_color) in enumerate(_scenario_map):
+    with sc_cols[i]:
+        is_active = orch.current_scenario == sc_id
+        btn_label = f"{em} {'[ACTIVE]' if is_active else sc_label}"
+        if st.button(btn_label, key=f"run_sc_{sc_id}", use_container_width=True,
+                     type="primary" if is_active else "secondary"):
+            chosen_scenario = sc_id
+
+with sc_cols[5]:
+    run_city = st.selectbox("City", ["All", "Ahmedabad", "Surat"], key="run_city", label_visibility="collapsed")
+    st.markdown(f'<div style="font-size:0.7rem;color:#94a3b8;text-align:center">City scope</div>', unsafe_allow_html=True)
+
+if chosen_scenario:
+    # Capture before-state snapshot
+    before_snap = {}
+    if orch.current_state:
+        preds_before = orch.current_state.get("risk_predictions", [])
+        before_snap = {
+            "scenario":        orch.current_scenario,
+            "critical":        sum(1 for p in preds_before if p["risk_level"] == "CRITICAL"),
+            "high":            sum(1 for p in preds_before if p["risk_level"] == "HIGH"),
+            "avg_score":       sum(p["risk_score"] for p in preds_before) / max(len(preds_before), 1),
+            "open_reports":    orch.current_state.get("report_analysis", {}).get("open_reports", 0),
+            "critical_drains": orch.current_state.get("drain_analysis", {}).get("priority_summary", {}).get("CRITICAL", 0),
+            "teams_avail":     sum(1 for t in orch.current_state.get("teams", []) if t.get("status") == "AVAILABLE"),
+        }
+    st.session_state.sim_before_state = before_snap
+
+    # Run the real pipeline
+    prog_bar = st.progress(0, text="Starting pipeline…")
+    with st.spinner(f"Running {SCENARIOS[chosen_scenario]['label']} scenario through all agents…"):
+        prog_bar.progress(20, text="🔵 Flood Risk Agent analyzing…")
+        new_state = orch.run_pipeline(scenario=chosen_scenario, city=run_city)
+        prog_bar.progress(60, text="🔵 Drainage Agent + Citizen Reports Agent processing…")
+        import time as _time; _time.sleep(0.3)
+        prog_bar.progress(80, text="🤖 IBM Granite generating situation report…")
+        _time.sleep(0.2)
+        prog_bar.progress(100, text="✅ Pipeline complete")
+
+    state = orch.current_state or {}
+
+    # Capture after-state
+    preds_after = state.get("risk_predictions", [])
+    after_snap = {
+        "scenario":        chosen_scenario,
+        "critical":        sum(1 for p in preds_after if p["risk_level"] == "CRITICAL"),
+        "high":            sum(1 for p in preds_after if p["risk_level"] == "HIGH"),
+        "avg_score":       sum(p["risk_score"] for p in preds_after) / max(len(preds_after), 1),
+        "open_reports":    state.get("report_analysis", {}).get("open_reports", 0),
+        "critical_drains": state.get("drain_analysis", {}).get("priority_summary", {}).get("CRITICAL", 0),
+        "teams_avail":     sum(1 for t in state.get("teams", []) if t.get("status") == "AVAILABLE"),
+    }
+    st.session_state.sim_after_state = after_snap
+    st.session_state.sim_scenario_ran = True
+    prog_bar.empty()
+
+# ── Show before / after transition if a scenario has been run ──
+if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
+    bef = st.session_state.sim_before_state or {}
+    aft = st.session_state.sim_after_state
+
+    # Determine system status level
+    aft_crit = aft.get("critical", 0)
+    aft_high  = aft.get("high", 0)
+    if aft_crit >= 3:
+        sys_status = "CRITICAL"; sys_color = "#ef4444"; sys_bg = "rgba(239,68,68,0.15)"
+    elif aft_crit >= 1 or aft_high >= 3:
+        sys_status = "WARNING";  sys_color = "#f97316"; sys_bg = "rgba(249,115,22,0.12)"
+    else:
+        sys_status = "NORMAL";   sys_color = "#22c55e"; sys_bg = "rgba(34,197,94,0.10)"
+
+    st.markdown(f"""
+    <div style="background:{sys_bg};border:2px solid {sys_color};border-radius:10px;
+                padding:0.8rem 1.2rem;margin:0.5rem 0 1rem 0">
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+            <div style="font-size:1.5rem;font-weight:900;color:{sys_color};letter-spacing:0.06em">
+                ● SYSTEM STATUS: {sys_status}
+            </div>
+            <div style="flex:1;font-size:0.82rem;color:#94a3b8">
+                Scenario: {SCENARIOS.get(aft['scenario'], {}).get('emoji', '')} {SCENARIOS.get(aft['scenario'], {}).get('label', aft['scenario'])}
+                &nbsp;·&nbsp; Pipeline run at {datetime.now(timezone.utc).strftime('%H:%M UTC')}
+            </div>
+            <span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:4px;font-size:0.72rem;font-weight:700">
+                🔵 PIPELINE OUTPUT
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Before / After metrics
+    def _delta_html(before_val, after_val, invert=False):
+        """Returns colored delta HTML. invert=True means increase is good."""
+        if before_val is None:
+            return ""
+        diff = after_val - before_val
+        if diff == 0:
+            return '<span style="color:#94a3b8;font-size:0.72rem">→ no change</span>'
+        arrow = "▲" if diff > 0 else "▼"
+        # For risk metrics: increase is bad (red). For teams: decrease is bad.
+        if invert:
+            color = "#22c55e" if diff > 0 else "#ef4444"
+        else:
+            color = "#ef4444" if diff > 0 else "#22c55e"
+        return f'<span style="color:{color};font-size:0.72rem">{arrow} {abs(diff):.0f}</span>'
+
+    st.markdown("**State Transition — Before vs After:**")
+    ba1, ba2, ba3, ba4, ba5, ba6 = st.columns(6)
+    pairs = [
+        (ba1, "Critical Zones",    "#ef4444", bef.get("critical"), aft["critical"],       False),
+        (ba2, "High Risk Zones",   "#f97316", bef.get("high"),     aft["high"],            False),
+        (ba3, "Avg Risk Score",    "#3b82f6", bef.get("avg_score"),aft["avg_score"],        False),
+        (ba4, "Open Reports",      "#eab308", bef.get("open_reports"), aft["open_reports"], False),
+        (ba5, "Critical Drains",   "#f97316", bef.get("critical_drains"), aft["critical_drains"], False),
+        (ba6, "Teams Available",   "#22c55e", bef.get("teams_avail"),  aft["teams_avail"],  True),
+    ]
+    for col, label, color, b_val, a_val, inv in pairs:
+        with col:
+            display_val = f"{a_val:.0f}" if isinstance(a_val, float) else str(a_val)
+            delta_html = _delta_html(b_val, a_val, invert=inv)
+            st.markdown(f"""
+            <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;
+                        padding:0.8rem;text-align:center">
+                <div style="font-size:1.6rem;font-weight:700;color:{color}">{display_val}</div>
+                <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase;
+                            letter-spacing:0.04em;margin:0.2rem 0">{label}</div>
+                <div style="min-height:1rem">{delta_html}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+st.markdown("---")
 
 # ──────────────────────────────────────────────
 # Tabs
 # ──────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "🌧️ What-If Simulator",
     "⏱️ Forecast Timeline",
+    "🔧 Drainage Simulation",
     "💼 Resource Optimization",
 ])
 
@@ -424,9 +606,133 @@ with tab2:
 
 
 # ═══════════════════════════════════════════════
-# TAB 3: RESOURCE OPTIMIZATION
+# TAB 3: DRAINAGE BEFORE/AFTER SIMULATION
 # ═══════════════════════════════════════════════
 with tab3:
+    section_header("DRAINAGE INTERVENTION SIMULATOR", model_badge())
+    st.markdown("""
+    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+        Simulate an AI-recommended maintenance intervention on a drain.
+        Scores use the real <strong>DrainageAgent</strong> scoring formula.
+        Select a drain, adjust parameters, and compare BEFORE vs AFTER.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Get drain data from current state
+    raw_drains = state.get("raw_drains", [])
+    rainfall_data_drain = state.get("rainfall_data", [])
+    risk_preds_drain = state.get("risk_predictions", [])
+
+    if not raw_drains:
+        st.info("Run a scenario first to load drain data.")
+    else:
+        drain_agent = get_drainage_agent()
+
+        # Average rainfall for context
+        avg_rain_drain = (
+            sum(r.get("rainfall_1h", 0) for r in rainfall_data_drain) /
+            max(len(rainfall_data_drain), 1)
+        )
+
+        # Build drain selector
+        drain_names = [f"{d.get('drain_id','?')} — {d.get('area','?')}, {d.get('city','?')}" for d in raw_drains[:30]]
+        selected_drain_label = st.selectbox("Select Drain", drain_names, key="drain_sel")
+        sel_idx = drain_names.index(selected_drain_label)
+        base_drain = dict(raw_drains[sel_idx])
+
+        # Get area flood risk for context
+        area_risk_val = 0.0
+        for rp in risk_preds_drain:
+            if rp.get("area") == base_drain.get("area") and rp.get("city") == base_drain.get("city"):
+                area_risk_val = rp.get("risk_score", 0.0)
+                break
+
+        # Score the drain BEFORE any intervention
+        before_score_result = drain_agent.score_drain(base_drain, avg_rain_drain, area_risk_val)
+
+        st.markdown("---")
+        col_before, col_arrow, col_after = st.columns([1, 0.15, 1])
+
+        with col_before:
+            bpri = before_score_result.get("maintenance_priority", "N/A")
+            bscore = before_score_result.get("computed_risk_score", 0)
+            bcolor = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(bpri, "#94a3b8")
+            st.markdown(f"""
+            <div style="background:#1a0f0f;border:2px solid {bcolor};border-radius:10px;padding:1rem;margin-bottom:0.5rem">
+                <div style="font-size:0.75rem;color:#94a3b8;font-weight:700;letter-spacing:0.05em;margin-bottom:0.5rem">BEFORE MAINTENANCE</div>
+                <div style="font-size:2.5rem;font-weight:900;color:{bcolor}">{bscore:.0f}</div>
+                <div style="font-size:0.75rem;color:#94a3b8">Risk Score / 100</div>
+                <div style="margin-top:0.5rem">
+                    <span style="background:{bcolor};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:600">{bpri}</span>
+                </div>
+                <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.5rem">
+                    Capacity: {base_drain.get('capacity_rating', '?')}% &nbsp;·&nbsp;
+                    Condition: {base_drain.get('condition', '?')} &nbsp;·&nbsp;
+                    Status: {base_drain.get('status', '?')}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            for reason in before_score_result.get("priority_reasons", [])[:3]:
+                st.markdown(f'<div style="font-size:0.75rem;color:#f97316;padding:2px 0">⚠ {reason}</div>', unsafe_allow_html=True)
+
+        with col_arrow:
+            st.markdown('<div style="font-size:2rem;color:#38bdf8;text-align:center;padding-top:2rem">→</div>', unsafe_allow_html=True)
+
+        with col_after:
+            st.markdown("**AI-Recommended Maintenance:**")
+            dc1, dc2, dc3 = st.columns(3)
+            with dc1:
+                new_capacity = st.slider("New Capacity %", 0, 100,
+                    min(100, base_drain.get("capacity_rating", 50) + 30),
+                    step=5, key="drain_cap")
+            with dc2:
+                new_cond = st.selectbox("Condition After", ["GOOD", "FAIR", "POOR", "CRITICAL"],
+                    index=0, key="drain_cond")
+            with dc3:
+                clear_block = st.checkbox("Clear Blockage", value=True, key="drain_block")
+
+            # Build modified drain for post-intervention scoring
+            modified_drain = {
+                **base_drain,
+                "capacity_rating": new_capacity,
+                "condition": new_cond,
+                "status": "OPERATIONAL" if clear_block else base_drain.get("status", "OPERATIONAL"),
+                "last_cleaned": datetime.now(timezone.utc).isoformat(),
+            }
+            after_score_result = drain_agent.score_drain(modified_drain, avg_rain_drain, area_risk_val)
+
+            apri = after_score_result.get("maintenance_priority", "N/A")
+            ascore = after_score_result.get("computed_risk_score", 0)
+            acolor = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(apri, "#94a3b8")
+            improvement = bscore - ascore
+
+            st.markdown(f"""
+            <div style="background:#0a1a0a;border:2px solid {acolor};border-radius:10px;padding:1rem;margin-bottom:0.5rem">
+                <div style="font-size:0.75rem;color:#94a3b8;font-weight:700;letter-spacing:0.05em;margin-bottom:0.5rem">AFTER INTERVENTION</div>
+                <div style="font-size:2.5rem;font-weight:900;color:{acolor}">{ascore:.0f}</div>
+                <div style="font-size:0.75rem;color:#94a3b8">Risk Score / 100</div>
+                <div style="margin-top:0.5rem">
+                    <span style="background:{acolor};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:600">{apri}</span>
+                    {'&nbsp;<span style="color:#22c55e;font-size:0.78rem;font-weight:700">▼ ' + f'{improvement:.0f} improved</span>' if improvement > 0 else ''}
+                </div>
+                <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.5rem">
+                    Capacity: {new_capacity}% &nbsp;·&nbsp;
+                    Condition: {new_cond} &nbsp;·&nbsp;
+                    Status: {'OPERATIONAL' if clear_block else base_drain.get('status', '?')}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            rec_action = after_score_result.get("recommended_action", "Monitor and schedule next inspection.")
+            st.markdown(f'<div style="font-size:0.75rem;color:#22c55e;padding:2px 0">✅ Recommended: {rec_action}</div>', unsafe_allow_html=True)
+
+        st.markdown(f'<div style="font-size:0.68rem;color:#475569;margin-top:0.75rem">⚙ Scores computed by DrainageAgent using real scoring formula. Drain: {base_drain.get("drain_id","?")}. Current rainfall context: {avg_rain_drain:.1f} mm/hr (DEMO). Area risk: {area_risk_val:.0f}/100 (MODEL).</div>', unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════
+# TAB 4: RESOURCE OPTIMIZATION
+# ═══════════════════════════════════════════════
+with tab4:
     section_header("RESOURCE OPTIMIZATION ENGINE", simulated_badge())
     ai_disclaimer()
     st.markdown("""

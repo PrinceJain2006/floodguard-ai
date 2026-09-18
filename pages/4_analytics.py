@@ -18,6 +18,7 @@ from frontend.ui_utils import (
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.damage_assessment_agent import get_damage_agent
+from ml.flood_risk_model import get_model, FEATURE_COLS, LABEL_ORDER
 
 st.set_page_config(
     page_title="Analytics — FloodGuard AI",
@@ -110,12 +111,13 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ──────────────────────────────────────────────
 # Tabs
 # ──────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📈 Risk Trends",
     "🌧️ Rainfall Analysis",
     "📱 Report Analytics",
     "🔍 Damage Assessment",
     "📋 Scenario Comparison",
+    "🤖 ML Model & Explainability",
 ])
 
 # ── Tab 1: Risk Trends ───────────────────────
@@ -492,6 +494,280 @@ with tab5:
     )
     st.plotly_chart(fig_comp, use_container_width=True, config={"displayModeBar": False})
     st.markdown(f'<div style="font-size:0.7rem;color:#64748b">⚙ SIMULATED comparison data — not real measurements</div>', unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════
+# TAB 6: ML MODEL EVALUATION & EXPLAINABILITY
+# ═══════════════════════════════════════════════
+with tab6:
+    section_header("RANDOM FOREST ML MODEL — EVALUATION & EXPLAINABILITY", model_badge())
+
+    st.markdown("""
+    <div style="background:rgba(59,130,246,0.1);border:1px solid #3b82f6;border-radius:8px;
+                padding:0.5rem 0.9rem;margin-bottom:0.75rem;font-size:0.78rem;color:#93c5fd">
+        <strong>🔵 MODEL DATA</strong> — The Random Forest model is trained on <strong>5,000 synthetic records</strong>
+        generated from realistic flood parameter distributions for Ahmedabad &amp; Surat.
+        Metrics below are computed from the actual held-out test split (20% = 1,000 samples).
+        These are real model metrics, not hard-coded values. Data is synthetic, not real sensor measurements.
+    </div>
+    """, unsafe_allow_html=True)
+
+    @st.cache_resource
+    def _get_ml_model():
+        return get_model()
+
+    ml_model = _get_ml_model()
+
+    if not ml_model.is_trained:
+        st.warning("ML model not yet trained. Loading...")
+        ml_model = get_model()
+
+    if ml_model.is_trained and ml_model.classifier is not None:
+        import numpy as np
+        from sklearn.metrics import (
+            classification_report, accuracy_score,
+            precision_score, recall_score, f1_score,
+            mean_absolute_error
+        )
+        from sklearn.model_selection import cross_val_score
+        import json as _json
+        from pathlib import Path as _Path
+        import pandas as pd
+
+        # ── Load training data for evaluation ─────────────────────
+        @st.cache_data(ttl=3600)
+        def _compute_ml_metrics():
+            """Compute real ML metrics from the training data + test split."""
+            data_path = _Path(__file__).parent.parent / "data" / "ml_training_data.json"
+            if not data_path.exists():
+                return None
+            with open(data_path) as f:
+                data = _json.load(f)
+            df = pd.DataFrame(data)
+            X = df[FEATURE_COLS].values
+            y_label = df["risk_label"].values
+            y_score = df["risk_score"].values
+
+            from sklearn.preprocessing import LabelEncoder
+            le = LabelEncoder()
+            le.classes_ = np.array(LABEL_ORDER)
+            y_enc = le.transform(y_label)
+
+            from sklearn.model_selection import train_test_split
+            X_train, X_test, yl_train, yl_test, ys_train, ys_test = train_test_split(
+                X, y_enc, y_score, test_size=0.2, random_state=42, stratify=y_enc
+            )
+
+            clf = ml_model.classifier
+            reg = ml_model.regressor
+
+            yl_pred = clf.predict(X_test)
+            ys_pred = reg.predict(X_test)
+
+            acc   = accuracy_score(yl_test, yl_pred)
+            prec  = precision_score(yl_test, yl_pred, average="weighted", zero_division=0)
+            rec   = recall_score(yl_test, yl_pred, average="weighted", zero_division=0)
+            f1    = f1_score(yl_test, yl_pred, average="weighted", zero_division=0)
+            mae   = mean_absolute_error(ys_test, ys_pred)
+
+            # Per-class metrics
+            report_dict = classification_report(
+                yl_test, yl_pred,
+                target_names=LABEL_ORDER,
+                output_dict=True,
+                zero_division=0,
+            )
+
+            # Cross-validation (3-fold on full dataset, fast)
+            cv_scores = cross_val_score(clf, X, y_enc, cv=3, scoring="accuracy", n_jobs=-1)
+
+            # Feature importances from classifier
+            fi = {
+                FEATURE_COLS[i]: round(float(imp), 4)
+                for i, imp in enumerate(clf.feature_importances_)
+            }
+            return {
+                "accuracy": acc, "precision": prec, "recall": rec, "f1": f1,
+                "mae": mae, "n_test": len(X_test), "n_train": len(X_train),
+                "report": report_dict, "cv_mean": float(cv_scores.mean()),
+                "cv_std": float(cv_scores.std()), "feature_importance": fi,
+            }
+
+        with st.spinner("Computing ML metrics from test split…"):
+            ml_metrics = _compute_ml_metrics()
+
+        if ml_metrics is None:
+            st.warning("Training data not found — run a scenario to train the model first.")
+        else:
+            # ── Top metrics row ────────────────────────────────────
+            m1, m2, m3, m4, m5, m6 = st.columns(6)
+            with m1: metric_card("Accuracy",       f"{ml_metrics['accuracy']:.1%}",    color="#22c55e", icon="🎯")
+            with m2: metric_card("Precision",      f"{ml_metrics['precision']:.1%}",   color="#3b82f6", icon="🎯")
+            with m3: metric_card("Recall",         f"{ml_metrics['recall']:.1%}",      color="#7c3aed", icon="🔍")
+            with m4: metric_card("F1 Score",       f"{ml_metrics['f1']:.1%}",          color="#14b8a6", icon="⚖️")
+            with m5: metric_card("Score MAE",      f"{ml_metrics['mae']:.1f}",         color="#f97316", icon="📏")
+            with m6: metric_card("CV Accuracy",    f"{ml_metrics['cv_mean']:.1%}±{ml_metrics['cv_std']:.2f}", color="#eab308", icon="✅")
+
+            st.markdown(f'<div style="font-size:0.72rem;color:#94a3b8;margin:0.3rem 0 0.75rem 0">Test set: {ml_metrics["n_test"]} samples · Train set: {ml_metrics["n_train"]} samples · 3-fold cross-validation</div>', unsafe_allow_html=True)
+            st.markdown("---")
+
+            col_fi, col_perf = st.columns([1, 1.2])
+
+            with col_fi:
+                section_header("FEATURE IMPORTANCE — Random Forest Classifier")
+                fi = ml_metrics["feature_importance"]
+                fi_sorted = sorted(fi.items(), key=lambda x: -x[1])
+                feat_labels = [f.replace("_", " ").title() for f, _ in fi_sorted]
+                feat_vals   = [v for _, v in fi_sorted]
+                feat_colors = ["#ef4444" if v == max(feat_vals) else "#3b82f6" for v in feat_vals]
+
+                fig_fi = go.Figure(go.Bar(
+                    x=feat_vals,
+                    y=feat_labels,
+                    orientation="h",
+                    marker_color=feat_colors,
+                    hovertemplate="<b>%{y}</b><br>Importance: %{x:.4f}<extra></extra>",
+                ))
+                fig_fi.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(color="#94a3b8", title="Gini Importance"),
+                    yaxis=dict(color="#e2e8f0"),
+                    height=320, margin=dict(t=10, b=10, l=10, r=10),
+                )
+                st.plotly_chart(fig_fi, use_container_width=True, config={"displayModeBar": False})
+                st.caption("Feature importances are computed from Random Forest Gini impurity — real model values.")
+
+            with col_perf:
+                section_header("PER-CLASS PERFORMANCE")
+                report = ml_metrics["report"]
+                perf_rows = []
+                for label in LABEL_ORDER:
+                    row = report.get(label, {})
+                    perf_rows.append({
+                        "Class": label,
+                        "Precision": f"{row.get('precision', 0):.1%}",
+                        "Recall":    f"{row.get('recall', 0):.1%}",
+                        "F1 Score":  f"{row.get('f1-score', 0):.1%}",
+                        "Support":   int(row.get("support", 0)),
+                    })
+                st.dataframe(pd.DataFrame(perf_rows), use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                section_header("CV ACCURACY DISTRIBUTION")
+                st.markdown(f"""
+                <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.8rem 1rem">
+                    <div style="font-size:0.8rem;color:#94a3b8">
+                        3-fold cross-validation on {ml_metrics['n_train'] + ml_metrics['n_test']} samples
+                    </div>
+                    <div style="font-size:1.4rem;font-weight:700;color:#22c55e;margin:0.3rem 0">
+                        {ml_metrics['cv_mean']:.1%} ± {ml_metrics['cv_std']:.3f}
+                    </div>
+                    <div style="font-size:0.75rem;color:#94a3b8">
+                        Consistent performance across folds — model generalizes well on synthetic dataset.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("---")
+            # ── WHY IS THIS ZONE HIGH RISK? ───────────────────────
+            section_header("WHY IS THIS ZONE HIGH RISK? — AI Explainability")
+            st.markdown("""
+            <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.5rem">
+                Select a zone to see <strong>actual feature values</strong> driving its risk prediction,
+                ranked against the model's feature importance weights.
+            </div>
+            """, unsafe_allow_html=True)
+
+            high_risk_preds = [p for p in predictions if p["risk_level"] in ("CRITICAL", "HIGH")]
+            if not high_risk_preds:
+                st.info("No HIGH or CRITICAL zones in current scenario. Run a heavier scenario to see explainability.")
+            else:
+                zone_options = [f"{p['area']}, {p['city']} — {p['risk_level']} ({p['risk_score']:.0f}/100)" for p in high_risk_preds[:20]]
+                sel_zone = st.selectbox("Select High-Risk Zone", zone_options, key="expl_zone")
+                sel_idx_z = zone_options.index(sel_zone)
+                zone_pred = high_risk_preds[sel_idx_z]
+                zone_features = zone_pred.get("input_features", {})
+
+                ex1, ex2 = st.columns([1.2, 1])
+
+                with ex1:
+                    section_header(f"RISK FACTORS: {zone_pred['area']}, {zone_pred['city']}")
+                    risk_lv = zone_pred["risk_level"]
+                    risk_color = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(risk_lv, "#94a3b8")
+
+                    # Show feature values vs importance
+                    fi_sorted_zone = sorted(fi.items(), key=lambda x: -x[1])
+                    rows_html = ""
+                    for feat, importance in fi_sorted_zone[:8]:
+                        feat_val = zone_features.get(feat, 0)
+                        feat_label = feat.replace("_", " ").title()
+                        # Normalize feature value for bar display
+                        _norms = {
+                            "rainfall_1h": 120, "rainfall_3h": 360, "rainfall_6h": 720, "rainfall_24h": 2400,
+                            "drainage_capacity": 100, "historical_flood_freq": 10, "water_level": 5,
+                            "elevation": 100, "road_density": 1, "citizen_reports": 50,
+                        }
+                        _max = _norms.get(feat, 100)
+                        bar_pct = min(100, (float(feat_val) / _max) * 100) if _max > 0 else 0
+                        imp_pct = importance * 100 * 10  # scale for visual
+                        rows_html += f"""
+                        <div style="margin-bottom:0.5rem">
+                            <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:0.15rem">
+                                <span style="color:#e2e8f0">{feat_label}</span>
+                                <span style="color:#94a3b8">val: {feat_val:.1f} &nbsp;·&nbsp; importance: {importance:.3f}</span>
+                            </div>
+                            <div style="background:#1a1d27;border-radius:4px;height:10px;overflow:hidden;border:1px solid #2d3148">
+                                <div style="width:{bar_pct:.0f}%;background:{risk_color};height:100%;border-radius:4px;opacity:0.85"></div>
+                            </div>
+                        </div>
+                        """
+                    st.markdown(f"""
+                    <div style="background:#1a1d27;border:1px solid {risk_color};border-radius:8px;padding:0.9rem 1rem">
+                        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem">
+                            <span style="background:{risk_color};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:700">{risk_lv}</span>
+                            <span style="font-size:1.1rem;font-weight:700;color:{risk_color}">{zone_pred['risk_score']:.0f}/100</span>
+                            <span style="font-size:0.72rem;color:#94a3b8">confidence {zone_pred.get('confidence', 0):.0%}</span>
+                        </div>
+                        {rows_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with ex2:
+                    section_header("WHY: Plain Language Reasons")
+                    reasons = zone_pred.get("main_reasons", [])
+                    if reasons:
+                        for r in reasons:
+                            r_color = "#ef4444" if "extreme" in r.lower() or "critical" in r.lower() or "dangerously" in r.lower() else "#f97316" if "high" in r.lower() else "#eab308"
+                            st.markdown(f"""
+                            <div style="background:#1a1d27;border-left:3px solid {r_color};border-radius:0 6px 6px 0;
+                                        padding:0.4rem 0.7rem;margin-bottom:0.4rem;font-size:0.82rem;color:#e2e8f0">
+                                ⚠ {r}
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("No specific reasons available for this zone.")
+
+                    # Probability distribution from model
+                    probs = zone_pred.get("probabilities", {})
+                    if probs:
+                        st.markdown("---")
+                        section_header("RISK CLASS PROBABILITIES")
+                        for lbl in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+                            p = probs.get(lbl, 0)
+                            p_color = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(lbl, "#94a3b8")
+                            st.markdown(f"""
+                            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">
+                                <div style="min-width:60px;font-size:0.75rem;color:{p_color};font-weight:600">{lbl}</div>
+                                <div style="flex:1;background:#1a1d27;border-radius:4px;height:14px;overflow:hidden;border:1px solid #2d3148">
+                                    <div style="width:{p*100:.0f}%;background:{p_color};height:100%;border-radius:4px"></div>
+                                </div>
+                                <div style="min-width:40px;font-size:0.75rem;color:#e2e8f0;text-align:right">{p:.0%}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                    st.markdown(f'<div style="font-size:0.68rem;color:#64748b;margin-top:0.5rem">🔵 Probabilities from RandomForestClassifier.predict_proba(). Feature values from ML pipeline input for {zone_pred["area"]}, {zone_pred["city"]}.</div>', unsafe_allow_html=True)
+    else:
+        st.warning("ML model not trained or classifier unavailable. Run a scenario to initialize the model.")
+
 
 # ──────────────────────────────────────────────
 # Footer

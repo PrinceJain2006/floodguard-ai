@@ -135,22 +135,66 @@ live_weather_records     = state.get("live_weather_records",     [])
 live_weather_map_points  = state.get("live_weather_map_points",  [])
 
 # ──────────────────────────────────────────────
-# Header
+# Header — AI FLOOD COMMAND CENTER
 # ──────────────────────────────────────────────
-header("FloodGuard AI — Municipal Command Center",
-       f"Scenario: {SCENARIOS[st.session_state.scenario]['emoji']} {SCENARIOS[st.session_state.scenario]['label']} | {st.session_state.city_filter}",
-       "🖥️")
+_scen_info = SCENARIOS[st.session_state.scenario]
+_is_live   = live_weather_status.get("is_live", False)
+_g_status  = state.get("granite_status", {})
+_g_avail   = _g_status.get("available", False)
+_g_rate    = _g_status.get("rate_limited", False)
 
-ai_disclaimer()
-
-# ──────────────────────────────────────────────
-# KPI Strip
-# ──────────────────────────────────────────────
+# Derive overall system status from predictions
 critical = sum(1 for p in predictions if p["risk_level"] == "CRITICAL")
 high     = sum(1 for p in predictions if p["risk_level"] == "HIGH")
 medium   = sum(1 for p in predictions if p["risk_level"] == "MEDIUM")
 total_zones = len(predictions)
 
+if critical >= 3:
+    _sys_status = "CRITICAL"; _sys_color = "#ef4444"; _sys_bg = "rgba(239,68,68,0.18)"
+elif critical >= 1 or high >= 4:
+    _sys_status = "WARNING";  _sys_color = "#f97316"; _sys_bg = "rgba(249,115,22,0.15)"
+elif high >= 1:
+    _sys_status = "ELEVATED"; _sys_color = "#eab308"; _sys_bg = "rgba(234,179,8,0.12)"
+else:
+    _sys_status = "NORMAL";   _sys_color = "#22c55e"; _sys_bg = "rgba(34,197,94,0.10)"
+
+st.markdown(f"""
+<div style="background:linear-gradient(135deg,#080c18 0%,#0d1428 50%,#080c18 100%);
+            border:2px solid {_sys_color};border-radius:14px;
+            padding:1.2rem 1.5rem;margin-bottom:0.75rem">
+    <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap">
+        <div style="font-size:2.8rem">🖥️</div>
+        <div style="flex:1">
+            <div style="font-size:1.7rem;font-weight:900;color:#e2e8f0;letter-spacing:0.02em">
+                AI FLOOD COMMAND CENTER
+            </div>
+            <div style="font-size:0.82rem;color:#94a3b8;margin-top:0.2rem">
+                FloodGuard AI &nbsp;·&nbsp; Ahmedabad &amp; Surat, Gujarat
+                &nbsp;·&nbsp; {_scen_info['emoji']} Scenario: {_scen_info['label']}
+                &nbsp;·&nbsp; City: {st.session_state.city_filter}
+            </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
+            <div style="font-size:1.2rem;font-weight:900;color:{_sys_color};
+                        background:{_sys_bg};padding:4px 14px;border-radius:8px;
+                        border:1px solid {_sys_color};letter-spacing:0.06em">
+                ● {_sys_status}
+            </div>
+            <div style="font-size:0.7rem;color:#94a3b8;text-align:right">
+                {'<span style="color:#22c55e">🟢 LIVE Weather</span>' if _is_live else '<span style="color:#eab308">🟡 DEMO Data</span>'}
+                &nbsp;·&nbsp;
+                {'<span style="color:#22c55e">IBM Granite CONNECTED</span>' if _g_avail else ('<span style="color:#eab308">Granite RATE LIMITED</span>' if _g_rate else '<span style="color:#94a3b8">Granite FALLBACK</span>')}
+            </div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+ai_disclaimer()
+
+# ──────────────────────────────────────────────
+# KPI Strip — Active Flood Event summary
+# ──────────────────────────────────────────────
 critical_drains = drain_analysis.get("priority_summary", {}).get("CRITICAL", 0)
 # Open reports = demo open count + all persisted user-submitted open reports
 _demo_open  = report_analysis.get("open_reports", 0)
@@ -169,6 +213,118 @@ with k5: metric_card("Open Reports", str(open_reports), color="#eab308", icon="�
 with k6: metric_card("Critical Drains", str(critical_drains), color="#f97316", icon="🔧")
 with k7: metric_card("Active Incidents", str(len(incidents)), color="#7c3aed", icon="⚡")
 with k8: metric_card("Teams Available", str(available_teams), color="#22c55e", icon="🚒")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
+# Live Agent Activity Panel (above tabs)
+# ──────────────────────────────────────────────
+with st.expander("⚡ LIVE AGENT ACTIVITY — Pipeline Execution Trace", expanded=False):
+    _log = orch.pipeline_log[-15:] if orch.pipeline_log else []
+    if not _log:
+        st.caption("No pipeline activity yet — run a scenario.")
+    else:
+        _agent_statuses = {
+            "Flood Risk Agent":            {"icon": "🔍", "color": "#3b82f6"},
+            "Drainage Agent":              {"icon": "🔧", "color": "#14b8a6"},
+            "Citizen Report Agent":        {"icon": "📱", "color": "#f97316"},
+            "Response Coordination Agent": {"icon": "🚒", "color": "#7c3aed"},
+            "IBM Granite":                 {"icon": "🤖", "color": "#22c55e" if _g_avail else "#eab308"},
+            "Chief Response Agent":        {"icon": "👮", "color": "#60a5fa"},
+            "Closed-Loop Learning":        {"icon": "🔄", "color": "#94a3b8"},
+        }
+        # Build per-agent latest status from pipeline log
+        agent_latest: dict = {}
+        for entry in _log:
+            ag = entry.get("agent", "")
+            agent_latest[ag] = entry
+
+        cols_ag = st.columns(4)
+        _all_agents = [
+            ("Flood Risk Agent", "🔍"),
+            ("Drainage Agent", "🔧"),
+            ("Citizen Report Agent", "📱"),
+            ("Response Coordination Agent", "🚒"),
+            ("IBM Granite", "🤖"),
+            ("Chief Response Agent", "👮"),
+            ("Closed-Loop Learning", "🔄"),
+            ("Orchestrator", "⚙️"),
+        ]
+        for idx, (ag_name, ag_icon) in enumerate(_all_agents):
+            entry = agent_latest.get(ag_name, {})
+            st_val = entry.get("status", "IDLE")
+            detail = entry.get("details", "")[:60]
+            st_color = {
+                "COMPLETE": "#22c55e", "RUNNING": "#3b82f6",
+                "FALLBACK": "#eab308", "IDLE": "#475569",
+                "ERROR": "#ef4444",
+            }.get(st_val, "#94a3b8")
+            with cols_ag[idx % 4]:
+                # Special label for Granite
+                if ag_name == "IBM Granite":
+                    if _g_avail:
+                        badge = '<span style="background:#14532d;color:#bbf7d0;font-size:0.6rem;padding:1px 4px;border-radius:3px;font-weight:700">IBM GRANITE</span>'
+                    elif _g_rate:
+                        badge = '<span style="background:#3a2e00;color:#fde68a;font-size:0.6rem;padding:1px 4px;border-radius:3px;font-weight:700">RATE LIMITED</span>'
+                    else:
+                        badge = '<span style="background:#2a1a00;color:#fdba74;font-size:0.6rem;padding:1px 4px;border-radius:3px;font-weight:700">FALLBACK</span>'
+                else:
+                    badge = ""
+                st.markdown(f"""
+                <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:6px;
+                            padding:0.4rem 0.6rem;margin-bottom:0.3rem">
+                    <div style="display:flex;align-items:center;gap:0.4rem">
+                        <span>{ag_icon}</span>
+                        <span style="font-size:0.72rem;font-weight:600;color:#e2e8f0;flex:1">{ag_name}</span>
+                        {badge}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.2rem">
+                        <span style="color:{st_color};font-size:0.65rem;font-weight:700">● {st_val}</span>
+                    </div>
+                    {f'<div style="font-size:0.62rem;color:#64748b;margin-top:0.15rem">{detail}</div>' if detail else ''}
+                </div>
+                """, unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
+# IBM Granite Flow Indicator
+# ──────────────────────────────────────────────
+_sit_report = state.get("situation_report", "")
+if _sit_report:
+    if _g_avail:
+        _granite_label = "IBM GRANITE EXECUTION"
+        _granite_style = "background:#0d2818;border:1px solid #22c55e"
+        _granite_badge = '<span style="background:#14532d;color:#bbf7d0;font-size:0.68rem;padding:2px 6px;border-radius:4px;font-weight:700">✅ IBM GRANITE</span>'
+        _granite_note  = "Situation report generated by IBM Granite 3-8b-instruct via WatsonX"
+    elif _g_rate:
+        _granite_label = "IBM GRANITE — RATE LIMITED"
+        _granite_style = "background:#1a1400;border:1px solid #eab308"
+        _granite_badge = '<span style="background:#3a2e00;color:#fde68a;font-size:0.68rem;padding:2px 6px;border-radius:4px;font-weight:700">⏳ RATE LIMITED</span>'
+        _granite_note  = "Situation report generated by fallback (WatsonX rate limit active — waiting for 429 backoff)"
+    else:
+        _granite_label = "FALLBACK EXECUTION — IBM Granite unavailable"
+        _granite_style = "background:#1a1400;border:1px solid #475569"
+        _granite_badge = '<span style="background:#1a1d27;color:#94a3b8;font-size:0.68rem;padding:2px 6px;border-radius:4px;font-weight:700;border:1px solid #475569">⚠ FALLBACK</span>'
+        _granite_note  = "Situation report generated by rule-based fallback (configure WATSONX_API_KEY for IBM Granite)"
+
+    with st.expander(f"🤖 GRANITE ANALYSIS FLOW — {_granite_label}", expanded=False):
+        st.markdown(f"""
+        <div style="{_granite_style};border-radius:8px;padding:0.8rem 1rem;margin-bottom:0.5rem">
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem">
+                {_granite_badge}
+                <span style="font-size:0.75rem;color:#94a3b8">{_granite_note}</span>
+            </div>
+            <div style="font-size:0.78rem;color:#94a3b8">
+                <strong>INPUT:</strong> Rainfall intensity · Drainage status · Citizen reports · Incident context (scenario: {_scen_info['label']})
+                <br><strong>PROCESSING:</strong> {"IBM Granite 3-8b-instruct via WatsonX REST API" if _g_avail else "Rule-based fallback (no LLM)"}
+                <br><strong>OUTPUT:</strong> Situation report + zone recommendations
+            </div>
+        </div>
+        <div style="background:#111827;border-radius:6px;padding:0.7rem 0.9rem;
+                    font-family:monospace;font-size:0.78rem;color:#e2e8f0;
+                    white-space:pre-wrap;line-height:1.5;max-height:200px;overflow-y:auto">
+{_sit_report[:800]}{"..." if len(_sit_report) > 800 else ""}
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
