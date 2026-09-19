@@ -15,7 +15,8 @@ from frontend.ui_utils import (
     apply_global_css, header, metric_card, ai_disclaimer, card,
     risk_badge, demo_badge, hybrid_badge, live_badge, model_badge,
     simulated_badge, COLORS, RISK_EMOJI,
-    risk_donut, rainfall_bar, risk_gauge, section_header
+    risk_donut, rainfall_bar, risk_gauge, section_header,
+    render_agent_trace, render_granite_panel, risk_level_indicator,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from frontend.map_component import build_flood_map
@@ -331,7 +332,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ──────────────────────────────────────────────
 # Tabs
 # ──────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab_granite, tab_trace = st.tabs([
     "🗺️ Live Risk Map",
     "🌦️ Live Weather",
     "⚡ Incidents",
@@ -340,6 +341,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📱 Citizen Reports",
     "🚒 Response Teams",
     "🌧️ Rainfall Data",
+    "🧠 IBM Granite AI",
+    "🔬 Agent Trace",
 ])
 
 # ── Tab 1: Live Risk Map ──────────────────────
@@ -367,9 +370,85 @@ with tab1:
         map_data = st_folium(m, width="100%", height=560, key="cmd_map")
 
     with col_detail:
-        section_header("RISK DISTRIBUTION")
+        # ── Zone selector + detail panel ──────────────
+        section_header("ZONE DETAIL")
 
-        # Donut chart
+        # Zone selector dropdown
+        _zone_options = [f"{p['area']}, {p['city']}" for p in predictions]
+        _zone_options_display = [
+            f"{'🔴' if p['risk_level']=='CRITICAL' else '🟠' if p['risk_level']=='HIGH' else '🟡' if p['risk_level']=='MEDIUM' else '🟢'} {p['area']}, {p['city']}"
+            for p in predictions
+        ]
+        if _zone_options:
+            _sel_zone_map = st.selectbox(
+                "Select zone", _zone_options_display,
+                key="map_zone_selector", label_visibility="collapsed"
+            )
+            _sel_zone_idx = _zone_options_display.index(_sel_zone_map)
+            _sel_pred = predictions[_sel_zone_idx]
+            _sel_feats = _sel_pred.get("input_features", {})
+            _sel_rl = _sel_pred["risk_level"]
+            _sel_rc = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_sel_rl, "#94a3b8")
+            _sel_bg = {"CRITICAL": "rgba(239,68,68,0.08)", "HIGH": "rgba(249,115,22,0.06)",
+                       "MEDIUM": "rgba(234,179,8,0.05)", "LOW": "rgba(34,197,94,0.05)"}.get(_sel_rl, "rgba(148,163,184,0.04)")
+
+            # Zone detail card
+            st.markdown(f"""
+            <div style="background:{_sel_bg};border:1px solid {_sel_rc}40;
+                        border-top:3px solid {_sel_rc};border-radius:8px;padding:0.8rem;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem">
+                <div>
+                  <div style="font-weight:800;color:#e2e8f0;font-size:0.95rem">{_sel_pred['area']}</div>
+                  <div style="font-size:0.75rem;color:#64748b">{_sel_pred['city']}</div>
+                </div>
+                <div style="background:{_sel_rc};color:white;padding:2px 8px;border-radius:8px;font-size:0.72rem;font-weight:700;letter-spacing:0.04em">{_sel_rl}</div>
+              </div>
+              <div style="font-size:2rem;font-weight:900;color:{_sel_rc};line-height:1;margin-bottom:0.1rem">
+                {_sel_pred['risk_score']:.0f}<span style="font-size:1rem;color:#64748b;font-weight:400">/100</span>
+              </div>
+              <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.6rem">RISK SCORE (ML MODEL)</div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;font-size:0.76rem;margin-bottom:0.5rem">
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.62rem">RAINFALL 1H</div>
+                  <div style="color:#3b82f6;font-weight:700">{_sel_feats.get('rainfall_1h', 0):.1f} mm/hr</div>
+                </div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.62rem">WATER LEVEL</div>
+                  <div style="color:#06b6d4;font-weight:700">{_sel_feats.get('water_level', 0):.2f} m</div>
+                </div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.62rem">DRAINAGE CAP.</div>
+                  <div style="color:{'#ef4444' if _sel_feats.get('drainage_capacity',50)<40 else '#f97316' if _sel_feats.get('drainage_capacity',50)<65 else '#22c55e'};font-weight:700">{_sel_feats.get('drainage_capacity', 0):.0f}%</div>
+                </div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.62rem">HIST. FLOODS</div>
+                  <div style="color:#f97316;font-weight:700">{_sel_feats.get('historical_flood_freq', 0):.0f}/yr</div>
+                </div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.62rem">CITIZEN RPTS</div>
+                  <div style="color:#eab308;font-weight:700">{_sel_feats.get('citizen_reports', 0):.0f}</div>
+                </div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.62rem">CONFIDENCE</div>
+                  <div style="color:#a78bfa;font-weight:700">{_sel_pred.get('confidence', 0):.0%}</div>
+                </div>
+              </div>
+
+              <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">Risk Factors</div>
+              {"".join(["<div style='display:flex;align-items:center;gap:0.4rem;padding:0.2rem 0;font-size:0.75rem'><span style='color:#ef4444'>▸</span><span style='color:#94a3b8'>" + r + "</span></div>" for r in _sel_pred.get("main_reasons", [])[:3]])}
+
+              <div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440">
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700">AI Action</div>
+                <div style="font-size:0.72rem;color:#fbbf24">{_sel_pred.get('recommended_action','')[:120]}...</div>
+              </div>
+              <div style="font-size:0.6rem;color:#475569;margin-top:0.4rem">🔵 ML MODEL PREDICTION — DEMO/SYNTHETIC DATA</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Risk distribution donut
+        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+        section_header("RISK DISTRIBUTION")
         risk_counts = {
             "CRITICAL": critical, "HIGH": high, "MEDIUM": medium,
             "LOW": total_zones - critical - high - medium
@@ -378,39 +457,18 @@ with tab1:
             fig_donut = risk_donut(risk_counts)
             st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
 
-        st.markdown("---")
-        section_header("CRITICAL AREAS")
-        crit_areas = [p for p in predictions if p["risk_level"] == "CRITICAL"][:5]
-        if crit_areas:
-            for p in crit_areas:
-                rf = p.get("input_features", {}).get("rainfall_1h", 0)
-                st.markdown(f"""
-                <div class="fg-card-danger" style="padding:0.6rem 0.8rem">
-                    <div style="display:flex;justify-content:space-between;align-items:center">
-                        <div style="font-weight:700;color:#e2e8f0;font-size:0.85rem">{p['area']}, {p['city']}</div>
-                        <div style="background:#ef4444;color:white;padding:1px 6px;border-radius:8px;font-size:0.7rem;font-weight:600">CRITICAL</div>
-                    </div>
-                    <div style="font-size:0.75rem;color:#94a3b8;margin-top:0.2rem">
-                        Score: {p['risk_score']:.0f}/100 &nbsp;|&nbsp; Rain: {rf:.0f} mm/hr &nbsp;|&nbsp; Conf: {p['confidence']:.0%}
-                    </div>
-                    <div style="font-size:0.72rem;color:#fca5a5;margin-top:0.2rem">{p['main_reasons'][0] if p.get('main_reasons') else ''}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="fg-card-success"><div style="color:#22c55e">✅ No critical risk areas currently.</div></div>', unsafe_allow_html=True)
-
         # Alerts
         if alerts:
             st.markdown("---")
             section_header("ACTIVE ALERTS", model_badge())
-            for alert in alerts[:4]:
+            for alert in alerts[:3]:
                 level = alert.get("alert_level", "INFO")
                 cls = {"CRITICAL": "alert-critical", "HIGH": "alert-high"}.get(level, "alert-info")
                 st.markdown(f"""
-                <div class="{cls}" style="font-size:0.8rem">
+                <div class="{cls}" style="font-size:0.78rem">
                     <b>{alert.get('title','')}</b><br>
-                    <span style="color:#cbd5e1">{alert.get('message','')[:120]}</span>
-                    <div style="font-size:0.68rem;color:#64748b;margin-top:0.2rem">🔵 MODEL GENERATED</div>
+                    <span style="color:#cbd5e1">{alert.get('message','')[:100]}</span>
+                    <div style="font-size:0.65rem;color:#64748b;margin-top:0.2rem">🔵 MODEL GENERATED — SIMULATED DATA</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -685,7 +743,12 @@ with tab6:
                 df_usr_disp = df_usr[_ucols_avail].copy()
                 df_usr_disp["category"] = df_usr_disp["category"].str.replace("_", " ").str.title()
                 if "submitted_at" in df_usr_disp.columns:
-                    df_usr_disp["submitted_at"] = pd.to_datetime(df_usr_disp["submitted_at"]).dt.strftime("%b %d %H:%M")
+                    df_usr_disp["submitted_at"] = (
+                        pd.to_datetime(df_usr_disp["submitted_at"], format="mixed", utc=True, errors="coerce")
+                        .dt.tz_localize(None)
+                        .dt.strftime("%b %d %H:%M")
+                        .fillna("—")
+                    )
                 st.dataframe(df_usr_disp, use_container_width=True, hide_index=True, height=200)
 
         st.markdown("---")
@@ -1122,6 +1185,272 @@ with tab2:
                 '</div>',
                 unsafe_allow_html=True,
             )
+
+
+# ── Tab: IBM Granite AI ───────────────────────
+with tab_granite:
+    section_header("IBM GRANITE AI ANALYSIS",
+                   '<span style="background:#14532d;color:#bbf7d0;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700">🧠 IBM GRANITE</span>')
+
+    _g_avail2  = state.get("granite_status", {}).get("available", False)
+    _g_rate2   = state.get("granite_status", {}).get("rate_limited", False)
+    _g_model   = state.get("granite_status", {}).get("model", "ibm/granite-4-h-small")
+
+    # Status card
+    col_gst1, col_gst2, col_gst3 = st.columns(3)
+    with col_gst1:
+        gstatus_color = "#22c55e" if _g_avail2 else "#eab308" if _g_rate2 else "#64748b"
+        gstatus_label = "LIVE — WatsonX Connected" if _g_avail2 else "RATE LIMITED" if _g_rate2 else "FALLBACK MODE"
+        st.markdown(f"""
+        <div class="fg-metric">
+            <div class="fg-metric-value" style="color:{gstatus_color};font-size:1.1rem">
+                {'✅' if _g_avail2 else '⏳' if _g_rate2 else '⚙'} {gstatus_label}
+            </div>
+            <div class="fg-metric-label">IBM Granite Status</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_gst2:
+        st.markdown(f"""
+        <div class="fg-metric">
+            <div class="fg-metric-value" style="color:#a78bfa;font-size:0.85rem">{_g_model}</div>
+            <div class="fg-metric-label">Model</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_gst3:
+        _g_conf = state.get("granite_status", {}).get("confidence", "N/A")
+        _g_endpoint = "WatsonX REST API" if _g_avail2 else "Rule-based fallback"
+        st.markdown(f"""
+        <div class="fg-metric">
+            <div class="fg-metric-value" style="color:#64748b;font-size:0.85rem">{_g_endpoint}</div>
+            <div class="fg-metric-label">Inference Endpoint</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    # Situation Report via Granite
+    st.markdown("""
+    <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.5rem;
+                text-transform:uppercase;letter-spacing:0.05em">📋 Situation Summary</div>
+    """, unsafe_allow_html=True)
+
+    _sit_rpt = state.get("situation_report", "")
+    _scen_info_g = SCENARIOS.get(st.session_state.scenario, {})
+    _input_summary = (
+        f"Scenario: {_scen_info_g.get('label','N/A')} · "
+        f"Critical zones: {critical} · High risk: {high} · "
+        f"Open reports: {open_reports} · City: {st.session_state.city_filter}"
+    )
+    render_granite_panel(
+        situation_report=_sit_rpt,
+        granite_available=_g_avail2,
+        granite_rate_limited=_g_rate2,
+        scenario_label=_scen_info_g.get("label", ""),
+        input_summary=_input_summary,
+    )
+
+    if _sit_rpt:
+        if st.download_button(
+            "📥 Download Granite Analysis",
+            data=_sit_rpt,
+            file_name=f"granite_analysis_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.txt",
+            mime="text/plain",
+            key="dl_granite_cc",
+        ):
+            pass
+
+    st.markdown("---")
+
+    # Zone-specific explanations via Granite
+    st.markdown("""
+    <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.75rem;
+                text-transform:uppercase;letter-spacing:0.05em">🔍 Zone Risk Explanation</div>
+    """, unsafe_allow_html=True)
+
+    _high_risk_zones_g = [p for p in predictions if p["risk_level"] in ("CRITICAL", "HIGH")]
+    if _high_risk_zones_g:
+        _zone_labels_g = [f"{p['area']}, {p['city']} — {p['risk_level']} ({p['risk_score']:.0f}/100)" for p in _high_risk_zones_g[:15]]
+        _sel_zone_g = st.selectbox("Select zone for Granite explanation", _zone_labels_g, key="granite_zone_sel")
+        _sel_idx_g = _zone_labels_g.index(_sel_zone_g)
+        _zone_g = _high_risk_zones_g[_sel_idx_g]
+        _feats_g = _zone_g.get("input_features", {})
+
+        _zone_detail_col, _zone_explain_col = st.columns([1, 1.5])
+        with _zone_detail_col:
+            _rl = _zone_g["risk_level"]
+            _rc = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_rl, "#94a3b8")
+            st.markdown(f"""
+            <div class="fg-card" style="border-top:3px solid {_rc}">
+              <div style="font-size:1.1rem;font-weight:800;color:{_rc};margin-bottom:0.3rem">
+                {risk_level_indicator(_rl)}
+              </div>
+              <div style="font-size:1.5rem;font-weight:800;color:{_rc};margin-top:0.5rem">{_zone_g['risk_score']:.0f}<span style="font-size:0.9rem;color:#64748b">/100</span></div>
+              <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.75rem">Risk Score</div>
+              <div style="font-size:0.78rem;color:#94a3b8;display:grid;grid-template-columns:1fr 1fr;gap:0.3rem">
+                <div>📍 {_zone_g['area']}, {_zone_g['city']}</div>
+                <div>🎯 Conf: {_zone_g.get('confidence', 0):.0%}</div>
+                <div>🌧️ Rain: {_feats_g.get('rainfall_1h', 0):.0f} mm/hr</div>
+                <div>🔧 Drain: {_feats_g.get('drainage_capacity', 0):.0f}%</div>
+                <div>💧 WL: {_feats_g.get('water_level', 0):.1f}m</div>
+                <div>📱 Reports: {_feats_g.get('citizen_reports', 0):.0f}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Risk factors bar chart (from feature importance)
+            _fi_g = _zone_g.get("feature_importance", {})
+            if _fi_g:
+                _fi_sorted_g = sorted(_fi_g.items(), key=lambda x: -x[1])[:6]
+                for _fn, _fv in _fi_sorted_g:
+                    _bar_pct = min(100, _fv * 100 * 8)
+                    st.markdown(f"""
+                    <div style="margin-bottom:0.3rem">
+                      <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#94a3b8;margin-bottom:1px">
+                        <span>{_fn.replace('_',' ').title()}</span>
+                        <span>{_fv:.3f}</span>
+                      </div>
+                      <div style="background:#1e2440;border-radius:3px;height:6px">
+                        <div style="width:{_bar_pct:.0f}%;background:linear-gradient(90deg,#3b82f6,#7c3aed);height:100%;border-radius:3px"></div>
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        with _zone_explain_col:
+            # Generate or show cached Granite explanation for this zone
+            _reasons_g = _zone_g.get("main_reasons", [])
+            _probs_g = _zone_g.get("probabilities", {})
+
+            st.markdown(f"""
+            <div style="background:{'#060e10' if _g_avail2 else '#0a0a0a'};
+                        border:1px solid {'#22c55e' if _g_avail2 else '#1e2440'};
+                        border-radius:8px;padding:0.9rem;margin-bottom:0.5rem">
+              <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase">
+                {'🧠 IBM GRANITE EXPLANATION' if _g_avail2 else '⚙ RULE-BASED EXPLANATION (Granite not connected)'}
+              </div>
+              <div style="font-size:0.85rem;color:#e2e8f0;margin-bottom:0.5rem;font-weight:600">
+                WHY IS {_zone_g['area'].upper()} CRITICAL/HIGH RISK?
+              </div>
+              <div style="font-size:0.82rem;color:#94a3b8;line-height:1.6">
+            """, unsafe_allow_html=True)
+
+            for _r in _reasons_g[:5]:
+                _r_color = "#ef4444" if "extreme" in _r.lower() or "critical" in _r.lower() else "#f97316" if "high" in _r.lower() else "#eab308"
+                st.markdown(f'<div style="padding:0.2rem 0;font-size:0.82rem;color:{_r_color}">▸ {_r}</div>', unsafe_allow_html=True)
+
+            st.markdown("</div></div>", unsafe_allow_html=True)
+
+            # Probability breakdown
+            if _probs_g:
+                st.markdown("""
+                <div style="font-size:0.75rem;font-weight:700;color:#64748b;margin:0.5rem 0 0.3rem;text-transform:uppercase">
+                  Model Confidence Distribution
+                </div>
+                """, unsafe_allow_html=True)
+                for _lvl in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+                    _pv = _probs_g.get(_lvl, 0)
+                    _pc = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_lvl, "#94a3b8")
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem">
+                      <div style="min-width:70px;font-size:0.72rem;font-weight:600;color:{_pc}">{_lvl}</div>
+                      <div style="flex:1;background:#1e2440;border-radius:3px;height:10px">
+                        <div style="width:{_pv*100:.0f}%;background:{_pc};height:100%;border-radius:3px"></div>
+                      </div>
+                      <div style="min-width:40px;font-size:0.72rem;color:#94a3b8;text-align:right">{_pv:.0%}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Recommended action
+            _rec_action_g = _zone_g.get("recommended_action", "")
+            if _rec_action_g:
+                st.markdown(f"""
+                <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);
+                            border-radius:6px;padding:0.6rem 0.8rem;margin-top:0.5rem">
+                  <div style="font-size:0.7rem;font-weight:700;color:#94a3b8;margin-bottom:0.2rem">AI RECOMMENDED ACTION</div>
+                  <div style="font-size:0.82rem;color:#fca5a5">{_rec_action_g}</div>
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.info("No high or critical risk zones currently. Run a high-rainfall scenario to see Granite analysis.")
+
+    if not _g_avail2:
+        st.markdown(f"""
+        <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);
+                    border-radius:8px;padding:0.75rem 1rem;margin-top:1rem">
+          <div style="font-size:0.8rem;color:#fde68a">
+            <strong>To enable live IBM Granite analysis:</strong> Set
+            <code style="background:#1a1a00;padding:1px 4px;border-radius:3px">WATSONX_API_KEY</code> and
+            <code style="background:#1a1a00;padding:1px 4px;border-radius:3px">WATSONX_PROJECT_ID</code>
+            in your <code>.env</code> file. See <code>.env.example</code> for format.
+            The application will automatically use live Granite on next pipeline run.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ── Tab: Agent Trace ──────────────────────────
+with tab_trace:
+    section_header("AGENTIC AI ACTIVITY TRACE",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700">🔬 LIVE PIPELINE</span>')
+
+    st.markdown("""
+    <div style="font-size:0.8rem;color:#64748b;margin-bottom:1rem">
+      Watch the 6-agent AI pipeline process flood data in real-time.
+      Each agent shows its status, inputs processed, and outputs generated.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Pipeline flow visualization
+    st.markdown("""
+    <div style="background:#080c14;border:1px solid #1e2440;border-radius:8px;
+                padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.75rem">
+      <div style="font-weight:700;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em">Pipeline Flow</div>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:3px">
+        <span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:4px;font-weight:700">📡 DATA</span>
+        <span style="color:#475569">→</span>
+        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🌊 FLOOD RISK</span>
+        <span style="color:#475569">→</span>
+        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🔧 DRAINAGE</span>
+        <span style="color:#475569">→</span>
+        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">📱 CITIZEN REPORTS</span>
+        <span style="color:#475569">→</span>
+        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">⚡ RESPONSE</span>
+        <span style="color:#475569">→</span>
+        <span style="background:#0d2818;color:#bbf7d0;padding:2px 8px;border-radius:4px;font-weight:700">🧠 IBM GRANITE</span>
+        <span style="color:#475569">→</span>
+        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🎯 CHIEF AGENT</span>
+        <span style="color:#475569">→</span>
+        <span style="background:#450a0a;color:#fca5a5;padding:2px 8px;border-radius:4px;font-weight:700">👤 HUMAN APPROVAL</span>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Use the render_agent_trace helper
+    _g_avail3 = state.get("granite_status", {}).get("available", False)
+    _g_rate3  = state.get("granite_status", {}).get("rate_limited", False)
+    render_agent_trace(
+        pipeline_log=orch.pipeline_log[-30:],
+        granite_available=_g_avail3,
+        granite_rate_limited=_g_rate3,
+    )
+
+    # Full pipeline log table
+    st.markdown("---")
+    section_header("RAW PIPELINE LOG")
+    if orch.pipeline_log:
+        _full_log = orch.pipeline_log[-30:]
+        _log_df = pd.DataFrame([
+            {
+                "Time": e.get("timestamp", "")[:19].replace("T", " "),
+                "Step": e.get("step", ""),
+                "Agent": e.get("agent", ""),
+                "Status": e.get("status", ""),
+                "Details": e.get("details", "")[:80],
+            }
+            for e in reversed(_full_log)
+        ])
+        st.dataframe(_log_df, use_container_width=True, hide_index=True, height=300)
+    else:
+        st.caption("No pipeline log entries yet. Run a scenario to generate the trace.")
 
 
 # ──────────────────────────────────────────────

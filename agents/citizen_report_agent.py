@@ -118,6 +118,9 @@ class CitizenReportAgent:
         summary = ai_result.get("summary", text[:100])
         location_hint = ai_result.get("location_hint", area)
         requires_immediate = ai_result.get("requires_immediate_action", False)
+        keywords = ai_result.get("keywords") or []
+        suggested_action = ai_result.get("suggested_action", "")
+        granite_used = ai_result.get("granite_used", False)
 
         # 3. Priority score
         priority = SEVERITY_PRIORITY_MAP.get(severity, 5)
@@ -168,6 +171,9 @@ class CitizenReportAgent:
             "original_text": text,
             "translated_text": text if language == "english" else f"[Auto-translated] {summary}",
             "ai_summary": summary,
+            "keywords": keywords,
+            "suggested_action": suggested_action,
+            "granite_used": granite_used,
             "status": "OPEN",
             "priority": priority,
             "is_duplicate": is_duplicate,

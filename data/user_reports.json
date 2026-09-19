@@ -76,5 +76,21 @@
     "submitted_at": "2026-09-17T07:08:14.757431",
     "source": "USER SUBMITTED",
     "_fingerprint": "7d2d08d16d8b300c"
+  },
+  {
+    "report_id": "VAL-TEST-001",
+    "city": "Ahmedabad",
+    "area": "Paldi",
+    "category": "waterlogging",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "original_text": "Validation test report",
+    "ai_summary": "Test",
+    "submitted_at": "2024-01-01T00:00:00",
+    "source": "USER SUBMITTED",
+    "created_at": "2026-09-18T10:29:46.518372+00:00",
+    "_fingerprint": "0d6f283b51269688",
+    "latitude": 23.0225,
+    "longitude": 72.5714
   }
 ]

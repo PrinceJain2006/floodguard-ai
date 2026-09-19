@@ -425,37 +425,41 @@ def granite_status() -> dict:
 def analyze_citizen_report(text: str, language: str, context: dict | None = None) -> dict:
     """
     Use Granite to understand a citizen flood report.
-    Returns: category, severity, summary, location_hint, language.
+    Returns: category, severity, summary, location_hint, language, keywords, granite_used.
+    Uses chat format (<|user|>/<|assistant|>) required by granite-4-h-small.
     """
-    system = (
-        "You are FloodGuard AI, analyzing citizen flood reports for Ahmedabad and Surat municipalities.\n"
-        "Respond ONLY with valid JSON. No additional text."
+    prompt = (
+        "<|user|>\n"
+        "You are FloodGuard AI. Analyze the citizen flood report below and extract structured data.\n"
+        f"Report (language: {language}): \"{text}\"\n\n"
+        "Return ONLY a JSON object with these exact keys:\n"
+        "category (one of: waterlogging, drain_overflow, road_blockage, traffic_disruption, property_flooding, emergency_situation)\n"
+        "severity (one of: LOW, MEDIUM, HIGH, CRITICAL)\n"
+        "summary (one-sentence English summary)\n"
+        "location_hint (location mentioned or null)\n"
+        "requires_immediate_action (true or false)\n"
+        "keywords (list of 3 flood-related terms found in report)\n"
+        "suggested_action (one specific municipal response action)\n"
+        "<|assistant|>\n"
+        "{\n"
     )
-    prompt = f"""{system}
 
-Citizen report (language: {language}):
-\"{text}\"
-
-Extract the following and respond as JSON:
-{{
-  "category": "<waterlogging|drain_overflow|road_blockage|traffic_disruption|property_flooding|emergency_situation>",
-  "severity": "<LOW|MEDIUM|HIGH|CRITICAL>",
-  "language_detected": "<english|hindi|gujarati|other>",
-  "summary": "<one sentence English summary>",
-  "location_hint": "<mentioned location if any, else null>",
-  "requires_immediate_action": <true|false>
-}}"""
-
-    response = _call_granite(prompt, max_tokens=250)
+    response = _call_granite(prompt, max_tokens=300)
     if response:
+        # Prepend the opening brace we included in the prompt to complete the JSON
         try:
-            match = re.search(r'\{.*\}', response, re.DOTALL)
+            full_json = "{" + response if not response.strip().startswith("{") else response
+            match = re.search(r'\{.*?\}', full_json, re.DOTALL)
             if match:
-                return json.loads(match.group())
+                result = json.loads(match.group())
+                result["granite_used"] = True
+                return result
         except Exception:
             pass
 
-    return _fallback_report_analysis(text, language)
+    result = _fallback_report_analysis(text, language)
+    result["granite_used"] = False
+    return result
 
 
 def explain_flood_risk(area: str, city: str, risk_data: dict) -> str:
@@ -666,24 +670,46 @@ _SEVERITY_KEYWORDS = {
 def _fallback_report_analysis(text: str, language: str) -> dict:
     text_lower = text.lower()
     category   = "waterlogging"
-    for cat, keywords in _CATEGORY_KEYWORDS.items():
-        if any(kw in text_lower for kw in keywords):
+    for cat, kws in _CATEGORY_KEYWORDS.items():
+        if any(kw in text_lower for kw in kws):
             category = cat
             break
 
     severity = "MEDIUM"
-    for sev, keywords in _SEVERITY_KEYWORDS.items():
-        if any(kw in text_lower for kw in keywords):
+    for sev, kws in _SEVERITY_KEYWORDS.items():
+        if any(kw in text_lower for kw in kws):
             severity = sev
             break
 
+    # Extract keywords found in the text (up to 5)
+    found_keywords: list[str] = []
+    all_kws = list(_CATEGORY_KEYWORDS.get(category, [])) + list(_SEVERITY_KEYWORDS.get(severity, []))
+    for kw in all_kws:
+        if kw in text_lower and kw not in found_keywords and len(kw) > 2:
+            found_keywords.append(kw)
+        if len(found_keywords) >= 5:
+            break
+
+    # Routing suggestion per category
+    _action_map = {
+        "waterlogging":        "Deploy pump team to clear waterlogging.",
+        "drain_overflow":      "Dispatch drainage maintenance team immediately.",
+        "road_blockage":       "Initiate traffic diversion and deploy road clearance team.",
+        "traffic_disruption":  "Deploy traffic control officers to manage congestion.",
+        "property_flooding":   "Deploy emergency response team for property evacuation.",
+        "emergency_situation": "Deploy emergency response team and senior officer immediately.",
+    }
+
     return {
-        "category":               category,
-        "severity":               severity,
-        "language_detected":      language,
-        "summary":                f"Flood-related report: {category.replace('_', ' ')} detected.",
-        "location_hint":          None,
+        "category":                  category,
+        "severity":                  severity,
+        "language_detected":         language,
+        "summary":                   f"Flood-related report: {category.replace('_', ' ')} detected.",
+        "location_hint":             None,
         "requires_immediate_action": severity in ("HIGH", "CRITICAL"),
+        "keywords":                  found_keywords,
+        "suggested_action":          _action_map.get(category, "Dispatch municipal response team."),
+        "granite_used":              False,
     }
 
 

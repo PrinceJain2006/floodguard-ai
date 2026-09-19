@@ -1,0 +1,44 @@
+1
+00:00:00,000 --> 00:00:08,000
+Welcome to FloodGuard AI — an intelligent flood decision-support system that transforms real-time data into faster, explainable, and human-approved civic action.
+
+2
+00:00:08,000 --> 00:00:22,200
+FloodGuard AI begins with a critical challenge: urban floods can change rapidly, while decision makers need reliable information in real time.
+
+3
+00:00:22,200 --> 00:00:36,400
+Traditional flood prediction tells us where risk may occur, but prediction alone is not enough. Civic teams also need evidence, context, prioritization, and actionable recommendations.
+
+4
+00:00:36,400 --> 00:00:50,600
+FloodGuard AI combines machine learning with multi-agent intelligence. It brings together live weather, flood risk, citizen reports, and operational evidence into one decision-support system.
+
+5
+00:00:50,600 --> 00:01:04,800
+The pipeline starts with live weather and ML-based flood risk prediction. Citizen reports add ground-level evidence. Multiple AI agents then analyze the information and identify the most critical zones.
+
+6
+00:01:04,800 --> 00:01:19,000
+Behind the system is a modular architecture connecting the dashboard, ML models, agent services, evidence processing, recommendations, and human approval into one coordinated workflow.
+
+7
+00:01:19,000 --> 00:01:33,200
+Machine learning predicts flood risk from data. Agentic AI goes further by interpreting multiple sources, reasoning over evidence, generating explanations, and supporting operational decisions.
+
+8
+00:01:33,200 --> 00:01:47,400
+Multiple specialized agents work together. They analyze weather, risk, citizen reports, and operational context before combining their findings into a unified decision.
+
+9
+00:01:47,400 --> 00:02:01,600
+Evidence fusion brings these signals together, while zone prioritization ranks areas by risk, rainfall, water level, drainage capacity, and citizen reports.
+
+10
+00:02:01,600 --> 00:02:15,800
+FloodGuard AI then generates an explainable recommendation for the selected zone. Human officers remain in control and can review, approve, reject, or modify the proposed action.
+
+11
+00:02:15,800 --> 00:02:30,000
+The system connects AI intelligence with civic operations. Approved decisions can support response teams, while the complete decision process is recorded for transparency and auditability.
+

@@ -12,7 +12,8 @@ import time
 from datetime import datetime
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
-    simulated_badge, section_header, COLORS
+    simulated_badge, section_header, COLORS,
+    render_agent_trace, render_granite_panel, risk_level_indicator,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.granite_service import granite_status, explain_why_zone_risky
@@ -307,6 +308,22 @@ with pa1: metric_card("Total Agents",    str(total_agents),  color="#3b82f6", ic
 with pa2: metric_card("Active/Ready",    str(active_agents), color="#22c55e", icon="✅")
 with pa3: metric_card("Pipeline Runs",   str(pipeline_runs), color="#7c3aed", icon="▶️")
 with pa4: metric_card("Last Run",        state.get("last_updated","N/A")[:16], color="#3b82f6", icon="🕐")
+
+st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
+
+# ── Agent Trace (enhanced visual pipeline trace) ─────────────────────────
+col_trace, col_agents_grid = st.columns([1, 1.8])
+with col_trace:
+    section_header("🔬 PIPELINE TRACE",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:1px 6px;border-radius:3px;font-weight:700">LIVE</span>')
+    render_agent_trace(
+        pipeline_log=orch.pipeline_log[-20:],
+        granite_available=g_available,
+        granite_rate_limited=g_rate_limited,
+    )
+
+with col_agents_grid:
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 

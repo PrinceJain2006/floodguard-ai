@@ -201,15 +201,27 @@ with col_form:
                     else:
                         st.session_state.last_submitted_fingerprint = _submit_fp
 
-                # ── Confirmation display ──────────────────────────────────────
+                # ── Enhanced AI Classification Display ───────────────────────
                 level_colors = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}
+                level_bgs    = {
+                    "CRITICAL": "rgba(239,68,68,0.1)",
+                    "HIGH":     "rgba(249,115,22,0.08)",
+                    "MEDIUM":   "rgba(234,179,8,0.07)",
+                    "LOW":      "rgba(34,197,94,0.07)",
+                }
                 sev   = report.get("severity", "MEDIUM")
                 color = level_colors.get(sev, "#94a3b8")
+                bg    = level_bgs.get(sev, "rgba(148,163,184,0.07)")
                 cat   = report.get("category", "waterlogging")
                 cat_display = cat.replace("_", " ").title()
                 priority_map = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3, "LOW": 4}
                 priority = priority_map.get(sev, 3)
                 is_dup = report.get("is_duplicate", False)
+                lang_det = report.get("language", "english").title()
+                ai_summary = report.get("ai_summary", report.get("summary", ""))
+                granite_used = report.get("granite_used", False)
+                keywords = report.get("keywords", [])
+                suggested_action = report.get("suggested_action", "")
 
                 if is_dup:
                     st.warning(
@@ -217,70 +229,86 @@ with col_form:
                         f"Reference ID: {report.get('duplicate_of', 'N/A')}"
                     )
                 else:
-                    st.success(f"Report submitted successfully! ID: {report['report_id']}")
+                    st.success(f"✅ Report submitted! ID: {report['report_id']}")
+
+                # Main AI classification card
+                _proc_badge = (
+                    '<span style="background:#14532d;color:#bbf7d0;font-size:0.65rem;padding:1px 6px;border-radius:3px;font-weight:700">🧠 IBM GRANITE</span>'
+                    if granite_used else
+                    '<span style="background:#1a1500;color:#fde68a;font-size:0.65rem;padding:1px 6px;border-radius:3px;font-weight:700">⚙ RULE-BASED</span>'
+                )
+                _sev_icon = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(sev, "⚪")
 
                 st.markdown(f"""
-                <div style="background:rgba(34,197,94,0.1);border:1px solid #22c55e;
-                            border-radius:8px;padding:1rem;margin-top:0.5rem">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;
-                                font-size:0.83rem;color:#e2e8f0;margin-bottom:0.5rem">
-                        <div><b>Report ID:</b> {report['report_id']}</div>
-                        <div><b>Category:</b> {cat_display}</div>
-                        <div><b>Location:</b> {area}, {city_choice}</div>
-                        <div><b>Severity:</b> <span style="color:{color};font-weight:700">{sev}</span></div>
-                        <div><b>Priority:</b> #{priority} in queue</div>
-                        <div><b>Routing to:</b> {report['assigned_team']}</div>
-                        <div><b>Status:</b> <span style="color:#22c55e">OPEN</span></div>
-                        <div><b>Source:</b> <span style="color:#fdba74;font-weight:700">USER SUBMITTED</span></div>
+                <div style="background:{bg};border:2px solid {color}40;border-top:3px solid {color};
+                            border-radius:10px;padding:1rem;margin-top:0.5rem">
+                  <!-- Header row -->
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">
+                    <span style="font-size:0.78rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em">🤖 AI CLASSIFICATION</span>
+                    {_proc_badge}
+                    <span style="font-size:0.65rem;color:#475569">USER SUBMITTED — not real emergency data</span>
+                  </div>
+
+                  <!-- Main classification grid -->
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:0.6rem">
+                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Incident Type</div>
+                      <div style="font-size:0.9rem;font-weight:700;color:#e2e8f0">{cat_display}</div>
                     </div>
-                    {"<div style='font-size:0.75rem;color:#ef4444;margin-top:0.3rem;padding:0.3rem 0.5rem;background:rgba(239,68,68,0.1);border-radius:4px'>Requires immediate action — emergency team alerted.</div>" if sev == "CRITICAL" else ""}
-                    <div style="font-size:0.7rem;color:#64748b;margin-top:0.4rem">
-                        USER SUBMITTED — Processed by FloodGuard AI. Not a real municipal emergency submission.
+                    <div style="background:#0d1020;border:1px solid {color}40;border-radius:6px;padding:0.5rem 0.7rem">
+                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Severity</div>
+                      <div style="font-size:0.9rem;font-weight:700;color:{color}">{_sev_icon} {sev}</div>
                     </div>
+                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Priority</div>
+                      <div style="font-size:0.9rem;font-weight:700;color:{color}">#{priority} in queue</div>
+                    </div>
+                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Language</div>
+                      <div style="font-size:0.85rem;font-weight:700;color:#94a3b8">{lang_det}</div>
+                    </div>
+                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Routing To</div>
+                      <div style="font-size:0.8rem;font-weight:700;color:#3b82f6">{report.get('assigned_team','N/A')}</div>
+                    </div>
+                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Status</div>
+                      <div style="font-size:0.85rem;font-weight:700;color:#22c55e">OPEN</div>
+                    </div>
+                  </div>
+
+                  {"<div style='background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.5rem;font-size:0.78rem;color:#fca5a5'><strong>🚨 CRITICAL:</strong> Requires immediate response. Emergency team notified. (DEMO — no real emergency services contacted)</div>" if sev == "CRITICAL" else ""}
+
+                  <!-- AI keywords -->
+                  {("<div style='margin-bottom:0.5rem'><div style='font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700'>Keywords Detected</div><div style='display:flex;flex-wrap:wrap;gap:4px'>" + "".join(['<span style="background:#1e2440;color:#93c5fd;padding:1px 7px;border-radius:12px;font-size:0.68rem">' + kw + "</span>" for kw in keywords[:6]]) + "</div></div>") if keywords else ""}
+
+                  <!-- AI summary -->
+                  {("<div style='background:#050810;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem;margin-bottom:0.5rem'><div style='font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700'>" + ("🧠 Granite AI Summary" if granite_used else "⚙ AI Summary") + "</div><div style='font-size:0.8rem;color:#c7d2fe;line-height:1.5'>" + str(ai_summary) + "</div></div>") if ai_summary else ""}
+
+                  <!-- Suggested action -->
+                  {("<div style='background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:0.45rem 0.7rem'><div style='font-size:0.62rem;color:#64748b;margin-bottom:0.15rem;text-transform:uppercase;font-weight:700'>Suggested Response</div><div style='font-size:0.8rem;color:#fbbf24'>" + str(suggested_action) + "</div></div>") if suggested_action else ""}
+
+                  <!-- Pipeline flow -->
+                  <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
+                    <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">Processing Pipeline</div>
+                    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:0.68rem">
+                      <span style="background:#3a1a00;color:#fdba74;padding:2px 6px;border-radius:4px;font-weight:700">📱 CITIZEN REPORT</span>
+                      <span style="color:#475569">→</span>
+                      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">🔍 REPORT AGENT</span>
+                      <span style="color:#475569">→</span>
+                      <span style="background:{'#0d2818' if granite_used else '#1a1500'};color:{'#bbf7d0' if granite_used else '#fde68a'};padding:2px 6px;border-radius:4px;font-weight:700">{'🧠 IBM GRANITE' if granite_used else '⚙ FALLBACK'}</span>
+                      <span style="color:#475569">→</span>
+                      <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🖥️ COMMAND CENTER</span>
+                    </div>
+                  </div>
+                  <div style="font-size:0.62rem;color:#475569;margin-top:0.4rem">
+                    Report ID: {report['report_id']} · Location: {area}, {city_choice}
+                  </div>
                 </div>
                 """, unsafe_allow_html=True)
 
                 if image_upload:
                     st.image(image_upload, caption="Uploaded photo preview (not stored to disk)", width=200)
-
-                # ── Citizen → AI → Command Center flow trace ─────────────
-                if not is_dup:
-                    lang_det = report.get("language", "english").title()
-                    ai_summary = report.get("ai_summary", report.get("summary", ""))
-                    granite_used = report.get("granite_used", False)
-                    proc_label = "🤖 IBM GRANITE" if granite_used else "⚙ FALLBACK (rule-based)"
-                    st.markdown(f"""
-                    <div style="background:#0d1020;border:1px solid #2d3148;border-radius:8px;
-                                padding:0.8rem 1rem;margin-top:0.5rem">
-                        <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;
-                                    letter-spacing:0.05em;margin-bottom:0.5rem">
-                            REPORT PROCESSING PIPELINE
-                        </div>
-                        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;font-size:0.75rem">
-                            <span style="background:#3a1a00;color:#fdba74;padding:2px 6px;border-radius:4px;font-weight:700">
-                                📱 CITIZEN REPORT
-                            </span>
-                            <span style="color:#475569">→</span>
-                            <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">
-                                🔍 CITIZEN REPORT AGENT
-                            </span>
-                            <span style="color:#475569">→</span>
-                            <span style="background:#1a1d27;color:#c4b5fd;padding:2px 6px;border-radius:4px;font-weight:700;border:1px solid #7c3aed">
-                                {proc_label}
-                            </span>
-                            <span style="color:#475569">→</span>
-                            <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">
-                                🖥️ COMMAND CENTER
-                            </span>
-                        </div>
-                        <div style="margin-top:0.5rem;font-size:0.75rem;color:#94a3b8">
-                            Language detected: <strong>{lang_det}</strong> &nbsp;·&nbsp;
-                            Category: <strong>{cat_display}</strong> &nbsp;·&nbsp;
-                            Routed to: <strong>{report.get('assigned_team', 'N/A')}</strong>
-                        </div>
-                        {f'<div style="font-size:0.75rem;color:#a78bfa;margin-top:0.2rem">AI Summary: {ai_summary}</div>' if ai_summary else ''}
-                    </div>
-                    """, unsafe_allow_html=True)
 
     # ── Quick stats ─────────────────────────────────────────────────────────
     st.markdown("---")

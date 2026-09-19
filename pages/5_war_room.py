@@ -13,7 +13,8 @@ import plotly.graph_objects as go
 from datetime import datetime
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, ai_disclaimer, demo_badge,
-    simulated_badge, hybrid_badge, model_badge, section_header, COLORS, risk_badge
+    simulated_badge, hybrid_badge, model_badge, section_header, COLORS, risk_badge,
+    render_granite_panel, render_agent_trace, risk_level_indicator,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.granite_service import explain_why_zone_risky
@@ -282,64 +283,114 @@ with col_mid:
     else:
         st.info("Run a scenario to generate the Chief Response Agent action plan.")
 
-# ── RIGHT: Resource Status + Agents ──────────
+# ── RIGHT: Resource Status + IBM Granite + Emergency Response ──────────
 with col_right:
-    # Resource recommendations
-    section_header("💼 RESOURCE RECOMMENDATIONS",
-                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL</span>'
-                   '&nbsp;<span style="background:#3a2e00;color:#fde68a;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🟡 DEMO RESOURCES</span>')
+    # ── AI RECOMMENDED RESPONSE (prominent) ──────────
+    _pending_actions = [
+        a for a in action_plan.get("actions", [])
+        if a.get("requires_human_approval") and
+           a["action_id"] not in st.session_state.war_approved and
+           a["action_id"] not in st.session_state.war_rejected
+    ]
+
+    if _pending_actions:
+        st.markdown(f"""
+        <div style="background:rgba(239,68,68,0.12);border:2px solid #ef4444;border-radius:10px;
+                    padding:0.8rem 1rem;margin-bottom:0.75rem">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+            <span style="font-size:1.2rem">🚨</span>
+            <span style="font-size:0.85rem;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:0.04em">
+              HUMAN APPROVAL REQUIRED
+            </span>
+            <span style="background:#ef4444;color:white;padding:1px 7px;border-radius:10px;font-size:0.7rem;font-weight:700">
+              {len(_pending_actions)} pending
+            </span>
+          </div>
+          <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.5rem">
+            The AI has recommended {len(_pending_actions)} action(s) that require municipal officer authorization
+            before implementation. Review each action below.
+          </div>
+          <div style="font-size:0.68rem;color:#475569">
+            ⚠ AI recommendations are decision-support tools only. Approving in this demo simulates
+            command-center authorization — no real emergency services are contacted.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Show top 3 pending approvals inline
+        for _pa in _pending_actions[:3]:
+            _pa_color = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308"}.get(
+                _pa.get("priority", "MEDIUM"), "#eab308"
+            )
+            st.markdown(f"""
+            <div style="background:#100808;border:1px solid {_pa_color}60;border-left:3px solid {_pa_color};
+                        border-radius:0 6px 6px 0;padding:0.5rem 0.7rem;margin-bottom:0.3rem">
+              <div style="display:flex;justify-content:space-between;margin-bottom:0.2rem">
+                <span style="font-size:0.78rem;font-weight:700;color:#e2e8f0">{_pa['title'][:55]}</span>
+                <span style="color:{_pa_color};font-size:0.65rem;font-weight:700">{_pa.get('priority','')}</span>
+              </div>
+              <div style="font-size:0.7rem;color:#94a3b8">{_pa.get('description','')[:100]}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            _pa_c1, _pa_c2 = st.columns(2)
+            with _pa_c1:
+                if st.button("✅ Approve", key=f"wr_quick_app_{_pa['action_id']}", type="primary", use_container_width=True):
+                    st.session_state.war_approved.add(_pa["action_id"])
+                    st.rerun()
+            with _pa_c2:
+                if st.button("❌ Reject", key=f"wr_quick_rej_{_pa['action_id']}", use_container_width=True):
+                    st.session_state.war_rejected.add(_pa["action_id"])
+                    st.rerun()
+    elif approved_count > 0:
+        st.markdown(f"""
+        <div style="background:rgba(34,197,94,0.08);border:1px solid #22c55e;border-radius:8px;
+                    padding:0.7rem 0.9rem;margin-bottom:0.75rem">
+          <div style="font-size:0.85rem;font-weight:700;color:#22c55e">✅ RESPONSE PLAN APPROVED</div>
+          <div style="font-size:0.75rem;color:#64748b;margin-top:0.2rem">
+            {approved_count} action(s) approved in this session. Status updated.
+            (DEMO — no real emergency services contacted)
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Resource recommendations (compact)
+    section_header("💼 RESOURCES",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:1px 5px;border-radius:3px;font-weight:700">MODEL+DEMO</span>')
     if resource_recs:
-        for rec in resource_recs[:5]:
+        for rec in resource_recs[:4]:
             level = rec["risk_level"]
             p_color = COLORS.get(level, "#94a3b8")
             assigned = rec.get("assigned_resources", [])
-            res_html = ""
-            for r in assigned:
-                t_color = "#22c55e" if r["status"] == "AVAILABLE" else "#f97316"
-                res_html += f'<div style="font-size:0.72rem;color:{t_color};padding:1px 0">💼 {r["team_name"]} (~{r["estimated_travel_min"]}min)</div>'
+            res_html = "".join([
+                f'<div style="font-size:0.7rem;color:{"#22c55e" if r["status"]=="AVAILABLE" else "#f97316"};padding:1px 0">💼 {r["team_name"]} (~{r["estimated_travel_min"]}min)</div>'
+                for r in assigned[:2]
+            ])
             st.markdown(f"""
-            <div style="background:#1a1d27;border:1px solid {p_color};border-radius:8px;
-                        padding:0.5rem 0.75rem;margin-bottom:0.4rem">
+            <div style="background:#131620;border:1px solid {p_color}40;border-left:2px solid {p_color};
+                        border-radius:0 6px 6px 0;padding:0.4rem 0.6rem;margin-bottom:0.3rem">
                 <div style="display:flex;justify-content:space-between;align-items:center">
-                    <div style="font-size:0.8rem;font-weight:700;color:#e2e8f0">{rec['zone']}</div>
-                    <span style="background:{p_color};color:white;padding:1px 5px;border-radius:4px;font-size:0.65rem;font-weight:600">{level}</span>
+                    <div style="font-size:0.78rem;font-weight:700;color:#e2e8f0">{rec['zone'][:25]}</div>
+                    <span style="background:{p_color};color:white;padding:1px 5px;border-radius:4px;font-size:0.62rem;font-weight:600">{level}</span>
                 </div>
-                <div style="font-size:0.7rem;color:#94a3b8;margin:0.2rem 0">{rec['rationale']}</div>
+                <div style="font-size:0.68rem;color:#64748b;margin:0.15rem 0">{rec['rationale'][:60]}</div>
                 {res_html}
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("No resource recommendations yet.")
+        st.caption("No resource recommendations yet.")
 
     st.markdown("---")
-    # Agent activity panel
-    section_header("🤖 AGENT ACTIVITY",
-                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">MODEL / APPLICATION PIPELINE</span>')
-    agent_statuses = orch.get_agent_statuses()
-    agent_icons = {
-        "Flood Risk Agent": "🌊", "Drainage Agent": "🔧",
-        "Citizen Report Agent": "📱", "Response Coordination Agent": "⚡",
-        "Damage Assessment Agent": "🔍", "Chief Response Agent": "🎯", "IBM Granite": "🧠",
-    }
-    for agent in agent_statuses:
-        name = agent.get("agent", "")
-        status = agent.get("status", "UNKNOWN")
-        icon = agent_icons.get(name, "🤖")
-        s_colors = {"ACTIVE": "#22c55e", "COMPLETE": "#22c55e", "FALLBACK": "#f97316", "INACTIVE": "#94a3b8"}
-        s_color = s_colors.get(status, "#94a3b8")
-        last_act = agent.get("recent_activity", [])
-        last_msg = last_act[-1] if last_act else "No recent activity"
-        st.markdown(f"""
-        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;
-                    border-bottom:1px solid rgba(45,49,72,0.5)">
-            <span style="font-size:1rem">{icon}</span>
-            <div style="flex:1;min-width:0">
-                <div style="font-size:0.78rem;font-weight:600;color:#e2e8f0">{name}</div>
-                <div style="font-size:0.68rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{str(last_msg)[:55]}</div>
-            </div>
-            <span style="background:{s_color};color:white;padding:1px 5px;border-radius:4px;font-size:0.62rem;font-weight:600;white-space:nowrap">{status}</span>
-        </div>
-        """, unsafe_allow_html=True)
+    # Compact agent trace
+    section_header("🤖 AGENT PIPELINE",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:1px 5px;border-radius:3px;font-weight:700">LIVE</span>')
+    _g_wr = state.get("granite_status", {})
+    render_agent_trace(
+        pipeline_log=orch.pipeline_log[-15:],
+        granite_available=_g_wr.get("available", False),
+        granite_rate_limited=_g_wr.get("rate_limited", False),
+    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("---")

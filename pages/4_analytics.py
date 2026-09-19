@@ -501,13 +501,45 @@ with tab5:
 with tab6:
     section_header("RANDOM FOREST ML MODEL — EVALUATION & EXPLAINABILITY", model_badge())
 
+    # Model info header
+    ml_info_cols = st.columns(4)
+    with ml_info_cols[0]:
+        st.markdown("""
+        <div class="fg-metric">
+          <div class="fg-metric-value" style="color:#3b82f6;font-size:1.1rem">Random Forest</div>
+          <div class="fg-metric-label">Model Type</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with ml_info_cols[1]:
+        st.markdown("""
+        <div class="fg-metric">
+          <div class="fg-metric-value" style="color:#f97316;font-size:1.1rem">5,000</div>
+          <div class="fg-metric-label">Synthetic Training Samples</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with ml_info_cols[2]:
+        st.markdown("""
+        <div class="fg-metric">
+          <div class="fg-metric-value" style="color:#7c3aed;font-size:1.1rem">4 Classes</div>
+          <div class="fg-metric-label">LOW / MEDIUM / HIGH / CRITICAL</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with ml_info_cols[3]:
+        st.markdown("""
+        <div class="fg-metric">
+          <div class="fg-metric-value" style="color:#eab308;font-size:1.1rem">10 Features</div>
+          <div class="fg-metric-label">Input Feature Dimensions</div>
+        </div>
+        """, unsafe_allow_html=True)
+
     st.markdown("""
-    <div style="background:rgba(59,130,246,0.1);border:1px solid #3b82f6;border-radius:8px;
-                padding:0.5rem 0.9rem;margin-bottom:0.75rem;font-size:0.78rem;color:#93c5fd">
-        <strong>🔵 MODEL DATA</strong> — The Random Forest model is trained on <strong>5,000 synthetic records</strong>
-        generated from realistic flood parameter distributions for Ahmedabad &amp; Surat.
-        Metrics below are computed from the actual held-out test split (20% = 1,000 samples).
-        These are real model metrics, not hard-coded values. Data is synthetic, not real sensor measurements.
+    <div style="background:rgba(59,130,246,0.08);border:1px solid #1e3a5f;border-left:3px solid #3b82f6;
+                border-radius:0 8px 8px 0;padding:0.6rem 0.9rem;margin:0.75rem 0;font-size:0.78rem;color:#93c5fd">
+        <strong>🔵 IMPORTANT — MODEL DATA</strong> — The Random Forest model is trained on
+        <strong>5,000 synthetic records</strong> generated from realistic flood parameter distributions
+        for Ahmedabad &amp; Surat. Metrics below are computed from the actual held-out test split (20% = 1,000 samples).
+        <br><strong style="color:#eab308">SYNTHETIC DATA NOTICE:</strong> Training data is simulated — not real government sensor measurements.
+        All metrics are genuine calculated values from the model, not hard-coded placeholders.
     </div>
     """, unsafe_allow_html=True)
 

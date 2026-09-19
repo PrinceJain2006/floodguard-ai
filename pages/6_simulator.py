@@ -21,11 +21,13 @@ import math
 from datetime import datetime, timedelta, timezone
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
-    simulated_badge, section_header, COLORS, ai_disclaimer, model_badge
+    simulated_badge, section_header, COLORS, ai_disclaimer, model_badge,
+    render_agent_trace, render_granite_panel,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.drainage_agent import get_drainage_agent
 from data.seed_generator import AHMEDABAD_AREAS, SURAT_AREAS, ALL_AREAS
+from ml.flood_risk_model import get_model as get_flood_model
 
 st.set_page_config(
     page_title="Simulator — FloodGuard AI",
@@ -53,6 +55,19 @@ if "sim_after_state" not in st.session_state:
     st.session_state.sim_after_state = None
 if "sim_scenario_ran" not in st.session_state:
     st.session_state.sim_scenario_ran = False
+# Custom what-if simulator state
+if "custom_sim_results" not in st.session_state:
+    st.session_state.custom_sim_results = None
+if "custom_sim_params" not in st.session_state:
+    st.session_state.custom_sim_params = {}
+
+@st.cache_resource
+def _get_ml_model_sim():
+    """Load the flood risk ML model for simulator use."""
+    try:
+        return get_flood_model()
+    except Exception:
+        return None
 
 # ──────────────────────────────────────────────
 # Header
@@ -255,80 +270,114 @@ with tab1:
     section_header("WHAT-IF FLOOD SCENARIO SIMULATOR", simulated_badge())
 
     # ── Controls ─────────────────────────────
-    st.markdown("**Adjust parameters to see simulated risk:**")
-    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5 = st.columns(5)
+    st.markdown("""
+    <div style="font-size:0.82rem;color:#64748b;margin-bottom:0.75rem">
+      Adjust flood parameters and click <strong style="color:#3b82f6">RUN SIMULATION</strong>
+      to calculate flood risk using the actual ML model.
+      All values are <strong style="color:#eab308">SIMULATED</strong> — not real sensor data.
+    </div>
+    """, unsafe_allow_html=True)
+
+    ctrl1, ctrl2, ctrl3 = st.columns(3)
+    ctrl4, ctrl5, ctrl6 = st.columns(3)
 
     with ctrl1:
-        rainfall_mm = st.slider("Rainfall Intensity", 0, 200, 45, step=5,
-                                 help="mm per hour — SIMULATED")
-        st.markdown(f'<div style="font-size:0.75rem;color:#94a3b8">Current: {rainfall_mm} mm/hr</div>', unsafe_allow_html=True)
-
+        rainfall_mm = st.slider("🌧️ Rainfall Intensity (mm/hr)", 0, 200, 45, step=5,
+                                 help="Rainfall intensity in mm per hour — SIMULATED")
     with ctrl2:
-        duration_hr = st.slider("Duration (hours)", 0, 24, 3, step=1,
+        duration_hr = st.slider("⏱️ Duration (hours)", 0, 24, 3, step=1,
                                  help="How long rainfall has been ongoing — SIMULATED")
-
     with ctrl3:
-        drainage_pct = st.slider("Drainage Capacity %", 0, 100, 60, step=5,
+        drainage_pct = st.slider("🔧 Drainage Capacity (%)", 0, 100, 60, step=5,
                                   help="% of drainage infrastructure functional — SIMULATED")
-
     with ctrl4:
-        blocked_drains = st.slider("Blocked Drains (%)", 0, 100, 20, step=5,
+        blocked_drains = st.slider("🚫 Blocked Drains (%)", 0, 100, 20, step=5,
                                     help="% of drains blocked — SIMULATED")
-
     with ctrl5:
-        city_filter = st.selectbox("City", ["All", "Ahmedabad", "Surat"], key="sim_city")
+        water_level_m = st.slider("💧 Water Level (m)", 0.0, 5.0, 0.5, step=0.1,
+                                   help="Current water level at sensor points — SIMULATED")
+    with ctrl6:
+        citizen_rpts = st.slider("📱 Citizen Reports", 0, 200, 15, step=5,
+                                  help="Number of incoming citizen flood reports — SIMULATED")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    _ctrl_city_col, _ctrl_run_col, _ctrl_reset_col = st.columns([1.5, 1, 1])
+    with _ctrl_city_col:
+        city_filter = st.selectbox("🏙️ City", ["All", "Ahmedabad", "Surat"], key="sim_city")
+    with _ctrl_run_col:
+        run_sim = st.button("▶ RUN SIMULATION", key="run_custom_sim", type="primary", use_container_width=True)
+    with _ctrl_reset_col:
+        reset_sim = st.button("↺ RESET SCENARIO", key="reset_custom_sim", use_container_width=True)
 
-    # ── Simulation function ───────────────────
+    if reset_sim:
+        st.session_state.custom_sim_results = None
+        st.session_state.custom_sim_params = {}
+        st.rerun()
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    # ── Simulation function — uses ML model when available ────────────────
+    _ml_model_sim = _get_ml_model_sim()
+
     def simulate_risk(area: dict, city: str, rainfall: float, duration: int,
-                      drainage: float, blocked: float) -> dict:
+                      drainage: float, blocked: float,
+                      water_level: float = 0.5, citizen_rep: int = 15) -> dict:
         """
-        Mathematical simulation of flood risk based on input parameters.
-        Completely synthetic — uses area metadata from demo dataset.
+        Simulate flood risk for an area using the actual ML model.
+        Falls back to rule-based math if model unavailable.
+        All outputs are SIMULATED — not real sensor readings.
         """
         elevation = area.get("elevation", 50)
         density = area.get("density", 0.7)
+        hff = max(1, int(3 + (50 - elevation) / 10))  # historical freq estimate
 
-        # Base risk from rainfall intensity
-        rain_risk = min(100, rainfall * 0.7)
+        r1h  = float(rainfall)
+        r3h  = round(r1h * (2.5 + duration * 0.1), 1)
+        r6h  = round(r1h * (5.0 + duration * 0.15), 1)
+        r24h = round(r1h * (15 + duration * 0.5), 1)
+        dc   = max(5, drainage - blocked * 0.3)
 
-        # Duration compounds risk (log scale)
-        duration_mult = 1 + math.log(max(1, duration)) * 0.2
+        features = {
+            "rainfall_1h":           r1h,
+            "rainfall_3h":           r3h,
+            "rainfall_6h":           r6h,
+            "rainfall_24h":          r24h,
+            "drainage_capacity":     dc,
+            "historical_flood_freq": hff,
+            "water_level":           water_level,
+            "elevation":             float(elevation),
+            "road_density":          density,
+            "citizen_reports":       float(citizen_rep),
+        }
 
-        # Low elevation = higher risk
-        elevation_factor = max(0, (60 - elevation) / 60) * 30
-
-        # Blocked drains compound risk
-        drain_factor = (blocked / 100) * 25
-
-        # Drainage capacity reduces risk
-        drain_reduction = (drainage / 100) * 20
-
-        # Population density multiplier
-        density_factor = density * 10
-
-        raw_score = (
-            rain_risk * duration_mult
-            + elevation_factor
-            + drain_factor
-            + density_factor
-            - drain_reduction
-        )
-        score = max(0, min(100, raw_score))
-
-        if score >= 75:   level = "CRITICAL"
-        elif score >= 55: level = "HIGH"
-        elif score >= 30: level = "MEDIUM"
-        else:             level = "LOW"
-
-        reasons = []
-        if rainfall > 60: reasons.append(f"Extreme rainfall ({rainfall} mm/hr)")
-        elif rainfall > 30: reasons.append(f"Heavy rainfall ({rainfall} mm/hr)")
-        if blocked > 40: reasons.append(f"High drain blockage ({blocked:.0f}%)")
-        if elevation < 15: reasons.append(f"Very low elevation ({elevation}m)")
-        if duration > 6: reasons.append(f"Prolonged rainfall ({duration}h)")
-        if drainage < 40: reasons.append(f"Low drainage capacity ({drainage}%)")
+        if _ml_model_sim and _ml_model_sim.is_trained:
+            pred = _ml_model_sim.predict(features)
+            score = pred["risk_score"]
+            level = pred["risk_level"]
+            reasons = pred.get("main_reasons", [])
+            fi = pred.get("feature_importance", {})
+            model_used = "ML MODEL"
+        else:
+            # Rule-based fallback
+            rain_risk = min(100, rainfall * 0.7)
+            duration_mult = 1 + math.log(max(1, duration)) * 0.2
+            elevation_factor = max(0, (60 - elevation) / 60) * 30
+            drain_factor = (blocked / 100) * 25
+            drain_reduction = (drainage / 100) * 20
+            density_factor = density * 10
+            wl_factor = water_level * 8
+            raw_score = (rain_risk * duration_mult + elevation_factor
+                         + drain_factor + density_factor + wl_factor - drain_reduction)
+            score = max(0, min(100, raw_score))
+            level = ("CRITICAL" if score >= 75 else "HIGH" if score >= 55
+                     else "MEDIUM" if score >= 30 else "LOW")
+            reasons = []
+            if rainfall > 60: reasons.append(f"Extreme rainfall ({rainfall} mm/hr)")
+            elif rainfall > 30: reasons.append(f"Heavy rainfall ({rainfall} mm/hr)")
+            if blocked > 40: reasons.append(f"High drain blockage ({blocked:.0f}%)")
+            if water_level >= 2: reasons.append(f"High water level ({water_level:.1f}m)")
+            if drainage < 40: reasons.append(f"Low drainage capacity ({drainage}%)")
+            fi = {}
+            model_used = "RULE-BASED"
 
         return {
             "area": area["name"],
@@ -338,20 +387,38 @@ with tab1:
             "simulated_risk_score": round(score, 1),
             "simulated_risk_level": level,
             "reasons": reasons[:3],
+            "feature_importance": fi,
+            "model_used": model_used,
         }
 
-    # Run simulation
+    # Run simulation (on button click or if results already exist)
     areas_to_sim = []
     if city_filter in ("All", "Ahmedabad"):
         areas_to_sim += [(a, "Ahmedabad") for a in AHMEDABAD_AREAS]
     if city_filter in ("All", "Surat"):
         areas_to_sim += [(a, "Surat") for a in SURAT_AREAS]
 
+    # Compute results immediately for display (live update as sliders move)
     sim_results = [
-        simulate_risk(a, c, rainfall_mm, duration_hr, drainage_pct, blocked_drains)
+        simulate_risk(a, c, rainfall_mm, duration_hr, drainage_pct, blocked_drains,
+                      water_level=water_level_m, citizen_rep=citizen_rpts)
         for a, c in areas_to_sim
     ]
     sim_results.sort(key=lambda x: x["simulated_risk_score"], reverse=True)
+
+    # Determine model source for badge
+    _model_src = sim_results[0].get("model_used", "RULE-BASED") if sim_results else "RULE-BASED"
+    _model_badge_html = (
+        '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:1px 6px;border-radius:3px;font-weight:700">🔵 ML MODEL</span>'
+        if _model_src == "ML MODEL" else
+        '<span style="background:#1a1500;color:#fde68a;font-size:0.68rem;padding:1px 6px;border-radius:3px;font-weight:700">⚙ RULE-BASED</span>'
+    )
+    st.markdown(f"""
+    <div style="font-size:0.72rem;color:#475569;margin-bottom:0.5rem">
+      Simulation using: {_model_badge_html}
+      &nbsp;·&nbsp; <span style="color:#475569">All values SIMULATED — not real sensor data</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ── Results ──────────────────────────────
     sim_critical = sum(1 for r in sim_results if r["simulated_risk_level"] == "CRITICAL")
@@ -726,7 +793,54 @@ with tab3:
             rec_action = after_score_result.get("recommended_action", "Monitor and schedule next inspection.")
             st.markdown(f'<div style="font-size:0.75rem;color:#22c55e;padding:2px 0">✅ Recommended: {rec_action}</div>', unsafe_allow_html=True)
 
-        st.markdown(f'<div style="font-size:0.68rem;color:#475569;margin-top:0.75rem">⚙ Scores computed by DrainageAgent using real scoring formula. Drain: {base_drain.get("drain_id","?")}. Current rainfall context: {avg_rain_drain:.1f} mm/hr (DEMO). Area risk: {area_risk_val:.0f}/100 (MODEL).</div>', unsafe_allow_html=True)
+        # Before/After summary card
+        st.markdown("---")
+        _impr_pct = ((bscore - ascore) / max(bscore, 1)) * 100 if bscore > 0 else 0
+        _impr_color = "#22c55e" if improvement > 5 else "#eab308" if improvement > 0 else "#ef4444"
+        st.markdown(f"""
+        <div style="background:#080c14;border:1px solid #1e2440;border-radius:10px;padding:1rem;margin-top:0.5rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
+            <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;text-transform:uppercase;letter-spacing:0.05em">
+              🔧 DRAINAGE MAINTENANCE IMPACT
+            </div>
+            <div style="background:{'rgba(34,197,94,0.1)' if improvement > 5 else 'rgba(234,179,8,0.1)'};
+                        border:1px solid {_impr_color}40;border-radius:6px;padding:0.25rem 0.7rem">
+              <span style="color:{_impr_color};font-size:0.85rem;font-weight:700">
+                {"▼" if improvement > 0 else "="} {abs(improvement):.0f} pts ({abs(_impr_pct):.0f}%) {'improvement' if improvement > 0 else 'change'}
+              </span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+            <div style="flex:1;min-width:120px">
+              <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">BEFORE</div>
+              <div style="background:#1e2440;border-radius:4px;height:24px;position:relative;overflow:hidden">
+                <div style="width:{bscore:.0f}%;background:{bcolor};height:100%;border-radius:4px;
+                            display:flex;align-items:center;justify-content:flex-end;padding-right:6px">
+                  <span style="color:white;font-size:0.7rem;font-weight:700">{bscore:.0f}</span>
+                </div>
+              </div>
+              <div style="font-size:0.7rem;color:{bcolor};margin-top:0.1rem;font-weight:700">{bpri}</div>
+            </div>
+            <div style="font-size:1.5rem;color:#475569">→</div>
+            <div style="flex:1;min-width:120px">
+              <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">AFTER</div>
+              <div style="background:#1e2440;border-radius:4px;height:24px;position:relative;overflow:hidden">
+                <div style="width:{ascore:.0f}%;background:{acolor};height:100%;border-radius:4px;
+                            display:flex;align-items:center;justify-content:flex-end;padding-right:6px">
+                  <span style="color:white;font-size:0.7rem;font-weight:700">{ascore:.0f}</span>
+                </div>
+              </div>
+              <div style="font-size:0.7rem;color:{acolor};margin-top:0.1rem;font-weight:700">{apri}</div>
+            </div>
+          </div>
+          <div style="font-size:0.65rem;color:#475569;margin-top:0.6rem">
+            ⚙ Scores from DrainageAgent real scoring formula ·
+            Drain: {base_drain.get('drain_id','?')} ·
+            Rainfall: {avg_rain_drain:.1f} mm/hr (DEMO) ·
+            Area flood risk: {area_risk_val:.0f}/100 (MODEL)
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════

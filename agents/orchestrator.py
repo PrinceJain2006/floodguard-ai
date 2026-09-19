@@ -113,11 +113,12 @@ class AgentOrchestrator:
             teams     = [t for t in teams     if t["city"] == city]
 
         # ── Step 1b: Overlay live weather rainfall (if available) ──────────
-        # Fetch live weather and blend into the rainfall records.
-        # Live observations replace the synthetic city-level records where
-        # available; area-level synthetic records are always preserved since
-        # Open-Meteo returns only one city-centre reading per city.
-        # This ensures the ML model receives real current rainfall signals.
+        # For NORMAL scenario: blend live rainfall with synthetic data so the
+        # ML model receives real current weather signals.
+        # For non-NORMAL scenarios (HEAVY/EXTREME/etc.): preserve the synthetic
+        # scenario-multiplied rainfall to keep the demo meaningful — live weather
+        # is still fetched for the weather tab display but does NOT override
+        # scenario-scaled rainfall used for risk prediction.
         live_weather_status = {"data_mode": "DEMO", "is_live": False, "fallback_reason": "not attempted"}
         live_weather_records: list[dict] = []
         live_weather_map_points: list[dict] = []
@@ -128,40 +129,44 @@ class AgentOrchestrator:
                 live_weather_status = ldm.get_status()
                 live_rf = ldm.get_rainfall_records(city_filter=city)
                 if live_rf:
-                    # Build a lookup: city → live_rain_1h
-                    live_lookup = {r["city"]: r for r in live_rf}
-                    # Blend: update synthetic rainfall records with live 1h value
-                    # for the matching city, scaling other accumulators proportionally
-                    blended = []
-                    for rec in rainfall:
-                        live_rec = live_lookup.get(rec.get("city", ""))
-                        if live_rec:
-                            live_r1h = live_rec["rainfall_1h"]
-                            # Preserve synthetic multi-hour accumulators but
-                            # scale them proportionally if live 1h differs
-                            synth_r1h = rec.get("rainfall_1h", 1.0) or 1.0
-                            scale = live_r1h / synth_r1h if synth_r1h > 0 else 1.0
-                            # Cap scale to avoid wild extrapolation
-                            scale = max(0.1, min(scale, 10.0))
-                            blended.append({
-                                **rec,
-                                "rainfall_1h":  round(live_r1h, 1),
-                                "rainfall_3h":  round(rec.get("rainfall_3h", 0) * scale, 1),
-                                "rainfall_6h":  round(rec.get("rainfall_6h", 0) * scale, 1),
-                                "rainfall_24h": round(rec.get("rainfall_24h", 0) * scale, 1),
-                                "data_source":  "Open-Meteo (LIVE, blended)",
-                                "is_live":      True,
-                            })
-                        else:
-                            blended.append(rec)
-                    rainfall = blended
                     live_weather_records = live_rf
-                    # Map-ready points (city-centre weather markers for the Digital Twin)
                     live_weather_map_points = ldm.weather_to_map_points(city_filter=city)
-                    self._log_step(
-                        "LIVE_WEATHER", "LiveDataManager", "COMPLETE",
-                        f"Live rainfall blended for {len(live_rf)} city observations"
-                    )
+
+                    # Only blend live rainfall into risk-model input for NORMAL scenario.
+                    # Non-NORMAL scenarios use scenario-scaled synthetic rainfall so that
+                    # HEAVY/EXTREME/EMERGENCY produce meaningfully different risk outputs.
+                    if scenario == "NORMAL":
+                        live_lookup = {r["city"]: r for r in live_rf}
+                        blended = []
+                        for rec in rainfall:
+                            live_rec = live_lookup.get(rec.get("city", ""))
+                            if live_rec:
+                                live_r1h  = live_rec["rainfall_1h"]
+                                synth_r1h = rec.get("rainfall_1h", 1.0) or 1.0
+                                scale     = max(0.1, min(live_r1h / synth_r1h, 10.0))
+                                blended.append({
+                                    **rec,
+                                    "rainfall_1h":  round(live_r1h, 1),
+                                    "rainfall_3h":  round(rec.get("rainfall_3h", 0) * scale, 1),
+                                    "rainfall_6h":  round(rec.get("rainfall_6h", 0) * scale, 1),
+                                    "rainfall_24h": round(rec.get("rainfall_24h", 0) * scale, 1),
+                                    "data_source":  "Open-Meteo (LIVE, blended)",
+                                    "is_live":      True,
+                                })
+                            else:
+                                blended.append(rec)
+                        rainfall = blended
+                        self._log_step(
+                            "LIVE_WEATHER", "LiveDataManager", "COMPLETE",
+                            f"Live rainfall blended for NORMAL scenario ({len(live_rf)} city observations)"
+                        )
+                    else:
+                        # Non-NORMAL: live weather fetched for display only; scenario
+                        # rainfall multipliers drive the risk model.
+                        self._log_step(
+                            "LIVE_WEATHER", "LiveDataManager", "COMPLETE",
+                            f"Live weather fetched for display; {scenario} scenario rainfall preserved"
+                        )
         except Exception as exc:
             live_weather_status = {
                 "data_mode": "DEMO",
