@@ -2,66 +2,66 @@
 
 ## AI-Powered Urban Flood Intelligence & Decision Support System
 
-**FloodGuard AI** is an AI-powered urban flood intelligence platform designed to support flood-risk analysis, multi-agent decision making, citizen incident reporting, drainage assessment, and human-reviewed emergency response planning for **Ahmedabad and Surat, Gujarat**.
+FloodGuard AI is an AI-powered urban flood intelligence platform designed to support **flood-risk prediction, drainage analysis, citizen incident processing, multi-agent decision making, explainable AI, and human-reviewed emergency response planning** for urban flood scenarios in Ahmedabad and Surat, Gujarat.
 
-The system combines **Machine Learning, Multi-Agent AI, IBM Granite, Geospatial Intelligence, Evidence Fusion, and Human-in-the-Loop decision making** into a unified flood command workflow.
+The platform combines **Machine Learning, Multi-Agent AI, IBM Granite, Geospatial Intelligence, Evidence Fusion, and Human-in-the-Loop decision support** into a unified operational workflow.
 
 > **FloodGuard AI doesn't just predict flooding. It converts prediction + citizen reports + drainage information into prioritized actions.**
 
 ---
 
-## ⚡ Decision Intelligence
+## ⚡ Decision Intelligence Workflow
 
 ```text
-┌──────────────────────┐
-│ Rainfall & Weather   │
-│ Drainage Conditions  │
-│ Historical Floods    │
-│ Citizen Reports      │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│   ML Flood Risk      │
-│     Prediction       │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│   Multi-Agent AI     │
-│ Risk • Drainage      │
-│ Citizen • Response   │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│   Evidence Fusion    │
-│ + Zone Prioritization│
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│    IBM Granite       │
-│ Analysis & Reasoning │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│ AI Recommendation    │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│   Human Approval     │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│ Civic Response Plan  │
-│      + Audit Trail   │
-└──────────────────────┘
+Weather & Flood Signals
+        │
+        ▼
+┌─────────────────────────┐
+│   ML Flood Risk Model   │
+│     Random Forest       │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│    Multi-Agent Layer    │
+│ Risk • Drainage •       │
+│ Citizen • Response      │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│     Evidence Fusion     │
+│  + Zone Prioritization  │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│      IBM Granite        │
+│ Analysis & Reasoning    │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│   AI Recommendation     │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│     Human Approval      │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│   Civic Response Plan   │
+│      + Audit Trail      │
+└─────────────────────────┘
 ```
 
 ---
 
-## 🖥️ AI Flood Command Center
+# 🖥️ AI Flood Command Center
 
-FloodGuard AI provides a centralized operational view for monitoring flood risk, incidents, drainage conditions, citizen reports, agent activity, and AI-generated decision support.
-
-<!-- Add your actual Command Center screenshot here -->
+FloodGuard AI provides a centralized operational interface for monitoring flood risk, incidents, drainage conditions, citizen reports, agent activity, and AI-supported decisions.
 
 <p align="center">
   <img src="assets/command-center.png" width="950" alt="FloodGuard AI Command Center">
@@ -69,41 +69,41 @@ FloodGuard AI provides a centralized operational view for monitoring flood risk,
 
 ---
 
-## 🎯 Problem
+# 🎯 Problem
 
-Rapid urbanization and changing rainfall patterns can put pressure on existing urban drainage infrastructure.
+Urban flooding requires decision-makers to evaluate multiple signals at the same time.
 
-During heavy rainfall, authorities need to understand multiple signals simultaneously:
+During heavy rainfall, important questions include:
 
-* Where is flood risk increasing?
-* Which zones require immediate attention?
-* Which drainage assets are vulnerable?
+* Which areas are becoming high risk?
+* Which drainage assets require attention?
 * What are citizens reporting?
-* What response should be prioritized?
-* Why was a particular zone classified as high risk?
+* Which incidents should be prioritized?
+* What response should be recommended?
+* Why is a particular zone considered high risk?
 * Where should human decision-makers intervene?
 
-FloodGuard AI addresses this as a **decision-intelligence problem**, rather than treating flood prediction as an isolated ML task.
+FloodGuard AI approaches this as a **decision-intelligence problem**, rather than treating flood prediction as an isolated machine-learning task.
 
 ---
 
-## 💡 Solution
+# 💡 Solution
 
-FloodGuard AI brings together multiple intelligence layers:
+FloodGuard AI connects prediction, agentic analysis and decision support into one workflow.
 
-| Layer                           | Purpose                                                     |
-| ------------------------------- | ----------------------------------------------------------- |
-| **Machine Learning**            | Predict flood risk from available features                  |
-| **Flood Risk Agent**            | Interprets and processes flood-risk predictions             |
-| **Drainage Agent**              | Identifies drainage-related vulnerabilities                 |
-| **Citizen Report Agent**        | Processes and classifies citizen incidents                  |
-| **Response Coordination Agent** | Generates response recommendations                          |
-| **Chief Response Agent**        | Helps unify the response plan                               |
-| **Damage Assessment Agent**     | Supports damage assessment                                  |
-| **IBM Granite**                 | Situation analysis, reasoning and recommendation generation |
-| **Evidence Fusion**             | Combines multiple signals for decision support              |
-| **Human Approval**              | Keeps critical response decisions under human control       |
-| **Audit Trail**                 | Records decision activity                                   |
+| Intelligence Layer              | Role                                              |
+| ------------------------------- | ------------------------------------------------- |
+| **Machine Learning**            | Flood-risk prediction                             |
+| **Flood Risk Agent**            | Processes flood-risk information                  |
+| **Drainage Agent**              | Analyzes drainage conditions                      |
+| **Citizen Report Agent**        | Processes citizen incidents                       |
+| **Response Coordination Agent** | Generates response recommendations                |
+| **Chief Response Agent**        | Unifies response-oriented decisions               |
+| **Damage Assessment Agent**     | Supports damage assessment                        |
+| **IBM Granite**                 | Contextual analysis and recommendation generation |
+| **Evidence Fusion**             | Combines available decision signals               |
+| **Human Approval**              | Keeps critical response decisions human-reviewed  |
+| **Audit Trail**                 | Records decision activity                         |
 
 ---
 
@@ -113,23 +113,23 @@ FloodGuard AI uses a six-agent architecture coordinated through an orchestration
 
 ### 01 — Flood Risk Agent
 
-Uses the ML flood-risk model to analyze flood-related inputs and produce risk information.
+Uses the project's ML flood-risk model and available inputs to produce flood-risk information.
 
 ### 02 — Drainage Agent
 
-Analyzes drainage conditions and identifies maintenance-related priorities.
+Analyzes drainage-related conditions and identifies maintenance priorities.
 
 ### 03 — Citizen Report Agent
 
-Processes citizen-submitted flood incidents and supports multilingual incident classification.
+Processes citizen-submitted flood reports and supports multilingual incident classification where implemented.
 
 ### 04 — Response Coordination Agent
 
-Converts analyzed incidents and risk information into response recommendations.
+Uses analyzed incident and risk information to generate response recommendations.
 
 ### 05 — Chief Response Agent
 
-Provides a unified response-oriented decision layer across the system.
+Provides a unified response-oriented decision layer.
 
 ### 06 — Damage Assessment Agent
 
@@ -138,88 +138,96 @@ Supports post-event damage assessment and scoring.
 ### Agent Orchestration
 
 ```text
-Data Inputs
-    │
-    ▼
-Agent Orchestrator
-    │
-    ├── Flood Risk Agent
-    ├── Drainage Agent
-    ├── Citizen Report Agent
-    ├── Response Coordination Agent
-    ├── Chief Response Agent
-    └── Damage Assessment Agent
-              │
-              ▼
-       Evidence Fusion
-              │
-              ▼
-       Decision Intelligence
+                         ┌─────────────────────┐
+                         │   Input Signals      │
+                         │ Weather / Reports    │
+                         │ Drainage / Incidents │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                         ┌─────────────────────┐
+                         │  Agent Orchestrator │
+                         └──────────┬──────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              ▼                     ▼                     ▼
+       Flood Risk Agent      Drainage Agent      Citizen Report Agent
+              │                     │                     │
+              └─────────────────────┼─────────────────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │ Response Agents     │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                           Evidence Fusion
+                                    │
+                                    ▼
+                        Decision Intelligence
 ```
 
 ---
 
 # 🧠 Machine Learning
 
-FloodGuard AI includes a **Random Forest-based flood-risk modelling pipeline**.
+FloodGuard AI contains a **Random Forest-based flood-risk modelling pipeline**.
 
-The project contains:
+The ML layer includes:
 
 * Random Forest classification
 * Random Forest regression components
-* Saved model artifacts
-* Feature importance / explainability
+* Saved trained model artifacts
+* Feature importance
 * Model evaluation functionality
-* Training data generation for the demonstration environment
+* Training-data generation for the demonstration environment
 
-The current repository includes **5,000 synthetic training samples** for demonstration purposes.
+The repository currently contains **5,000 synthetic training samples** for the demonstration environment.
 
-> **Data transparency:** The current demonstration environment uses synthetic/demo data where applicable. These values should not be interpreted as live municipal or government flood data.
+> **Data transparency:** Synthetic/demo data is used where applicable. These values should not be interpreted as live municipal or government flood data.
 
 ---
 
 # 🔍 Explainable Flood Risk
 
-FloodGuard AI does not treat a risk score as a black box.
+FloodGuard AI is designed to provide more context than a single risk score.
 
-The system can expose model-related factors and feature importance to help explain why flood risk changes.
-
-Conceptually:
+The system can expose model-related factors and feature importance to help explain changes in predicted flood risk.
 
 ```text
 Rainfall
-     +
-Drainage Condition
-     +
+    +
+Drainage Conditions
+    +
 Water Level
-     +
+    +
 Historical Flood Information
-     +
+    +
 Other Available Features
-     │
-     ▼
-Random Forest Model
-     │
-     ▼
-Flood Risk Prediction
-     │
-     ▼
-Explainability / Feature Importance
+          │
+          ▼
+   Random Forest Model
+          │
+          ▼
+   Flood Risk Prediction
+          │
+          ▼
+ Feature Importance /
+   Explainability
 ```
 
-This supports the key decision question:
+### Key Decision Question
 
 > **Why is this zone considered high risk?**
+
+The explainability layer helps connect model output with the available input factors.
 
 ---
 
 # 🗺️ Geospatial Intelligence
 
-The application includes a map-based flood intelligence layer using the project's existing geographical implementation.
+FloodGuard AI includes a map-based flood intelligence layer using the project's existing geographical implementation.
 
-Risk information can be visualized by zone and connected with relevant flood, drainage, and incident information available to the application.
-
-<!-- Add your actual Risk Map screenshot here -->
+Risk information can be visualized by zone and connected with relevant flood, drainage and incident information available to the application.
 
 <p align="center">
   <img src="assets/risk-map.png" width="950" alt="FloodGuard AI Risk Map">
@@ -231,25 +239,28 @@ Risk information can be visualized by zone and connected with relevant flood, dr
 
 FloodGuard AI includes a citizen-facing reporting workflow.
 
-A citizen can submit a flood-related incident, which is then processed through the application's citizen-report pipeline.
+A submitted flood incident enters the application's processing pipeline and can be surfaced in the command-center workflow.
 
 ```text
 Citizen Report
-      ↓
+      │
+      ▼
 Citizen Report Agent
-      ↓
+      │
+      ▼
 Incident Classification
-      ↓
+      │
+      ▼
 Severity / Context
-      ↓
+      │
+      ▼
 Command Center
-      ↓
+      │
+      ▼
 Response Recommendation
 ```
 
-The project supports multilingual citizen-report processing where implemented, including **English, Hindi and Gujarati** capabilities.
-
-<!-- Add your actual Citizen Portal screenshot here -->
+The project supports multilingual citizen-report processing where implemented, including **English, Hindi and Gujarati**.
 
 <p align="center">
   <img src="assets/citizen-portal.png" width="950" alt="FloodGuard AI Citizen Portal">
@@ -259,43 +270,44 @@ The project supports multilingual citizen-report processing where implemented, i
 
 # ☁️ IBM Granite Integration
 
-FloodGuard AI integrates an IBM Granite / watsonx service layer through:
+FloodGuard AI contains an IBM Granite / watsonx service layer:
 
 ```text
 agents/granite_service.py
 ```
 
-Granite is used within the application's AI reasoning layer for tasks such as:
+The Granite layer supports AI-assisted tasks such as:
 
 * Situation understanding
 * Contextual analysis
 * Incident summarization
 * Recommendation generation
 
-The application also contains fallback/demo behavior for environments where external IBM services are unavailable.
+### Execution Transparency
 
-### Execution transparency
+When IBM Granite is available:
 
 ```text
-IBM Granite Available
-        │
-        ▼
-IBM Granite Execution
-        │
-        ▼
-Generated AI Analysis
+Application Context
+        ↓
+IBM Granite
+        ↓
+AI Analysis
+        ↓
+Generated Summary / Recommendation
 ```
 
-or, when external execution is unavailable:
+When the external IBM service is unavailable:
 
 ```text
 IBM Granite Unavailable
-        │
-        ▼
+        ↓
 Existing Demo / Fallback Logic
 ```
 
-The application does **not** treat fallback output as live Granite execution.
+The application distinguishes between live Granite execution and fallback/demo behavior.
+
+> **Fallback output is never presented as live IBM Granite execution.**
 
 ---
 
@@ -305,35 +317,35 @@ FloodGuard AI combines multiple available signals before producing decision supp
 
 ```text
 ML Risk Prediction
-       +
+        +
 Drainage Intelligence
-       +
+        +
 Citizen Reports
-       +
+        +
 Incident Context
-       +
+        +
 Geospatial Information
-       │
-       ▼
- Evidence Fusion
-       │
-       ▼
-Zone Prioritization
-       │
-       ▼
-AI Recommendation
-       │
-       ▼
-Human Decision
+        │
+        ▼
+   Evidence Fusion
+        │
+        ▼
+ Zone Prioritization
+        │
+        ▼
+ AI Recommendation
+        │
+        ▼
+ Human Decision
 ```
 
-This is the core distinction between a simple prediction dashboard and a broader **decision-support system**.
+This provides a decision-support layer around the underlying flood-risk prediction.
 
 ---
 
 # 🚨 Human-in-the-Loop
 
-FloodGuard AI is designed around human-reviewed response planning.
+Critical response recommendations are designed around human review.
 
 ```text
 Risk Detected
@@ -351,33 +363,29 @@ Response Plan
 Audit Trail
 ```
 
-AI recommendations are not presented as autonomous control of real municipal infrastructure.
+AI recommendations do **not** represent autonomous control of real municipal emergency infrastructure.
 
-> **Human approval remains an important control point for critical response decisions.**
+> **Human approval remains a control point for critical response decisions.**
 
 ---
 
 # 🌧️ Flood Scenario Simulation
 
-The project includes a simulator for demonstrating flood scenarios and system responses.
+The application includes a controlled flood-scenario simulation environment.
 
-The simulator allows controlled changes to available scenario inputs and demonstrates how the application's risk and decision-support pipeline responds.
+Scenario inputs can be adjusted to demonstrate how the application's risk and decision-support pipeline responds.
 
 ```text
 Scenario Input
-     ↓
+      ↓
 Risk Recalculation
-     ↓
+      ↓
 Agent Processing
-     ↓
+      ↓
 Evidence Fusion
-     ↓
+      ↓
 Recommendation
 ```
-
-This provides a controlled environment for demonstrating the system without claiming live municipal deployment.
-
-<!-- Add your actual Simulator screenshot here -->
 
 <p align="center">
   <img src="assets/simulator.png" width="950" alt="FloodGuard AI Flood Scenario Simulator">
@@ -385,20 +393,17 @@ This provides a controlled environment for demonstrating the system without clai
 
 ---
 
-# 📊 Analytics & Decision Intelligence
+# 📊 Analytics & Explainability
 
-The application includes dedicated views for:
+The analytics layer provides visibility into:
 
-* Flood-risk analytics
+* Flood-risk analysis
 * ML evaluation
 * Feature importance
-* Agent monitoring
-* Emergency analysis
-* Decision intelligence
-* Audit information
-* Closed-loop learning
-
-<!-- Add actual Analytics screenshot -->
+* Prediction behaviour
+* Decision-support information
+* Agent-related analysis
+* Closed-loop learning information
 
 <p align="center">
   <img src="assets/analytics.png" width="950" alt="FloodGuard AI Analytics">
@@ -408,7 +413,7 @@ The application includes dedicated views for:
 
 # 🔄 Closed-Loop Learning
 
-FloodGuard AI includes a closed-loop learning component for tracking prediction outcomes and supporting future improvement of the decision pipeline.
+FloodGuard AI includes a closed-loop learning component for tracking prediction outcomes and supporting future improvement.
 
 ```text
 Prediction
@@ -419,24 +424,58 @@ Comparison
     ↓
 Learning Signal
     ↓
-Future Model Improvement
+Future Improvement
 ```
+
+Implementation details are handled through:
+
+```text
+agents/closed_loop_learning.py
+```
+
+---
+
+# 🧭 Decision Intelligence
+
+The decision-intelligence layer connects model outputs, agent analysis and available evidence into a structured decision workflow.
+
+Core sequence:
+
+```text
+DETECT
+  ↓
+PREDICT
+  ↓
+ANALYZE
+  ↓
+EXPLAIN
+  ↓
+PRIORITIZE
+  ↓
+HUMAN APPROVAL
+  ↓
+CIVIC RESPONSE
+  ↓
+AUDIT
+```
+
+This is the central operational story of FloodGuard AI.
 
 ---
 
 # 🖥️ Application Modules
 
-| Page                      | Purpose                                           |
-| ------------------------- | ------------------------------------------------- |
-| **Landing / Command Hub** | Entry point and system overview                   |
-| **Citizen Portal**        | Multilingual citizen reporting                    |
-| **Command Center**        | Central flood intelligence and Granite/agent view |
-| **Agent Monitor**         | Multi-agent pipeline monitoring                   |
-| **Analytics**             | ML analytics, evaluation and explainability       |
-| **War Room**              | Emergency response and human approval             |
-| **Simulator**             | Flood scenario and drainage simulation            |
-| **Learning Loop**         | Prediction/outcome tracking                       |
-| **Decision Intelligence** | Evidence fusion, prioritization and audit         |
+| Module                    | Purpose                                    |
+| ------------------------- | ------------------------------------------ |
+| **Landing / Command Hub** | System entry point and overview            |
+| **Citizen Portal**        | Citizen flood reporting                    |
+| **Command Center**        | Central flood intelligence and AI analysis |
+| **Agent Monitor**         | Multi-agent pipeline monitoring            |
+| **Analytics**             | ML analytics and explainability            |
+| **War Room**              | Emergency response and human approval      |
+| **Simulator**             | Flood scenario and drainage simulation     |
+| **Learning Loop**         | Prediction/outcome tracking                |
+| **Decision Intelligence** | Evidence fusion, prioritization and audit  |
 
 ---
 
@@ -445,26 +484,24 @@ Future Model Improvement
 ```text
                          FLOODGUARD AI
                               │
-          ┌───────────────────┴───────────────────┐
-          │                                       │
-      DATA LAYER                              ML LAYER
-          │                                       │
- Weather / Reports                       Random Forest Model
- Drainage / Incidents                    Risk Prediction
- Historical Information                  Explainability
-          │                                       │
-          └───────────────────┬───────────────────┘
+        ┌─────────────────────┴─────────────────────┐
+        │                                           │
+     DATA LAYER                                  ML LAYER
+        │                                           │
+ Weather / Reports                         Random Forest Model
+ Drainage / Incidents                      Risk Prediction
+ Historical Information                    Explainability
+        │                                           │
+        └─────────────────────┬─────────────────────┘
                               │
                        AGENTIC AI LAYER
                               │
-                  ┌───────────┼───────────┐
-                  │           │           │
-                Risk      Drainage     Citizen
-                Agent       Agent       Agent
-                  │           │           │
-                  └───────────┼───────────┘
-                              │
-                     Response Agents
+        ┌─────────────┬───────┴────────┬─────────────┐
+        │             │                │             │
+      Risk        Drainage         Citizen       Response
+      Agent        Agent            Agent          Agents
+        │             │                │             │
+        └─────────────┴────────────────┴─────────────┘
                               │
                               ▼
                        Evidence Fusion
@@ -476,7 +513,7 @@ Future Model Improvement
                     Decision Intelligence
                               │
                               ▼
-                     Human Approval
+                       Human Approval
                               │
                               ▼
                        Response Plan
@@ -489,7 +526,7 @@ Future Model Improvement
 
 # 🛠️ Technology Stack
 
-### AI / ML
+### Artificial Intelligence & Machine Learning
 
 * Python
 * Scikit-learn
@@ -501,7 +538,6 @@ Future Model Improvement
 
 * IBM Granite
 * IBM watsonx integration
-* IBM AI ecosystem
 
 ### Application
 
@@ -510,7 +546,7 @@ Future Model Improvement
 * Folium
 * Streamlit-Folium
 
-### Data / Services
+### Data & Services
 
 * SQLite / application persistence
 * Synthetic demonstration data
@@ -571,90 +607,81 @@ floodguard-ai/
 
 # 🚀 Run Locally
 
-### 1. Clone the repository
+### Clone
 
 ```bash
 git clone https://github.com/PrinceJain2006/floodguard-ai.git
 cd floodguard-ai
 ```
 
-### 2. Install dependencies
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Start the Streamlit application
+### Launch
 
 ```bash
 streamlit run app.py
 ```
 
-The application will open in the local Streamlit environment.
-
 ---
 
-# 🎬 Recommended Demonstration Flow
+# 🎬 Demonstration Flow
 
-For a concise technical demonstration:
+A concise demonstration can follow the complete decision pipeline:
 
 ```text
 01  Start Command Center
-          ↓
-02  Introduce current flood-risk state
-          ↓
-03  Run a controlled flood scenario
-          ↓
+        ↓
+02  Review current flood-risk state
+        ↓
+03  Run controlled flood scenario
+        ↓
 04  Observe risk / zone changes
-          ↓
-05  Show agent processing
-          ↓
-06  Submit a citizen flood report
-          ↓
-07  Show incident classification
-          ↓
-08  Show evidence fusion / prioritization
-          ↓
-09  Show IBM Granite analysis when connected
-          ↓
-10  Show AI recommendation
-          ↓
+        ↓
+05  Monitor agent processing
+        ↓
+06  Submit citizen flood report
+        ↓
+07  Process incident classification
+        ↓
+08  Review evidence fusion / prioritization
+        ↓
+09  Review IBM Granite analysis
+        ↓
+10  Generate AI recommendation
+        ↓
 11  Human reviews / approves response
-          ↓
-12  Show audit / decision record
+        ↓
+12  Review decision / audit information
 ```
 
-The demonstration should clearly distinguish **model output, agent processing, Granite-generated analysis, and simulated/demo values**.
+The demonstration should clearly distinguish:
+
+* ML-generated values
+* Deterministic application logic
+* Agent processing
+* IBM Granite output
+* Demo/synthetic data
+* Human-approved recommendations
 
 ---
 
-# ⚠️ Demonstration & Data Disclaimer
+# ⚠️ Project Status & Data Transparency
 
 FloodGuard AI is a **hackathon demonstration and decision-support prototype**.
 
-The current system may use synthetic/demo data and controlled simulations. It should not be interpreted as a live municipal emergency-management platform.
+The current system uses synthetic/demo data and controlled simulations where applicable. External data integrations are only represented as available/configured in the application.
 
-The application does not directly control real emergency infrastructure.
+The system does **not** directly control real municipal emergency infrastructure.
 
 AI-generated recommendations require appropriate human verification before any real-world implementation.
 
 ---
 
-# 👥 Team
-
-### FloodGuard AI
-
-Built for the **AI-Powered Urban Flood Management** challenge.
-
-The project focuses on combining:
-
-**Machine Learning + Agentic AI + IBM Granite + Geospatial Intelligence + Evidence Fusion + Human-in-the-Loop Decision Support**
-
-for urban flood-management scenarios.
-
----
-
-## 🌊 FloodGuard AI
+# 🌊 FloodGuard AI
 
 ### From Flood Prediction → Decision Intelligence
 
