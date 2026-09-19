@@ -523,6 +523,141 @@ doc.close()
 
 
 # ============================================================
+# STEP 2b — FIX TEAM MEMBER PHOTOS ON OPENING SLIDE
+# ============================================================
+#
+# LibreOffice mis-renders the two team member photos on slide 3
+# (circles 2 and 3) as dark blobs. This step re-composites the
+# original face photos into the correct circular frames.
+#
+# Only circles 2 (Alka Raikwar) and 3 (Aniket Jaiswal) are
+# replaced. Circle 1 (Prince Jain / Team Leader) is untouched.
+# Everything else on the slide is preserved pixel-for-pixel.
+# ============================================================
+
+print()
+print("==========================================")
+print("STEP 2b — Fixing team member photos")
+print("==========================================")
+print()
+
+
+def _make_circle_photo(
+    photo_path,
+    diameter,
+    face_top_fraction=0.75,
+):
+    """
+    Load *photo_path*, crop a square centred on the face
+    (upper *face_top_fraction* of image height, horizontally
+    centred), resize to *diameter* × *diameter*, apply a
+    circular mask, and return an RGBA PIL image ready to paste.
+    """
+    photo = Image.open(str(photo_path)).convert("RGBA")
+    w, h = photo.size
+
+    # --- crop a square that captures the face ---
+    # Use the upper face_top_fraction of the height as the
+    # region of interest, then take the largest square that
+    # fits, horizontally centred.
+    roi_h = int(h * face_top_fraction)
+    side = min(w, roi_h)
+    left_crop = (w - side) // 2
+    top_crop = 0
+    photo = photo.crop(
+        (left_crop, top_crop, left_crop + side, top_crop + side)
+    )
+
+    # --- resize to circle diameter ---
+    photo = photo.resize(
+        (diameter, diameter),
+        Image.Resampling.LANCZOS
+    )
+
+    # --- apply circular mask ---
+    mask = Image.new("L", (diameter, diameter), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.ellipse(
+        [0, 0, diameter - 1, diameter - 1],
+        fill=255
+    )
+    photo.putalpha(mask)
+
+    return photo
+
+
+# Photo asset paths
+_PHOTO_ALKA = Path(
+    r"C:\Users\Prince\FloodGuard-Original\PPT-BentoGrid\ASSETS\Alka Raikwar.png.png"
+)
+
+_PHOTO_ANIKET = Path(
+    r"C:\Users\Prince\FloodGuard-Original\PPT-BentoGrid\ASSETS\Aniket Jaiswal.png.png"
+)
+
+# Pixel coordinates of the three circles in the 2880×1620 slide PNG.
+# Measured from the rendered slide (2× zoom from PDF).
+# circle_bbox = (x_left, y_top, width, height)
+_CIRCLE_1_BBOX = (79, 239, 320, 341)   # Team Leader — DO NOT TOUCH
+_CIRCLE_2_BBOX = (79, 701, 320, 341)   # Team member 1 — Alka Raikwar
+_CIRCLE_3_BBOX = (79, 1160, 320, 341)  # Team member 2 — Aniket Jaiswal
+
+_SLIDE3_PATH = SLIDES_DIR / "slide_3.png"
+
+if _SLIDE3_PATH.exists() and _PHOTO_ALKA.exists() and _PHOTO_ANIKET.exists():
+
+    slide3 = Image.open(str(_SLIDE3_PATH)).convert("RGBA")
+
+    for photo_path, bbox in [
+        (_PHOTO_ALKA,   _CIRCLE_2_BBOX),
+        (_PHOTO_ANIKET, _CIRCLE_3_BBOX),
+    ]:
+        bx, by, bw, bh = bbox
+
+        # Use the shorter dimension as the diameter so the
+        # circle fits exactly inside the bounding box.
+        diameter = min(bw, bh)
+
+        # Centre the circle within the bounding box.
+        offset_x = bx + (bw - diameter) // 2
+        offset_y = by + (bh - diameter) // 2
+
+        circle_img = _make_circle_photo(
+            photo_path,
+            diameter,
+            face_top_fraction=0.75,
+        )
+
+        # Paste using the alpha channel as the mask so only
+        # pixels inside the circle are written.
+        slide3.paste(circle_img, (offset_x, offset_y), circle_img)
+
+        print(
+            f"Composited {photo_path.name} "
+            f"→ circle at ({offset_x},{offset_y}) "
+            f"diameter={diameter}px"
+        )
+
+    # Save back as RGB (video pipeline expects no alpha)
+    slide3.convert("RGB").save(str(_SLIDE3_PATH))
+    print("slide_3.png updated with corrected team photos.")
+
+else:
+
+    missing = []
+    if not _SLIDE3_PATH.exists():
+        missing.append(str(_SLIDE3_PATH))
+    if not _PHOTO_ALKA.exists():
+        missing.append(str(_PHOTO_ALKA))
+    if not _PHOTO_ANIKET.exists():
+        missing.append(str(_PHOTO_ANIKET))
+    print(
+        f"WARNING: skipping photo fix — "
+        f"missing files: {missing}"
+    )
+
+
+# ============================================================
 # STEP 3 — CREATE THANK YOU IMAGE
 # ============================================================
 
