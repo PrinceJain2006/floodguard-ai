@@ -290,16 +290,63 @@ with col_form:
 
                   <!-- Pipeline flow -->
                   <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
-                    <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">Processing Pipeline</div>
+                    <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">🔀 Processing Pipeline</div>
                     <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:0.68rem">
                       <span style="background:#3a1a00;color:#fdba74;padding:2px 6px;border-radius:4px;font-weight:700">📱 CITIZEN REPORT</span>
                       <span style="color:#475569">→</span>
-                      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">🔍 REPORT AGENT</span>
+                      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">🔍 VALIDATE</span>
+                      <span style="color:#475569">→</span>
+                      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">📊 CLASSIFY</span>
                       <span style="color:#475569">→</span>
                       <span style="background:{'#0d2818' if granite_used else '#1a1500'};color:{'#bbf7d0' if granite_used else '#fde68a'};padding:2px 6px;border-radius:4px;font-weight:700">{'🧠 IBM GRANITE' if granite_used else '⚙ FALLBACK'}</span>
                       <span style="color:#475569">→</span>
+                      <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🔀 EVIDENCE FUSION</span>
+                      <span style="color:#475569">→</span>
+                      <span style="background:#7c3aed22;color:#a78bfa;padding:2px 6px;border-radius:4px;font-weight:700;border:1px solid #7c3aed">📍 ZONE RISK UPDATE</span>
+                      <span style="color:#475569">→</span>
                       <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🖥️ COMMAND CENTER</span>
                     </div>
+                  </div>
+
+                  <!-- Evidence impact on zone risk -->
+                  <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
+                    <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">📍 Zone Risk Context ({area})</div>
+                """, unsafe_allow_html=True)
+
+                # Show zone risk for this area
+                _cp_state2 = orch.current_state or {}
+                _area_pred = next(
+                    (p for p in _cp_state2.get("risk_predictions", [])
+                     if p.get("area") == area and p.get("city") == city_choice),
+                    None
+                )
+                if _area_pred:
+                    _zrl = _area_pred.get("risk_level", "UNKNOWN")
+                    _zrs = _area_pred.get("risk_score", 0)
+                    _zrc = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_zrl, "#94a3b8")
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                      <div>
+                        <div style="font-size:0.65rem;color:#64748b">Current Zone Risk (ML Model)</div>
+                        <div style="font-size:1.1rem;font-weight:800;color:{_zrc}">
+                          {_zrs:.0f}/100
+                          <span style="font-size:0.7rem;background:{_zrc};color:white;padding:1px 6px;
+                                       border-radius:4px;margin-left:4px">{_zrl}</span>
+                        </div>
+                      </div>
+                      <div style="font-size:0.72rem;color:#94a3b8;flex:1">
+                        Your report has been recorded in the citizen intelligence layer.
+                        {"The zone is already at elevated risk — response team may be dispatched soon." if _zrl in ("CRITICAL","HIGH") else "Continue monitoring — your report helps improve AI accuracy."}
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="font-size:0.72rem;color:#94a3b8">
+                      Zone risk data not available for {area}. Your report is recorded.
+                    </div>""", unsafe_allow_html=True)
+
+                st.markdown(f"""
                   </div>
                   <div style="font-size:0.62rem;color:#475569;margin-top:0.4rem">
                     Report ID: {report['report_id']} · Location: {area}, {city_choice}

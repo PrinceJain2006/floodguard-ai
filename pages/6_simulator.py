@@ -249,6 +249,158 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
             </div>
             """, unsafe_allow_html=True)
 
+    # ── Agent Analysis summary + Granite situation report ──
+    _sc_info = SCENARIOS.get(aft["scenario"], {})
+    _sc_label = _sc_info.get("label", aft["scenario"])
+    _sc_emoji = _sc_info.get("emoji", "")
+
+    # Scenario narratives
+    _sc_narratives = {
+        "NORMAL":        "Baseline monitoring conditions. Rainfall within normal parameters. All systems operating nominally.",
+        "HEAVY":         "Heavy rainfall detected. Drainage systems under increased load. Some zones showing elevated risk.",
+        "EXTREME":       "EXTREME weather event. Multiple zones at HIGH/CRITICAL risk. Drainage near or at capacity limit.",
+        "CITIZEN_SURGE": "High volume of citizen flood reports received. AI cross-referencing reports with sensor data.",
+        "EMERGENCY":     "EMERGENCY protocol active. Multiple CRITICAL zones. Maximum resource deployment required.",
+    }
+    _narrative = _sc_narratives.get(aft["scenario"], "Scenario analysis complete.")
+
+    # Scenario flow visualization
+    bef_label = SCENARIOS.get(bef.get("scenario", "NORMAL"), {}).get("label", "Previous") if bef else "—"
+    bef_emoji = SCENARIOS.get(bef.get("scenario", "NORMAL"), {}).get("emoji", "") if bef else ""
+    _sit_rep = state.get("situation_report", "")
+    _g_status = state.get("granite_status", {})
+    _g_avail = _g_status.get("available", False)
+
+    col_flow, col_analysis = st.columns([1, 1.2])
+
+    with col_flow:
+        st.markdown(f"""
+        <div style="background:#131620;border:1px solid #2d3148;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.5rem">
+          <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.7rem;
+                      text-transform:uppercase;letter-spacing:0.05em">
+            🎬 SCENARIO TRANSITION
+          </div>
+
+          <!-- BEFORE state -->
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
+            <div style="background:#1e2440;border:1px solid #2d3148;border-radius:6px;
+                        padding:0.4rem 0.8rem;flex:1">
+              <div style="font-size:0.62rem;color:#475569;text-transform:uppercase;font-weight:700">BEFORE</div>
+              <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">{bef_emoji} {bef_label}</div>
+              <div style="font-size:0.68rem;color:#64748b">
+                Critical: {bef.get("critical", "—")} &nbsp;|&nbsp; High: {bef.get("high", "—")} &nbsp;|&nbsp; Avg score: {bef.get("avg_score", 0):.0f}
+              </div>
+            </div>
+          </div>
+
+          <!-- Arrow -->
+          <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
+
+          <!-- SCENARIO -->
+          <div style="background:{sys_bg};border:1px solid {sys_color};border-radius:6px;
+                      padding:0.4rem 0.8rem;margin-bottom:0.4rem;
+                      display:flex;align-items:center;gap:0.5rem">
+            <span style="font-size:1.2rem">{_sc_emoji}</span>
+            <div>
+              <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">SCENARIO APPLIED</div>
+              <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_label}</div>
+              <div style="font-size:0.68rem;color:#94a3b8">{_narrative}</div>
+            </div>
+          </div>
+
+          <!-- Arrow -->
+          <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
+
+          <!-- AFTER state -->
+          <div style="background:#1e2440;border:2px solid {sys_color};border-radius:6px;padding:0.4rem 0.8rem">
+            <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">AFTER — SYSTEM STATE: {sys_status}</div>
+            <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_emoji} {_sc_label}</div>
+            <div style="font-size:0.68rem;color:#94a3b8">
+              Critical: {aft["critical"]} &nbsp;|&nbsp; High: {aft["high"]} &nbsp;|&nbsp; Avg score: {aft["avg_score"]:.0f}
+            </div>
+          </div>
+
+          <!-- SIMULATION MODE badge -->
+          <div style="margin-top:0.6rem;text-align:center">
+            <span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;
+                         border-radius:4px;font-weight:700">🟡 SIMULATION MODE</span>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_analysis:
+        # Agent pipeline outputs
+        _drain_crit = state.get("drain_analysis", {}).get("priority_summary", {}).get("CRITICAL", 0)
+        _drain_high = state.get("drain_analysis", {}).get("priority_summary", {}).get("HIGH", 0)
+        _rpt_total = state.get("report_analysis", {}).get("total_reports", 0)
+        _rpt_crit = state.get("report_analysis", {}).get("critical_count", 0)
+        _incidents = len(state.get("response_plan", {}).get("incidents", []))
+        _actions = state.get("action_plan", {}).get("total_actions", 0)
+        _needs_appr = state.get("action_plan", {}).get("approval_needed", 0)
+        _top_preds = sorted(state.get("risk_predictions", []), key=lambda x: x["risk_score"], reverse=True)[:3]
+
+        st.markdown(f"""
+        <div style="background:#131620;border:1px solid #2d3148;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.5rem">
+          <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.7rem;
+                      text-transform:uppercase;letter-spacing:0.05em">
+            🤖 AGENT ANALYSIS OUTPUTS
+          </div>
+          <!-- Agent outputs grid -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.35rem;margin-bottom:0.6rem">
+            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+              <div style="font-size:0.6rem;color:#64748b">ML Risk Zones</div>
+              <div style="font-size:0.9rem;font-weight:700;color:#ef4444">{aft["critical"]}</div>
+              <div style="font-size:0.58rem;color:#475569">CRITICAL</div>
+            </div>
+            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+              <div style="font-size:0.6rem;color:#64748b">Critical Drains</div>
+              <div style="font-size:0.9rem;font-weight:700;color:#f97316">{_drain_crit}</div>
+              <div style="font-size:0.58rem;color:#475569">Immediate</div>
+            </div>
+            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+              <div style="font-size:0.6rem;color:#64748b">Citizen Reports</div>
+              <div style="font-size:0.9rem;font-weight:700;color:#eab308">{_rpt_total}</div>
+              <div style="font-size:0.58rem;color:#475569">{_rpt_crit} critical</div>
+            </div>
+            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+              <div style="font-size:0.6rem;color:#64748b">Incidents</div>
+              <div style="font-size:0.9rem;font-weight:700;color:#7c3aed">{_incidents}</div>
+              <div style="font-size:0.58rem;color:#475569">Response plans</div>
+            </div>
+            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+              <div style="font-size:0.6rem;color:#64748b">AI Actions</div>
+              <div style="font-size:0.9rem;font-weight:700;color:#3b82f6">{_actions}</div>
+              <div style="font-size:0.58rem;color:#475569">{_needs_appr} need approval</div>
+            </div>
+            <div style="background:#0d1117;border:1px solid {"#22c55e" if _needs_appr == 0 else "#ef4444"};border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+              <div style="font-size:0.6rem;color:#64748b">HITL Pending</div>
+              <div style="font-size:0.9rem;font-weight:700;color:{"#22c55e" if _needs_appr == 0 else "#ef4444"}">{_needs_appr}</div>
+              <div style="font-size:0.58rem;color:#475569">approvals</div>
+            </div>
+          </div>
+          <!-- Top risk zones -->
+          <div style="font-size:0.68rem;font-weight:700;color:#94a3b8;margin-bottom:0.3rem;
+                      text-transform:uppercase;letter-spacing:0.04em">Top Risk Zones (AI Recommendation)</div>
+          {"".join([f'<div style="display:flex;align-items:center;gap:0.5rem;padding:3px 0;border-bottom:1px solid #1e2440"><div style="font-size:0.72rem;font-weight:600;color:#e2e8f0;flex:1">{p["area"]}, {p["city"]}</div><div style="font-size:0.72rem;font-weight:700;color:' + ({"CRITICAL":"#ef4444","HIGH":"#f97316","MEDIUM":"#eab308","LOW":"#22c55e"}.get(p["risk_level"],"#94a3b8")) + '">' + str(p["risk_score"]) + '/100 ' + p["risk_level"] + '</div></div>' for p in _top_preds])}
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Granite situation report (if available)
+        if _sit_rep:
+            _granite_badge = (
+                '<span style="background:#14532d;color:#bbf7d0;font-size:0.62rem;padding:1px 5px;border-radius:3px;font-weight:700">🧠 IBM GRANITE</span>'
+                if _g_avail else
+                '<span style="background:#1a1500;color:#fde68a;font-size:0.62rem;padding:1px 5px;border-radius:3px;font-weight:700">⚙ FALLBACK</span>'
+            )
+            with st.expander(f"🧠 Situation Report {_granite_badge}", expanded=False):
+                st.markdown(f"""
+                <div style="background:#0a0f1e;border-radius:6px;padding:0.7rem;
+                            font-family:monospace;font-size:0.76rem;color:#e2e8f0;
+                            white-space:pre-wrap;line-height:1.5;max-height:200px;overflow-y:auto">
+{_sit_rep[:600]}{"..." if len(_sit_rep) > 600 else ""}
+                </div>
+                """, unsafe_allow_html=True)
+
     st.markdown("<br>", unsafe_allow_html=True)
 
 st.markdown("---")

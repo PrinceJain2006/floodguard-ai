@@ -296,24 +296,86 @@ def _build_why_this_zone(
     significant_factors: list[dict],
     risk_prediction: dict,
 ) -> str:
-    lines = [f"WHY {area.upper()}?", ""]
-    lines.append(f"Application Priority Score: {score:.0f}/100 — {level}")
-    lines.append("")
-    lines.append("Main contributing factors:")
-    for f in significant_factors:
-        lines.append(f"  ✓ {f['label']}: {f['note']}")
-    if not significant_factors:
-        lines.append("  • Multiple moderate risk factors contributing.")
-    lines.append("")
+    """Build a structured WHY THIS ZONE explanation with all available evidence."""
+    features = risk_prediction.get("input_features", {})
+    r1h = features.get("rainfall_1h", 0)
+    dc  = features.get("drainage_capacity", 50)
+    wl  = features.get("water_level", 0)
+    elev = features.get("elevation", 50)
+    hff  = features.get("historical_flood_freq", 0)
+    cr   = features.get("citizen_reports", 0)
+    conf = risk_prediction.get("confidence", 0)
+    ml_score = risk_prediction.get("risk_score", 0)
 
-    # Recommended action from risk agent
+    lines = [f"WHY {area.upper()} ({city})?", ""]
+    lines.append(f"Fused Priority Score: {score:.0f}/100 — {level}")
+    lines.append(f"ML Flood Risk: {ml_score:.0f}/100 (confidence: {conf:.0%})")
+    lines.append("")
+    lines.append("📊 Evidence Snapshot:")
+
+    # Rainfall evidence
+    if r1h >= 50:
+        lines.append(f"  🌧️ EXTREME rainfall: {r1h:.1f} mm/hr  [HIGH IMPACT]")
+    elif r1h >= 25:
+        lines.append(f"  🌧️ Heavy rainfall: {r1h:.1f} mm/hr  [ELEVATED]")
+    elif r1h > 0:
+        lines.append(f"  🌧️ Rainfall: {r1h:.1f} mm/hr  [MODERATE]")
+
+    # Water level
+    if wl >= 3:
+        lines.append(f"  💧 CRITICAL water level: {wl:.1f} m above baseline  [DANGER]")
+    elif wl >= 1.5:
+        lines.append(f"  💧 Elevated water level: {wl:.1f} m  [WATCH]")
+
+    # Drainage
+    if dc < 30:
+        lines.append(f"  🔧 CRITICALLY low drainage capacity: {dc:.0f}%  [DANGER]")
+    elif dc < 60:
+        lines.append(f"  🔧 Reduced drainage capacity: {dc:.0f}%  [ELEVATED]")
+
+    # Citizen reports
+    if cr >= 30:
+        lines.append(f"  📱 HIGH citizen reports: {int(cr)}  [CONFIRMED FLOODING]")
+    elif cr >= 10:
+        lines.append(f"  📱 Multiple citizen reports: {int(cr)}  [ELEVATED]")
+
+    # Historical
+    if hff >= 5:
+        lines.append(f"  📅 High historical flood frequency: {hff:.0f} events/year  [VULNERABLE]")
+    elif hff >= 2:
+        lines.append(f"  📅 Moderate historical flooding: {hff:.0f} events/year")
+
+    # Elevation
+    if elev < 15:
+        lines.append(f"  ⛰️ Very low elevation: {elev:.0f} m — high inundation risk  [STRUCTURAL]")
+    elif elev < 30:
+        lines.append(f"  ⛰️ Low elevation zone: {elev:.0f} m  [ELEVATED]")
+
+    # Top ML features
+    top_feats = risk_prediction.get("top_features", [])
+    if top_feats:
+        lines.append("")
+        lines.append("🤖 Top ML Feature Contributions (Random Forest):")
+        for feat_name, importance in top_feats[:3]:
+            label = feat_name.replace("_", " ").title()
+            lines.append(f"  → {label}: {importance:.1%} model importance")
+
+    # Significant fused factors
+    if significant_factors:
+        lines.append("")
+        lines.append("🔀 Evidence Fusion Drivers:")
+        for f in significant_factors[:4]:
+            src_badge = "[LIVE]" if f.get("is_live") else "[DEMO]"
+            lines.append(f"  ✓ {f['label']} ({f['raw_score']:.0f}/100) {src_badge}")
+
+    lines.append("")
     action = risk_prediction.get("recommended_action", "")
     if action:
-        lines.append(f"Recommended next step: {action}")
+        lines.append(f"📋 Recommended: {action}")
     lines.append("")
     lines.append(
-        "⚠ This is a DEMO/SIMULATED decision-support priority score. "
-        "It is NOT a scientifically validated emergency-response score."
+        "⚠ DEMO/SIMULATED — decision-support score only. "
+        "Not a validated emergency-response score."
     )
     return "\n".join(lines)
 
@@ -388,17 +450,30 @@ def _build_why_now_narrative(
     area, curr_score, prev_score, curr_level, prev_level, delta, changes
 ):
     direction = "increased" if delta >= 0 else "decreased"
+    arrow = "↑" if delta > 0 else "↓" if delta < 0 else "→"
+    urgency = ""
+    if abs(delta) >= 20:
+        urgency = "  ⚡ RAPID change — immediate review required."
+    elif abs(delta) >= 10:
+        urgency = "  ⚠ Significant change — monitor closely."
+
     lines = [
         f"WHY NOW — {area.upper()}?",
         "",
-        f"Priority score {direction} from {prev_score:.0f} to {curr_score:.0f}",
+        f"Priority score {direction}: {prev_score:.0f} → {curr_score:.0f}  ({arrow}{abs(delta):.0f} pts)",
     ]
     if curr_level != prev_level:
-        lines.append(f"Risk escalated: {prev_level} → {curr_level}")
+        lines.append(f"🔺 Level escalated: {prev_level} → {curr_level}")
+    if urgency:
+        lines.append(urgency)
     lines.append("")
-    lines.append("Key changes:")
+    lines.append("📈 What changed:")
     for c in changes:
         lines.append(f"  • {c}")
+    lines.append("")
+    lines.append(
+        "⚠ DEMO/SIMULATED — comparison of application priority scores across scenario runs."
+    )
     return "\n".join(lines)
 
 

@@ -16,9 +16,10 @@ from frontend.ui_utils import (
     risk_badge, demo_badge, hybrid_badge, live_badge, model_badge,
     simulated_badge, COLORS, RISK_EMOJI,
     risk_donut, rainfall_bar, risk_gauge, section_header,
-    render_agent_trace, render_granite_panel, risk_level_indicator,
+    render_agent_trace, render_granite_panel, risk_level_indicator, data_source_strip,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
+from agents.evidence_fusion import get_audit_trail as _get_audit_trail
 from frontend.map_component import build_flood_map
 from streamlit_folium import st_folium
 from services.report_store import get_user_reports, count_open as _user_open_count
@@ -159,32 +160,65 @@ elif high >= 1:
 else:
     _sys_status = "NORMAL";   _sys_color = "#22c55e"; _sys_bg = "rgba(34,197,94,0.10)"
 
+# Build summary metrics for header
+_avg_rainfall = sum(r.get("rainfall_1h", 0) for r in rainfall_data) / max(len(rainfall_data), 1)
+_top_zone = max(predictions, key=lambda p: p.get("risk_score", 0)) if predictions else {}
+_top_zone_name = f"{_top_zone.get('area','—')}, {_top_zone.get('city','—')}" if _top_zone else "—"
+_top_zone_score = _top_zone.get("risk_score", 0) if _top_zone else 0
+_top_zone_level = _top_zone.get("risk_level", "—") if _top_zone else "—"
+
 st.markdown(f"""
 <div style="background:linear-gradient(135deg,#080c18 0%,#0d1428 50%,#080c18 100%);
             border:2px solid {_sys_color};border-radius:14px;
-            padding:1.2rem 1.5rem;margin-bottom:0.75rem">
+            padding:1.2rem 1.5rem;margin-bottom:0.75rem;position:relative;overflow:hidden">
+    <!-- Color accent line -->
+    <div style="position:absolute;top:0;left:0;right:0;height:3px;
+                background:linear-gradient(90deg,{_sys_color},{_sys_color}88,transparent)"></div>
     <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap">
-        <div style="font-size:2.8rem">🖥️</div>
+        <div style="font-size:2.5rem">🖥️</div>
         <div style="flex:1">
-            <div style="font-size:1.7rem;font-weight:900;color:#e2e8f0;letter-spacing:0.02em">
-                AI FLOOD COMMAND CENTER
+            <div style="font-size:1.6rem;font-weight:900;color:#e2e8f0;letter-spacing:0.02em">
+                ACTIVE FLOOD EVENT — AI COMMAND CENTER
             </div>
-            <div style="font-size:0.82rem;color:#94a3b8;margin-top:0.2rem">
+            <div style="font-size:0.8rem;color:#94a3b8;margin-top:0.2rem">
                 FloodGuard AI &nbsp;·&nbsp; Ahmedabad &amp; Surat, Gujarat
-                &nbsp;·&nbsp; {_scen_info['emoji']} Scenario: {_scen_info['label']}
-                &nbsp;·&nbsp; City: {st.session_state.city_filter}
+                &nbsp;·&nbsp; {_scen_info['emoji']} <strong style="color:#e2e8f0">{_scen_info['label']}</strong>
+                &nbsp;·&nbsp; City: <strong style="color:#e2e8f0">{st.session_state.city_filter}</strong>
+            </div>
+            <!-- Key live metrics inline -->
+            <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem">
+                <span style="background:rgba(239,68,68,0.15);border:1px solid #ef444440;
+                             color:#fca5a5;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
+                    🔴 {critical} CRITICAL
+                </span>
+                <span style="background:rgba(249,115,22,0.12);border:1px solid #f9731640;
+                             color:#fdba74;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
+                    🟠 {high} HIGH
+                </span>
+                <span style="background:rgba(59,130,246,0.12);border:1px solid #3b82f640;
+                             color:#93c5fd;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
+                    🌧️ Avg {_avg_rainfall:.0f} mm/hr
+                </span>
+                <span style="background:rgba(124,58,237,0.12);border:1px solid #7c3aed40;
+                             color:#c4b5fd;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
+                    📍 Top: {_top_zone_name[:22]} ({_top_zone_score:.0f})
+                </span>
             </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
-            <div style="font-size:1.2rem;font-weight:900;color:{_sys_color};
-                        background:{_sys_bg};padding:4px 14px;border-radius:8px;
-                        border:1px solid {_sys_color};letter-spacing:0.06em">
+            <div style="font-size:1.3rem;font-weight:900;color:{_sys_color};
+                        background:{_sys_bg};padding:5px 16px;border-radius:8px;
+                        border:1px solid {_sys_color};letter-spacing:0.06em;white-space:nowrap">
                 ● {_sys_status}
             </div>
-            <div style="font-size:0.7rem;color:#94a3b8;text-align:right">
-                {'<span style="color:#22c55e">🟢 LIVE Weather</span>' if _is_live else '<span style="color:#eab308">🟡 DEMO Data</span>'}
+            <div style="font-size:0.7rem;color:#94a3b8;text-align:right;line-height:1.6">
+                {'<span style="color:#22c55e">🟢 LIVE Weather</span>' if _is_live else '<span style="color:#eab308">🟡 DEMO Weather</span>'}
                 &nbsp;·&nbsp;
-                {'<span style="color:#22c55e">IBM Granite CONNECTED</span>' if _g_avail else ('<span style="color:#eab308">Granite RATE LIMITED</span>' if _g_rate else '<span style="color:#94a3b8">Granite FALLBACK</span>')}
+                {'<span style="color:#22c55e">Granite LIVE</span>' if _g_avail else ('<span style="color:#eab308">Granite RATE LIMITED</span>' if _g_rate else '<span style="color:#94a3b8">Granite FALLBACK</span>')}
+                <br>
+                <span style="color:#475569;font-size:0.65rem">
+                    {state.get('last_updated','')[:19]} UTC
+                </span>
             </div>
         </div>
     </div>
@@ -192,6 +226,12 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 ai_disclaimer()
+
+# Data source transparency strip
+data_source_strip(
+    is_live_weather=_is_live,
+    last_updated=state.get("last_updated", ""),
+)
 
 # ──────────────────────────────────────────────
 # KPI Strip — Active Flood Event summary
@@ -392,57 +432,116 @@ with tab1:
             _sel_bg = {"CRITICAL": "rgba(239,68,68,0.08)", "HIGH": "rgba(249,115,22,0.06)",
                        "MEDIUM": "rgba(234,179,8,0.05)", "LOW": "rgba(34,197,94,0.05)"}.get(_sel_rl, "rgba(148,163,184,0.04)")
 
-            # Zone detail card
+            # ── Enhanced FLOOD RISK SCORE zone detail card ──
+            _sel_fi = _sel_pred.get("feature_importance", {})
+            _sel_top_fi = sorted(_sel_fi.items(), key=lambda x: -x[1])[:5] if _sel_fi else []
+            _sel_probs = _sel_pred.get("probabilities", {})
+            _dc = _sel_feats.get("drainage_capacity", 50)
+            _dc_color = "#ef4444" if _dc < 40 else "#f97316" if _dc < 65 else "#22c55e"
+
+            # Build feature importance bar HTML
+            _fi_html = ""
+            for _fn, _fv in _sel_top_fi:
+                _fl = _fn.replace("_", " ").title()
+                _fbar = min(100, _fv * 100 * 8)
+                _fi_html += f"""
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
+                  <div style="min-width:110px;font-size:0.63rem;color:#94a3b8">{_fl}</div>
+                  <div style="flex:1;background:#1e2440;border-radius:2px;height:5px">
+                    <div style="width:{_fbar:.0f}%;background:#7c3aed;height:5px;border-radius:2px"></div>
+                  </div>
+                  <div style="min-width:28px;font-size:0.6rem;color:#a78bfa;text-align:right">{_fv:.1%}</div>
+                </div>"""
+
+            # Probability row
+            _prob_html = ""
+            for _lvl, _pv in [("CRITICAL","#ef4444"),("HIGH","#f97316"),("MEDIUM","#eab308"),("LOW","#22c55e")]:
+                _pval = _sel_probs.get(_lvl, 0)
+                _pbar = int(_pval * 100)
+                _prob_html += f"""
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
+                  <div style="min-width:55px;font-size:0.6rem;color:{_pv};font-weight:600">{_lvl}</div>
+                  <div style="flex:1;background:#1e2440;border-radius:2px;height:5px">
+                    <div style="width:{_pbar}%;background:{_pv};height:5px;border-radius:2px"></div>
+                  </div>
+                  <div style="min-width:28px;font-size:0.6rem;color:{_pv};text-align:right">{_pval:.0%}</div>
+                </div>"""
+
             st.markdown(f"""
             <div style="background:{_sel_bg};border:1px solid {_sel_rc}40;
                         border-top:3px solid {_sel_rc};border-radius:8px;padding:0.8rem;">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem">
-                <div>
-                  <div style="font-weight:800;color:#e2e8f0;font-size:0.95rem">{_sel_pred['area']}</div>
-                  <div style="font-size:0.75rem;color:#64748b">{_sel_pred['city']}</div>
-                </div>
-                <div style="background:{_sel_rc};color:white;padding:2px 8px;border-radius:8px;font-size:0.72rem;font-weight:700;letter-spacing:0.04em">{_sel_rl}</div>
-              </div>
-              <div style="font-size:2rem;font-weight:900;color:{_sel_rc};line-height:1;margin-bottom:0.1rem">
-                {_sel_pred['risk_score']:.0f}<span style="font-size:1rem;color:#64748b;font-weight:400">/100</span>
-              </div>
-              <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.6rem">RISK SCORE (ML MODEL)</div>
 
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;font-size:0.76rem;margin-bottom:0.5rem">
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.62rem">RAINFALL 1H</div>
+              <!-- Header: zone name + level badge -->
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.4rem">
+                <div>
+                  <div style="font-weight:800;color:#e2e8f0;font-size:0.9rem">{_sel_pred['area']}</div>
+                  <div style="font-size:0.7rem;color:#64748b">{_sel_pred['city']}</div>
+                </div>
+                <div style="background:{_sel_rc};color:white;padding:2px 8px;
+                            border-radius:8px;font-size:0.68rem;font-weight:700">{_sel_rl}</div>
+              </div>
+
+              <!-- FLOOD RISK SCORE -->
+              <div style="font-size:0.6rem;color:#64748b;text-transform:uppercase;
+                          letter-spacing:0.07em;margin-bottom:0.1rem">FLOOD RISK SCORE</div>
+              <div style="font-size:1.9rem;font-weight:900;color:{_sel_rc};line-height:1;margin-bottom:0.05rem">
+                {_sel_pred['risk_score']:.0f}
+                <span style="font-size:0.85rem;color:#64748b;font-weight:400"> / 100 — {_sel_rl}</span>
+              </div>
+              <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.6rem">
+                confidence: {_sel_pred.get('confidence', 0):.0%} &nbsp;|&nbsp; 🔵 Random Forest ML
+              </div>
+
+              <!-- Evidence grid -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;font-size:0.72rem;margin-bottom:0.5rem">
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.58rem">🌧️ RAINFALL 1H</div>
                   <div style="color:#3b82f6;font-weight:700">{_sel_feats.get('rainfall_1h', 0):.1f} mm/hr</div>
                 </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.62rem">WATER LEVEL</div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.58rem">💧 WATER LEVEL</div>
                   <div style="color:#06b6d4;font-weight:700">{_sel_feats.get('water_level', 0):.2f} m</div>
                 </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.62rem">DRAINAGE CAP.</div>
-                  <div style="color:{'#ef4444' if _sel_feats.get('drainage_capacity',50)<40 else '#f97316' if _sel_feats.get('drainage_capacity',50)<65 else '#22c55e'};font-weight:700">{_sel_feats.get('drainage_capacity', 0):.0f}%</div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.58rem">🔧 DRAINAGE</div>
+                  <div style="color:{_dc_color};font-weight:700">{_dc:.0f}%</div>
                 </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.62rem">HIST. FLOODS</div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.58rem">📅 HIST. FLOODS</div>
                   <div style="color:#f97316;font-weight:700">{_sel_feats.get('historical_flood_freq', 0):.0f}/yr</div>
                 </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.62rem">CITIZEN RPTS</div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.58rem">📱 CITIZEN RPTS</div>
                   <div style="color:#eab308;font-weight:700">{_sel_feats.get('citizen_reports', 0):.0f}</div>
                 </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.35rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.62rem">CONFIDENCE</div>
-                  <div style="color:#a78bfa;font-weight:700">{_sel_pred.get('confidence', 0):.0%}</div>
+                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+                  <div style="color:#64748b;font-size:0.58rem">⛰️ ELEVATION</div>
+                  <div style="color:#94a3b8;font-weight:700">{_sel_feats.get('elevation', 0):.0f} m</div>
                 </div>
               </div>
 
-              <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">Risk Factors</div>
-              {"".join(["<div style='display:flex;align-items:center;gap:0.4rem;padding:0.2rem 0;font-size:0.75rem'><span style='color:#ef4444'>▸</span><span style='color:#94a3b8'>" + r + "</span></div>" for r in _sel_pred.get("main_reasons", [])[:3]])}
+              <!-- Risk factors -->
+              <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.25rem;
+                          text-transform:uppercase;font-weight:700">🤖 ML Risk Factors</div>
+              {"".join(["<div style='display:flex;align-items:center;gap:0.4rem;padding:1px 0;font-size:0.72rem'><span style='color:" + ("#ef4444" if any(w in r.lower() for w in ["extreme","critical","dangerously"]) else "#f97316" if "high" in r.lower() else "#eab308") + "'>▸</span><span style='color:#94a3b8'>" + r + "</span></div>" for r in _sel_pred.get("main_reasons", [])[:3]])}
 
+              <!-- Feature importance -->
+              {('<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440"><div style="font-size:0.62rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">🔬 Feature Importance (RF)</div>' + _fi_html + '</div>') if _sel_top_fi else ''}
+
+              <!-- Probabilities -->
+              {('<div style="margin-top:0.4rem;padding-top:0.35rem;border-top:1px solid #1e2440"><div style="font-size:0.62rem;color:#64748b;margin-bottom:0.25rem;text-transform:uppercase;font-weight:700">📊 Class Probabilities</div>' + _prob_html + '</div>') if _sel_probs else ''}
+
+              <!-- Recommended action -->
               <div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440">
-                <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700">AI Action</div>
-                <div style="font-size:0.72rem;color:#fbbf24">{_sel_pred.get('recommended_action','')[:120]}...</div>
+                <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;
+                            text-transform:uppercase;font-weight:700">📋 AI Action</div>
+                <div style="font-size:0.7rem;color:#fbbf24;line-height:1.4">
+                    {_sel_pred.get('recommended_action','')[:150]}
+                </div>
               </div>
-              <div style="font-size:0.6rem;color:#475569;margin-top:0.4rem">🔵 ML MODEL PREDICTION — DEMO/SYNTHETIC DATA</div>
+              <div style="font-size:0.58rem;color:#475569;margin-top:0.4rem">
+                🔵 Random Forest ML · 🟡 DEMO/SYNTHETIC DATA
+              </div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -515,15 +614,51 @@ with tab3:
                         🔐 <strong>HUMAN APPROVAL REQUIRED</strong> — Emergency actions require municipal officer authorization.
                     </div>
                     """, unsafe_allow_html=True)
-                    col_approve, col_reject = st.columns(2)
+                    _inc_note_key = f"cc_inc_note_{inc['incident_id']}"
+                    if _inc_note_key not in st.session_state:
+                        st.session_state[_inc_note_key] = ""
+                    _inc_note = st.text_input(
+                        "Note (optional):", key=_inc_note_key,
+                        placeholder="e.g. Reduce scope / defer drainage...",
+                        label_visibility="collapsed",
+                    )
+                    col_approve, col_mod, col_reject = st.columns(3)
+                    _cc_audit = _get_audit_trail()
+                    _inc_action_obj = {
+                        "action_id": inc["incident_id"],
+                        "title": f"Incident Response: {inc.get('area','')}, {inc.get('city','')}",
+                        "description": f"Flood incident response — {inc.get('risk_level','')} risk, score {inc.get('risk_score',0):.0f}",
+                        "urgency": inc.get("risk_level", "MEDIUM"),
+                        "area": inc.get("area", ""),
+                        "city": inc.get("city", ""),
+                        "priority_level": inc.get("risk_level", "MEDIUM"),
+                        "priority_score": inc.get("risk_score", 0),
+                        "requires_approval": True,
+                    }
                     with col_approve:
-                        if st.button("✅ Approve Actions", key=f"approve_{inc['incident_id']}", type="primary"):
+                        if st.button("✅ Approve", key=f"approve_{inc['incident_id']}", type="primary", use_container_width=True):
                             st.session_state.approved_recs.add(inc["incident_id"])
-                            st.success(f"Actions approved for {inc['incident_id']} [DEMO — logged]")
+                            _cc_audit.record(
+                                _inc_action_obj, "APPROVED", "Command Center Operator",
+                                st.session_state.get(_inc_note_key, "") or "Approved via Command Center."
+                            )
+                            st.success(f"Approved {inc['incident_id']} — logged to audit trail")
+                    with col_mod:
+                        if st.button("🔄 Modify", key=f"modify_{inc['incident_id']}", use_container_width=True):
+                            st.session_state.approved_recs.add(inc["incident_id"])
+                            _cc_audit.record(
+                                _inc_action_obj, "MODIFIED", "Command Center Operator",
+                                st.session_state.get(_inc_note_key, "") or "Scope modified via Command Center."
+                            )
+                            st.info(f"Modified {inc['incident_id']} — logged to audit trail")
                     with col_reject:
-                        if st.button("❌ Reject", key=f"reject_{inc['incident_id']}"):
+                        if st.button("❌ Reject", key=f"reject_{inc['incident_id']}", use_container_width=True):
                             st.session_state.rejected_recs.add(inc["incident_id"])
-                            st.warning(f"Actions rejected for {inc['incident_id']} [DEMO — logged]")
+                            _cc_audit.record(
+                                _inc_action_obj, "REJECTED", "Command Center Operator",
+                                st.session_state.get(_inc_note_key, "") or "Rejected via Command Center."
+                            )
+                            st.warning(f"Rejected {inc['incident_id']} — logged to audit trail")
 
 # ── Tab 4: AI Recommendations ─────────────────
 with tab4:
@@ -569,14 +704,50 @@ with tab4:
             """, unsafe_allow_html=True)
 
             if not approved and not rejected and rec.get("requires_approval"):
-                c1, c2 = st.columns([1, 1])
+                _rec_note_key = f"cc_rec_note_{rec['rec_id']}"
+                if _rec_note_key not in st.session_state:
+                    st.session_state[_rec_note_key] = ""
+                _rec_note = st.text_input(
+                    "Note (optional):", key=_rec_note_key,
+                    placeholder="e.g. Reduce scope / modify timeline...",
+                    label_visibility="collapsed",
+                )
+                _cc_rec_audit = _get_audit_trail()
+                _rec_action_obj = {
+                    "action_id": rec["rec_id"],
+                    "title": rec.get("recommendation", "")[:80],
+                    "description": rec.get("reasoning", "")[:200],
+                    "urgency": rec.get("priority", "MEDIUM"),
+                    "area": rec.get("area", ""),
+                    "city": rec.get("city", ""),
+                    "priority_level": rec.get("priority", "MEDIUM"),
+                    "priority_score": 0,
+                    "requires_approval": True,
+                }
+                c1, c2, c3 = st.columns([1, 1, 1])
                 with c1:
-                    if st.button("✅ Approve", key=f"rec_approve_{rec['rec_id']}"):
+                    if st.button("✅ Approve", key=f"rec_approve_{rec['rec_id']}", type="primary", use_container_width=True):
                         st.session_state.approved_recs.add(rec["rec_id"])
+                        _cc_rec_audit.record(
+                            _rec_action_obj, "APPROVED", "Command Center Operator",
+                            st.session_state.get(_rec_note_key, "") or "Approved via Command Center."
+                        )
                         st.rerun()
                 with c2:
-                    if st.button("❌ Reject", key=f"rec_reject_{rec['rec_id']}"):
+                    if st.button("🔄 Modify", key=f"rec_modify_{rec['rec_id']}", use_container_width=True):
+                        st.session_state.approved_recs.add(rec["rec_id"])
+                        _cc_rec_audit.record(
+                            _rec_action_obj, "MODIFIED", "Command Center Operator",
+                            st.session_state.get(_rec_note_key, "") or "Modified via Command Center."
+                        )
+                        st.rerun()
+                with c3:
+                    if st.button("❌ Reject", key=f"rec_reject_{rec['rec_id']}", use_container_width=True):
                         st.session_state.rejected_recs.add(rec["rec_id"])
+                        _cc_rec_audit.record(
+                            _rec_action_obj, "REJECTED", "Command Center Operator",
+                            st.session_state.get(_rec_note_key, "") or "Rejected via Command Center."
+                        )
                         st.rerun()
             elif not approved and not rejected:
                 if st.button("✅ Mark Implemented", key=f"rec_impl_{rec['rec_id']}", type="secondary"):

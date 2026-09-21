@@ -396,6 +396,40 @@ def ai_disclaimer():
     """, unsafe_allow_html=True)
 
 
+def data_source_strip(
+    is_live_weather: bool = False,
+    show_ml: bool = True,
+    show_citizen: bool = True,
+    show_infra: bool = True,
+    last_updated: str = "",
+):
+    """Consistent data-source transparency strip shown at the top of pages."""
+    parts = []
+    if is_live_weather:
+        parts.append('<span style="background:#0f4c2a;color:#6ee7b7;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">🟢 LIVE Weather (Open-Meteo)</span>')
+    else:
+        parts.append('<span style="background:#3a2e00;color:#fde68a;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">🟡 DEMO Weather</span>')
+
+    if show_ml:
+        parts.append('<span style="background:#1e3a5f;color:#93c5fd;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">🔵 ML Flood Risk (Random Forest)</span>')
+
+    if show_citizen:
+        parts.append('<span style="background:#3a1a00;color:#fdba74;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">🟠 Citizen Reports (User Submitted)</span>')
+
+    if show_infra:
+        parts.append('<span style="background:#1e2440;color:#94a3b8;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">⚪ Infrastructure (DEMO)</span>')
+
+    if last_updated:
+        parts.append(f'<span style="font-size:0.62rem;color:#475569">Updated: {last_updated[:19]} UTC</span>')
+
+    st.markdown(
+        '<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:0.75rem">'
+        + " ".join(parts)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
 # ──────────────────────────────────────────────
 # Chart helpers
 # ──────────────────────────────────────────────

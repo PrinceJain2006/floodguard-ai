@@ -80,6 +80,24 @@ st.markdown("""
 # ── Hero header ───────────────────────────────────────────────────────────────
 now_str = datetime.now(timezone.utc).strftime("%d %b %Y · %H:%M UTC")
 
+# Try to read live pipeline state for the status strip (best-effort, non-blocking)
+try:
+    from agents.orchestrator import get_orchestrator as _get_orch_hp
+    from agents.evidence_fusion import get_audit_trail as _get_audit_hp
+    _hp_orch = _get_orch_hp()
+    _hp_state = _hp_orch.current_state or {}
+    _hp_preds = _hp_state.get("risk_predictions", [])
+    _hp_crit  = sum(1 for p in _hp_preds if p.get("risk_level") == "CRITICAL")
+    _hp_high  = sum(1 for p in _hp_preds if p.get("risk_level") == "HIGH")
+    _hp_scen  = _hp_state.get("scenario", "NORMAL")
+    _hp_live  = _hp_state.get("live_weather_status", {}).get("is_live", False)
+    _hp_gran  = _hp_state.get("granite_status", {}).get("available", False)
+    _hp_audit = len(_get_audit_hp().get_all())
+    _hp_ready = bool(_hp_preds)
+except Exception:
+    _hp_crit = _hp_high = _hp_scen = _hp_live = _hp_gran = _hp_audit = 0
+    _hp_ready = False
+
 st.markdown(f"""
 <div class="cmd-hero">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
@@ -103,12 +121,19 @@ st.markdown(f"""
     </div>
     <div style="text-align:right">
       <div style="font-size:0.7rem;color:#475569;margin-bottom:0.4rem">{now_str}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end">
+      <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;margin-bottom:0.3rem">
         <span style="background:#0f4c2a;color:#6ee7b7;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">🌐 HYBRID DATA</span>
         <span style="background:#0d2818;color:#4ade80;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">🤖 6 AGENTS ACTIVE</span>
         <span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">🧠 IBM GRANITE</span>
         <span style="background:#1a1500;color:#fde68a;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">⚙ DEMO/SYNTHETIC</span>
       </div>
+      {f'''<div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end">
+        <span style="background:rgba(239,68,68,0.15);color:#fca5a5;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">🔴 {_hp_crit} CRITICAL</span>
+        <span style="background:rgba(249,115,22,0.12);color:#fdba74;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">🟠 {_hp_high} HIGH</span>
+        <span style="background:{"#14532d" if _hp_live else "#3a2e00"};color:{"#bbf7d0" if _hp_live else "#fde68a"};font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">{"🟢 Live" if _hp_live else "🟡 Demo"} Weather</span>
+        <span style="background:{"#0d2818" if _hp_gran else "#1a1d27"};color:{"#6ee7b7" if _hp_gran else "#94a3b8"};font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">{"🧠 Granite LIVE" if _hp_gran else "⚙ Granite FALLBACK"}</span>
+        <span style="background:#1a1d27;color:#a78bfa;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">📋 {_hp_audit} audit entries</span>
+      </div>''' if _hp_ready else ''}
     </div>
   </div>
 </div>

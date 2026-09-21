@@ -299,28 +299,32 @@ with tab_priority:
             </div>
             """
 
+        _rain_live = fusion.get("rainfall_is_live", False)
+        _live_badge = '<span style="background:#0d2818;color:#6ee7b7;font-size:0.55rem;padding:1px 4px;border-radius:3px;font-weight:700;margin-left:3px">LIVE</span>' if _rain_live else ""
+
         st.markdown(f"""
         <div style="background:#1a1d27;border:1px solid {color};border-left:4px solid {color};
-                    border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.5rem">
+                    border-radius:10px;padding:0.7rem 1rem;margin-bottom:0.4rem">
             <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
-                <div style="flex:1;min-width:160px">
-                    <div style="font-size:1rem;font-weight:700;color:#e2e8f0">{emoji} {area}</div>
-                    <div style="font-size:0.75rem;color:#94a3b8">{city}</div>
+                <div style="flex:1;min-width:150px">
+                    <div style="font-size:0.95rem;font-weight:700;color:#e2e8f0">{emoji} {area}</div>
+                    <div style="font-size:0.7rem;color:#64748b">{city}</div>
                 </div>
-                <div style="text-align:center;min-width:90px">
-                    <div style="font-size:1.8rem;font-weight:800;color:{color};line-height:1">{score:.0f}</div>
-                    <div style="font-size:0.65rem;color:#94a3b8">/ 100</div>
+                <div style="text-align:center;min-width:80px">
+                    <div style="font-size:1.6rem;font-weight:800;color:{color};line-height:1">{score:.0f}</div>
+                    <div style="font-size:0.6rem;color:#64748b">/ 100</div>
                 </div>
-                <div style="min-width:80px;text-align:center">
-                    <span style="background:{color};color:white;padding:3px 10px;
-                                 border-radius:8px;font-size:0.78rem;font-weight:700">{level}</span>
+                <div style="min-width:75px;text-align:center">
+                    <span style="background:{color};color:white;padding:2px 9px;
+                                 border-radius:6px;font-size:0.72rem;font-weight:700">{level}</span>
                 </div>
                 <div style="flex:2;min-width:180px">
                     {bar_html}
                 </div>
-                <div style="font-size:0.72rem;color:#94a3b8;min-width:150px;max-width:200px">
-                    Top factor: <strong style="color:#e2e8f0">{top_factor.get('label','')}</strong><br>
-                    {top_factor.get('note','')[:60]}
+                <div style="font-size:0.7rem;color:#94a3b8;min-width:140px;max-width:190px">
+                    <div style="font-size:0.65rem;color:#64748b;margin-bottom:1px">Top factor{_live_badge}</div>
+                    <strong style="color:#e2e8f0;font-size:0.72rem">{top_factor.get('label','')}</strong><br>
+                    <span style="font-size:0.65rem">{top_factor.get('note','')[:55]}</span>
                 </div>
             </div>
         </div>
@@ -359,27 +363,93 @@ with tab_why:
             factors = fusion["contributing_factors"]
             significant = [f for f in factors if f["significant"]]
 
-            # Summary card
+            # Get ML prediction for this zone
+            pred_why = next(
+                (p for p in state.get("risk_predictions", [])
+                 if p.get("area") == area and p.get("city") == city),
+                {}
+            )
+            ml_score_why = pred_why.get("risk_score", 0)
+            conf_why = pred_why.get("confidence", 0)
+            top_feats_why = pred_why.get("top_features", [])
+            main_reasons_why = pred_why.get("main_reasons", [])
+            features_why = pred_why.get("input_features", {})
+
+            # Summary card with FLOOD RISK SCORE
             st.markdown(f"""
             <div style="background:#1a1d27;border:1px solid {color};border-top:3px solid {color};
                         border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem">
                     <div>
-                        <div style="font-size:1.2rem;font-weight:800;color:#e2e8f0">{area}</div>
-                        <div style="font-size:0.8rem;color:#94a3b8">{city}</div>
+                        <div style="font-size:1.1rem;font-weight:800;color:#e2e8f0">{area}</div>
+                        <div style="font-size:0.78rem;color:#94a3b8">{city}</div>
+                        <div style="margin-top:0.4rem;font-size:0.7rem;color:#64748b">
+                            FLOOD RISK SCORE (ML)
+                        </div>
+                        <div style="font-size:1.5rem;font-weight:900;color:{color};line-height:1.1">
+                            {ml_score_why:.0f} <span style="font-size:0.9rem">/ 100</span>
+                            <span style="font-size:0.75rem;font-weight:700;background:{color};color:white;
+                                         padding:2px 8px;border-radius:6px;margin-left:4px">{level}</span>
+                        </div>
+                        <div style="font-size:0.7rem;color:#64748b;margin-top:0.15rem">
+                            confidence: {conf_why:.0%} &nbsp;|&nbsp; fused priority: {score:.0f}/100
+                        </div>
                     </div>
                     <div style="text-align:right">
-                        <div style="font-size:2rem;font-weight:900;color:{color};line-height:1">{score:.0f}</div>
-                        <div style="font-size:0.65rem;color:#94a3b8">Priority Score / 100</div>
-                        <span style="background:{color};color:white;padding:2px 10px;
-                                     border-radius:8px;font-size:0.78rem;font-weight:700">{level}</span>
+                        {"<span style='background:#0d2818;color:#6ee7b7;font-size:0.65rem;padding:2px 8px;border-radius:4px;font-weight:700'>🟢 LIVE WEATHER</span>" if fusion.get("rainfall_is_live") else "<span style='background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;border-radius:4px;font-weight:700'>🟡 DEMO RAINFALL</span>"}
+                        <div style="font-size:0.65rem;color:#475569;margin-top:0.25rem">
+                            🔵 ML Model + 🟡 DEMO infra
+                        </div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            # Significant factors
-            st.markdown("**Main factors:**")
+            # ML main reasons
+            if main_reasons_why:
+                st.markdown("""
+                <div style="font-size:0.75rem;font-weight:700;color:#a78bfa;margin-bottom:0.3rem;
+                            text-transform:uppercase;letter-spacing:0.05em">
+                    🤖 ML Model Reasons (Random Forest)
+                </div>""", unsafe_allow_html=True)
+                for reason in main_reasons_why[:4]:
+                    r_color = "#ef4444" if any(w in reason.lower() for w in ["extreme","critical","dangerously"]) else \
+                              "#f97316" if "high" in reason.lower() else "#eab308"
+                    st.markdown(f"""
+                    <div style="font-size:0.78rem;color:{r_color};padding:2px 0 2px 8px;
+                                border-left:2px solid {r_color};margin-bottom:3px">
+                        {reason}
+                    </div>""", unsafe_allow_html=True)
+
+            # Top ML feature importances
+            if top_feats_why:
+                st.markdown("""
+                <div style="font-size:0.75rem;font-weight:700;color:#93c5fd;margin:0.5rem 0 0.3rem;
+                            text-transform:uppercase;letter-spacing:0.05em">
+                    📊 Top ML Feature Importance
+                </div>""", unsafe_allow_html=True)
+                for feat_name, importance in top_feats_why[:4]:
+                    feat_label = feat_name.replace("_", " ").title()
+                    feat_val = features_why.get(feat_name, 0)
+                    bar_pct = min(100, importance * 100 * 8)
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:3px">
+                        <div style="min-width:140px;font-size:0.72rem;color:#e2e8f0">{feat_label}</div>
+                        <div style="flex:1;background:#2d3148;border-radius:3px;height:7px">
+                            <div style="width:{bar_pct:.0f}%;background:#7c3aed;height:7px;border-radius:3px"></div>
+                        </div>
+                        <div style="min-width:40px;font-size:0.68rem;color:#a78bfa;text-align:right">{importance:.1%}</div>
+                        <div style="min-width:50px;font-size:0.68rem;color:#64748b">(val: {feat_val:.1f})</div>
+                    </div>""", unsafe_allow_html=True)
+
+            st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+
+            # Evidence fusion factors
+            st.markdown("""
+            <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.3rem;
+                        text-transform:uppercase;letter-spacing:0.05em">
+                🔀 Evidence Fusion Factors
+            </div>""", unsafe_allow_html=True)
             for f in factors:
                 raw  = f["raw_score"]
                 fcolor = (
@@ -388,21 +458,26 @@ with tab_why:
                     "#eab308" if raw >= 25 else "#22c55e"
                 )
                 checkmark = "✓" if f["significant"] else "·"
+                src_badge = ""
+                if f.get("is_live"):
+                    src_badge = '<span style="background:#0d2818;color:#6ee7b7;font-size:0.55rem;padding:1px 4px;border-radius:3px;font-weight:700;margin-left:3px">LIVE</span>'
                 st.markdown(f"""
                 <div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;
                             border-bottom:1px solid rgba(45,49,72,0.4)">
                     <span style="color:{fcolor};font-weight:700;min-width:14px">{checkmark}</span>
                     <div style="flex:1">
-                        <div style="font-size:0.82rem;font-weight:600;color:#e2e8f0">{f['label']}</div>
-                        <div style="font-size:0.72rem;color:#94a3b8">{f['note']}</div>
+                        <div style="font-size:0.8rem;font-weight:600;color:#e2e8f0">
+                            {f['label']}{src_badge}
+                        </div>
+                        <div style="font-size:0.68rem;color:#94a3b8">{f['note'][:80]}</div>
                     </div>
-                    <div style="text-align:right;min-width:55px">
-                        <div style="font-size:0.85rem;font-weight:700;color:{fcolor}">{raw:.0f}</div>
-                        <div style="font-size:0.6rem;color:#475569">wt {f['weight']*100:.0f}%</div>
+                    <div style="text-align:right;min-width:45px">
+                        <div style="font-size:0.82rem;font-weight:700;color:{fcolor}">{raw:.0f}</div>
+                        <div style="font-size:0.58rem;color:#475569">wt {f['weight']*100:.0f}%</div>
                     </div>
-                    <div style="min-width:60px">
-                        <div style="background:#2d3148;border-radius:3px;height:8px">
-                            <div style="width:{raw:.0f}%;background:{fcolor};height:8px;border-radius:3px"></div>
+                    <div style="min-width:55px">
+                        <div style="background:#2d3148;border-radius:3px;height:7px">
+                            <div style="width:{raw:.0f}%;background:{fcolor};height:7px;border-radius:3px"></div>
                         </div>
                     </div>
                 </div>
@@ -410,11 +485,10 @@ with tab_why:
 
             # Disclaimer
             st.markdown(f"""
-            <div style="font-size:0.7rem;color:#475569;margin-top:0.5rem;
+            <div style="font-size:0.68rem;color:#475569;margin-top:0.5rem;
                         border-top:1px solid #2d3148;padding-top:0.4rem">
-                ⚠ Application decision-support priority score. Inputs combine LIVE weather, MODEL predictions,
-                USER SUBMITTED reports and DEMO infrastructure data.
-                Not a validated emergency-response score. Fused at {fusion['fused_at'][:19]} UTC.
+                ⚠ Decision-support priority score. LIVE weather · MODEL predictions · USER SUBMITTED reports · DEMO infrastructure.
+                Fused at {fusion['fused_at'][:19]} UTC.
             </div>
             """, unsafe_allow_html=True)
 
@@ -735,46 +809,52 @@ with tab_hitl:
                 </div>
                 """, unsafe_allow_html=True)
 
-                btn_col1, btn_col2, btn_col3, note_col = st.columns([1, 1, 1, 2])
+                note_key = f"di_note_{action_id}"
+                if note_key not in st.session_state:
+                    st.session_state[note_key] = ""
+
+                note_col, btn_col1, btn_col2, btn_col3 = st.columns([2, 1, 1, 1])
+                with note_col:
+                    mod_note = st.text_input(
+                        "Modification note (optional):",
+                        key=note_key,
+                        placeholder="e.g. Reduce scope to drainage only...",
+                        label_visibility="collapsed",
+                    )
+                    st.markdown("""
+                    <div style="font-size:0.68rem;color:#475569;margin-top:2px">
+                        ✏️ Note — updates application state only. No real actions triggered.
+                    </div>""", unsafe_allow_html=True)
                 with btn_col1:
                     if st.button("✅ APPROVE", key=f"di_app_{action_id}", type="primary",
                                  use_container_width=True):
                         ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
+                        note_text = st.session_state.get(note_key, "") or "Human operator approved."
                         st.session_state.di_approved_actions[action_id] = {
-                            "decision": "APPROVED", "note": "Human operator approved.",
-                            "timestamp": ts,
+                            "decision": "APPROVED", "note": note_text, "timestamp": ts,
                         }
-                        audit.record(action_h, "APPROVED", "Operator")
+                        audit.record(action_h, "APPROVED", "Operator", note_text)
                         st.rerun()
                 with btn_col2:
                     if st.button("🔄 MODIFY", key=f"di_mod_{action_id}",
                                  use_container_width=True):
                         ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
+                        note_text = st.session_state.get(note_key, "") or "Action scope modified by operator."
                         st.session_state.di_approved_actions[action_id] = {
-                            "decision": "MODIFIED",
-                            "note": "Human operator modified recommendation.",
-                            "timestamp": ts,
+                            "decision": "MODIFIED", "note": note_text, "timestamp": ts,
                         }
-                        audit.record(action_h, "MODIFIED", "Operator",
-                                     "Action scope modified by operator.")
+                        audit.record(action_h, "MODIFIED", "Operator", note_text)
                         st.rerun()
                 with btn_col3:
                     if st.button("❌ REJECT", key=f"di_rej_{action_id}",
                                  use_container_width=True):
                         ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
+                        note_text = st.session_state.get(note_key, "") or "Operator determined action not appropriate at this time."
                         st.session_state.di_approved_actions[action_id] = {
-                            "decision": "REJECTED", "note": "Human operator rejected.",
-                            "timestamp": ts,
+                            "decision": "REJECTED", "note": note_text, "timestamp": ts,
                         }
-                        audit.record(action_h, "REJECTED", "Operator",
-                                     "Operator determined action not appropriate at this time.")
+                        audit.record(action_h, "REJECTED", "Operator", note_text)
                         st.rerun()
-                with note_col:
-                    st.markdown("""
-                    <div style="font-size:0.7rem;color:#475569;padding-top:0.5rem">
-                        Approval updates application state only. No real-world actions are triggered.
-                    </div>
-                    """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     # Summary of decisions
@@ -860,12 +940,34 @@ with tab_audit:
             </div>
             """, unsafe_allow_html=True)
 
-        # Clear button
+        # Export + Clear buttons
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🗑 Clear Audit Trail", key="di_clear_audit"):
-            audit.clear()
-            st.session_state.di_approved_actions = {}
-            st.rerun()
+        _dl_col, _cl_col = st.columns([1, 1])
+        with _dl_col:
+            # Build CSV for download
+            import io as _io
+            _csv_lines = ["Zone,AI Recommendation,Human Decision,Note,Priority,Timestamp,Status"]
+            for _e in entries:
+                def _esc(s): return '"' + str(s).replace('"', '""') + '"'
+                _csv_lines.append(",".join([
+                    _esc(_e.get("zone","")), _esc(_e.get("ai_recommendation","")),
+                    _esc(_e.get("human_decision","")), _esc(_e.get("modification_note","")),
+                    _esc(_e.get("priority_level","")), _esc(_e.get("timestamp","")),
+                    _esc(_e.get("status","")),
+                ]))
+            _csv_data = "\n".join(_csv_lines)
+            st.download_button(
+                "📥 Export Audit Trail (CSV)",
+                data=_csv_data,
+                file_name=f"floodguard_audit_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with _cl_col:
+            if st.button("🗑 Clear Audit Trail", key="di_clear_audit", use_container_width=True):
+                audit.clear()
+                st.session_state.di_approved_actions = {}
+                st.rerun()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Footer

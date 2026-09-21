@@ -122,6 +122,57 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 # ── Tab 1: Risk Trends ───────────────────────
 with tab1:
+    # System Status Banner
+    _ana_scen = state.get("scenario", "NORMAL")
+    _ana_scen_info = SCENARIOS.get(_ana_scen, {})
+    _ana_is_live = state.get("live_weather_status", {}).get("is_live", False)
+    _ana_g_avail = state.get("granite_status", {}).get("available", False)
+
+    if high_risk_zones >= 3:
+        _ana_sys = "CRITICAL"; _ana_sys_c = "#ef4444"; _ana_sys_bg = "rgba(239,68,68,0.10)"
+    elif high_risk_zones >= 1 or flood_detected >= 4:
+        _ana_sys = "WARNING";  _ana_sys_c = "#f97316"; _ana_sys_bg = "rgba(249,115,22,0.08)"
+    elif flood_detected >= 1:
+        _ana_sys = "ELEVATED"; _ana_sys_c = "#eab308"; _ana_sys_bg = "rgba(234,179,8,0.07)"
+    else:
+        _ana_sys = "NORMAL";   _ana_sys_c = "#22c55e"; _ana_sys_bg = "rgba(34,197,94,0.06)"
+
+    st.markdown(f"""
+    <div style="background:{_ana_sys_bg};border:1px solid {_ana_sys_c}40;border-left:4px solid {_ana_sys_c};
+                border-radius:0 8px 8px 0;padding:0.6rem 1rem;margin-bottom:0.75rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <span style="font-size:1.1rem;font-weight:800;color:{_ana_sys_c};letter-spacing:0.06em">
+            ● SYSTEM: {_ana_sys}
+          </span>
+          <span style="font-size:0.78rem;color:#94a3b8">
+            {_ana_scen_info.get("emoji","")} {_ana_scen_info.get("label", _ana_scen)}
+          </span>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+          <span style="background:rgba(239,68,68,0.15);color:#fca5a5;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
+            🔴 {high_risk_zones} CRITICAL
+          </span>
+          <span style="background:rgba(249,115,22,0.12);color:#fdba74;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
+            🟠 {flood_detected - high_risk_zones} HIGH
+          </span>
+          <span style="background:rgba(59,130,246,0.12);color:#93c5fd;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
+            📱 {reports_processed} reports
+          </span>
+          <span style="background:rgba(249,115,22,0.10);color:#fdba74;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
+            🔧 {drain_issues} drain issues
+          </span>
+          <span style="{'background:#14532d;color:#bbf7d0' if _ana_is_live else 'background:#3a2e00;color:#fde68a'};padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">
+            {'🟢 LIVE Weather' if _ana_is_live else '🟡 DEMO Weather'}
+          </span>
+          <span style="{'background:#0d2818;color:#6ee7b7' if _ana_g_avail else 'background:#1a1d27;color:#94a3b8'};padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700;border:1px solid {'#22c55e40' if _ana_g_avail else '#2d3148'}">
+            {'🧠 Granite LIVE' if _ana_g_avail else '⚙ Granite FALLBACK'}
+          </span>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     col1, col2 = st.columns([1.5, 1])
 
     with col1:
@@ -470,7 +521,15 @@ with tab5:
     </div>
     """, unsafe_allow_html=True)
 
-    # Hardcoded comparison (based on scenario configs)
+    # Scenario comparison — reference values based on scenario multipliers (clearly labeled SIMULATED)
+    st.markdown("""
+    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.5rem">
+      Reference scenario profiles derived from application scenario multipliers.
+      <span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:1px 5px;border-radius:3px;font-weight:700">🟡 SIMULATED REFERENCE VALUES</span>
+      — Current pipeline output is <span style="background:#1e3a5f;color:#93c5fd;font-size:0.65rem;padding:1px 5px;border-radius:3px;font-weight:700">🔵 LIVE PIPELINE</span>
+    </div>
+    """, unsafe_allow_html=True)
+
     scenarios = ["NORMAL", "HEAVY", "EXTREME", "CITIZEN_SURGE", "EMERGENCY"]
     scenario_labels = ["Normal Rain", "Heavy Rainfall", "Extreme", "Citizen Surge", "Emergency"]
     critical_zones_sim = [2, 8, 18, 6, 20]
@@ -478,22 +537,51 @@ with tab5:
     citizen_reports_sim = [40, 80, 120, 200, 150]
     response_actions_sim = [5, 20, 45, 30, 50]
 
-    fig_comp = go.Figure()
-    fig_comp.add_trace(go.Bar(name="Critical Zones", x=scenario_labels, y=critical_zones_sim, marker_color="#ef4444"))
-    fig_comp.add_trace(go.Bar(name="High Risk Zones", x=scenario_labels, y=high_zones_sim, marker_color="#f97316"))
-    fig_comp.add_trace(go.Bar(name="Citizen Reports (÷5)", x=scenario_labels, y=[c//5 for c in citizen_reports_sim], marker_color="#3b82f6"))
-    fig_comp.add_trace(go.Bar(name="Response Actions", x=scenario_labels, y=response_actions_sim, marker_color="#7c3aed"))
+    # Current pipeline values (real, not simulated)
+    # high_risk_zones = CRITICAL count (line 92); flood_detected = HIGH+CRITICAL (line 91)
+    curr_scenario = orch.current_scenario
+    curr_crit = high_risk_zones
+    curr_high = flood_detected - high_risk_zones
+    curr_rpts = report_analysis.get("total_reports", 0)
+    curr_actions = sum(len(inc.get("recommended_actions", [])) for inc in response_plan.get("incidents", []))
 
+    # Highlight current scenario bar
+    bar_colors_crit = ["#ef4444" if s != curr_scenario else "#ff6b6b" for s in scenarios]
+
+    fig_comp = go.Figure()
+    fig_comp.add_trace(go.Bar(
+        name="Critical Zones (simulated ref)",
+        x=scenario_labels, y=critical_zones_sim, marker_color="#ef444488",
+    ))
+    fig_comp.add_trace(go.Bar(
+        name="High Risk Zones (simulated ref)",
+        x=scenario_labels, y=high_zones_sim, marker_color="#f9731688",
+    ))
+
+    # Overlay current real pipeline value
+    curr_idx = scenarios.index(curr_scenario) if curr_scenario in scenarios else 0
+    fig_comp.add_annotation(
+        x=scenario_labels[curr_idx],
+        y=max(critical_zones_sim[curr_idx], curr_crit) + 1.5,
+        text=f"LIVE: {curr_crit} CRIT / {curr_high} HIGH",
+        showarrow=True, arrowhead=2, arrowcolor="#22c55e",
+        font=dict(color="#22c55e", size=11), ax=0, ay=-30,
+    )
     fig_comp.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(color="#94a3b8"),
         yaxis=dict(color="#94a3b8", title="Count"),
-        legend=dict(font=dict(color="#e2e8f0")),
+        legend=dict(font=dict(color="#e2e8f0", size=10)),
         barmode="group",
-        height=360, margin=dict(t=10, b=10, l=10, r=10),
+        height=340, margin=dict(t=30, b=10, l=10, r=10),
     )
     st.plotly_chart(fig_comp, use_container_width=True, config={"displayModeBar": False})
-    st.markdown(f'<div style="font-size:0.7rem;color:#64748b">⚙ SIMULATED comparison data — not real measurements</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="font-size:0.7rem;color:#64748b">
+      🟡 SIMULATED reference values — based on scenario multiplier assumptions.
+      🟢 Green annotation = current live pipeline output for <strong style="color:#22c55e">{orch.current_scenario}</strong>.
+    </div>
+    """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════
 # TAB 6: ML MODEL EVALUATION & EXPLAINABILITY
@@ -569,6 +657,7 @@ with tab6:
         @st.cache_data(ttl=3600)
         def _compute_ml_metrics():
             """Compute real ML metrics from the training data + test split."""
+            from sklearn.metrics import confusion_matrix
             data_path = _Path(__file__).parent.parent / "data" / "ml_training_data.json"
             if not data_path.exists():
                 return None
@@ -592,6 +681,9 @@ with tab6:
             clf = ml_model.classifier
             reg = ml_model.regressor
 
+            if clf is None or reg is None:
+                return None
+
             yl_pred = clf.predict(X_test)
             ys_pred = reg.predict(X_test)
 
@@ -606,7 +698,7 @@ with tab6:
                 yl_test, yl_pred,
                 target_names=LABEL_ORDER,
                 output_dict=True,
-                zero_division=0,
+                zero_division=0,  # type: ignore[arg-type]
             )
 
             # Cross-validation (3-fold on full dataset, fast)
@@ -617,11 +709,16 @@ with tab6:
                 FEATURE_COLS[i]: round(float(imp), 4)
                 for i, imp in enumerate(clf.feature_importances_)
             }
+
+            # Confusion matrix (actual model output)
+            cm = confusion_matrix(yl_test, yl_pred, labels=list(range(len(LABEL_ORDER))))
+
             return {
                 "accuracy": acc, "precision": prec, "recall": rec, "f1": f1,
                 "mae": mae, "n_test": len(X_test), "n_train": len(X_train),
                 "report": report_dict, "cv_mean": float(cv_scores.mean()),
                 "cv_std": float(cv_scores.std()), "feature_importance": fi,
+                "confusion_matrix": cm.tolist(),
             }
 
         with st.spinner("Computing ML metrics from test split…"):
@@ -698,6 +795,36 @@ with tab6:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+
+                # Confusion matrix
+                cm_data = ml_metrics.get("confusion_matrix")
+                if cm_data:
+                    st.markdown("---")
+                    section_header("CONFUSION MATRIX")
+                    import numpy as _np
+                    cm_arr = _np.array(cm_data)
+                    # Normalize by row
+                    row_sums = cm_arr.sum(axis=1, keepdims=True)
+                    cm_norm = _np.where(row_sums > 0, cm_arr / row_sums, 0)
+                    fig_cm = go.Figure(go.Heatmap(
+                        z=cm_norm,
+                        x=[f"Pred {l}" for l in LABEL_ORDER],
+                        y=[f"True {l}" for l in LABEL_ORDER],
+                        colorscale=[[0, "#0a0d14"], [0.5, "#1e3a5f"], [1, "#22c55e"]],
+                        text=[[f"{cm_arr[i][j]}" for j in range(4)] for i in range(4)],
+                        texttemplate="%{text}",
+                        showscale=False,
+                        hovertemplate="True: %{y}<br>Pred: %{x}<br>Count: %{text}<extra></extra>",
+                    ))
+                    fig_cm.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        xaxis=dict(color="#94a3b8", side="bottom"),
+                        yaxis=dict(color="#94a3b8"),
+                        height=200, margin=dict(t=5, b=5, l=5, r=5),
+                        font=dict(color="#e2e8f0", size=11),
+                    )
+                    st.plotly_chart(fig_cm, use_container_width=True, config={"displayModeBar": False})
+                    st.caption("Darker diagonal = better accuracy per class. Counts from actual model test set predictions.")
 
             st.markdown("---")
             # ── WHY IS THIS ZONE HIGH RISK? ───────────────────────

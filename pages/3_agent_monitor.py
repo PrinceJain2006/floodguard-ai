@@ -414,14 +414,47 @@ for i, agent in enumerate(agent_statuses):
 
         data_label_html = agent_data_labels.get(name, "")
 
+        # Build INPUT/PROCESS/OUTPUT summaries per agent
+        _ipo = {
+            "Flood Risk Agent": {
+                "input": "Rainfall records, drain data, citizen reports, area metadata",
+                "process": "Random Forest ML → risk score 0–100 per zone",
+            },
+            "Drainage Agent": {
+                "input": "Drain records, rainfall intensity, area flood risk",
+                "process": "Rule-based scoring: capacity + blockage + condition",
+            },
+            "Citizen Report Agent": {
+                "input": "Citizen text (EN/HI/GU), location, category hint",
+                "process": "NLP classification → severity + routing + dedup",
+            },
+            "Response Coordination Agent": {
+                "input": "Risk predictions, drain analysis, report analysis, teams",
+                "process": "Priority queue → incident plans + team assignments",
+            },
+            "Chief Response Agent": {
+                "input": "All agent outputs, resource state, scenario",
+                "process": "Unified action plan + resource allocation",
+            },
+            "Damage Assessment Agent": {
+                "input": "Incident descriptions, location data",
+                "process": "Rule-based + Granite damage classification",
+            },
+            "IBM Granite": {
+                "input": "Situation summary, zone data, user queries",
+                "process": "WatsonX LLM → NL reasoning + explanations",
+            },
+        }
+        _ipo_data = _ipo.get(name, {})
+
         st.markdown(f"""
         <style>@keyframes pulse {{0%,100%{{opacity:1}}50%{{opacity:0.5}}}}</style>
-        <div class="fg-card" style="min-height:180px">
+        <div class="fg-card" style="min-height:200px">
             <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem">
                 <span style="font-size:1.5rem">{icon}</span>
                 <div style="flex:1;min-width:0">
                     <div style="font-weight:700;color:#e2e8f0;font-size:0.88rem">{name}</div>
-                    <div style="font-size:0.68rem;color:#64748b">{desc}</div>
+                    <div style="font-size:0.65rem;color:#64748b">{desc}</div>
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
                     <span style="background:{s_color};color:white;padding:2px 7px;
@@ -429,13 +462,27 @@ for i, agent in enumerate(agent_statuses):
                     {data_label_html}
                 </div>
             </div>
-            <div style="background:#0f1117;border-radius:6px;padding:0.4rem 0.5rem;margin-bottom:0.4rem;font-size:0.7rem;color:#94a3b8;min-height:24px">
-                📊 {output_summary if output_summary else "Awaiting pipeline run"}
+            <!-- INPUT → PROCESS → OUTPUT -->
+            <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:0.4rem">
+              <div style="background:#0a1020;border:1px solid #1e2440;border-radius:5px;padding:3px 6px">
+                <div style="font-size:0.56rem;color:#475569;font-weight:700;text-transform:uppercase">INPUT</div>
+                <div style="font-size:0.65rem;color:#64748b">{_ipo_data.get('input','—')}</div>
+              </div>
+              <div style="text-align:center;color:#2d3148;font-size:0.7rem;line-height:1">▼</div>
+              <div style="background:#0a1020;border:1px solid #3b82f620;border-radius:5px;padding:3px 6px">
+                <div style="font-size:0.56rem;color:#3b82f6;font-weight:700;text-transform:uppercase">PROCESS</div>
+                <div style="font-size:0.65rem;color:#64748b">{_ipo_data.get('process','—')}</div>
+              </div>
+              <div style="text-align:center;color:#2d3148;font-size:0.7rem;line-height:1">▼</div>
+              <div style="background:#0d1117;border:1px solid {s_color}40;border-radius:5px;padding:3px 6px">
+                <div style="font-size:0.56rem;color:{s_color};font-weight:700;text-transform:uppercase">OUTPUT</div>
+                <div style="font-size:0.65rem;color:#94a3b8">{output_summary if output_summary else "Awaiting pipeline run"}</div>
+              </div>
             </div>
-            <div style="font-size:0.68rem;color:#475569;margin-bottom:0.3rem">
+            <div style="font-size:0.63rem;color:#475569;margin-bottom:0.25rem">
                 Last run: {str(last_run)[:19]}
             </div>
-            <div style="border-top:1px solid #2d3148;padding-top:0.35rem">
+            <div style="border-top:1px solid #2d3148;padding-top:0.3rem">
                 {activities_html}
             </div>
         </div>
@@ -715,3 +762,118 @@ with why_col2:
             Select a zone and click "Explain WHY" to see IBM Granite's risk explanation.
         </div>
         """, unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
+# Live Pipeline Execution Log
+# ──────────────────────────────────────────────
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("---")
+section_header("⚡ PIPELINE EXECUTION LOG",
+               '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700">LIVE TRACE</span>')
+
+st.markdown("""
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    Real-time execution trace of the multi-agent pipeline.
+    Each row corresponds to one pipeline step logged by the Orchestrator.
+    <span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:1px 5px;border-radius:3px;font-weight:700">LIVE TRACE</span>
+    — no fabricated steps.
+</div>
+""", unsafe_allow_html=True)
+
+_log = orch.pipeline_log[-30:] if orch.pipeline_log else []
+
+if not _log:
+    st.info("No pipeline log entries yet. Run a scenario to see the execution trace.")
+else:
+    # Status colour map
+    _status_colors = {
+        "RUNNING":   "#3b82f6",
+        "COMPLETE":  "#22c55e",
+        "FALLBACK":  "#eab308",
+        "ERROR":     "#ef4444",
+        "SKIPPED":   "#94a3b8",
+    }
+    _step_icons = {
+        "PIPELINE_START": "▶",
+        "DATA_LOAD":      "📂",
+        "LIVE_WEATHER":   "🌐",
+        "FLOOD_RISK":     "🌊",
+        "DRAINAGE":       "🔧",
+        "CITIZEN":        "📱",
+        "RESPONSE":       "⚡",
+        "DAMAGE":         "🔍",
+        "CHIEF":          "🎯",
+        "GRANITE":        "🧠",
+        "LEARNING":       "🔄",
+        "PIPELINE_COMPLETE": "✅",
+    }
+
+    # Build header
+    st.markdown("""
+    <div style="display:grid;grid-template-columns:80px 140px 100px 1fr;gap:0.5rem;
+                padding:0.4rem 0.7rem;background:#1a1d27;border-radius:6px 6px 0 0;
+                font-size:0.68rem;font-weight:700;color:#94a3b8;text-transform:uppercase;
+                letter-spacing:0.04em">
+        <div>Time</div><div>Step</div><div>Status</div><div>Details</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    rows_html = ""
+    for entry in reversed(_log[-20:]):  # most recent first
+        step   = entry.get("step", "")
+        agent  = entry.get("agent", "")
+        status = entry.get("status", "")
+        details = entry.get("details", "")
+        ts     = entry.get("timestamp", "")
+        time_str = ts[11:19] if len(ts) >= 19 else ts
+
+        icon = next((v for k, v in _step_icons.items() if k in step), "•")
+        s_color = _status_colors.get(status, "#94a3b8")
+        row_bg = "rgba(34,197,94,0.05)" if status == "COMPLETE" else \
+                 "rgba(239,68,68,0.05)" if status == "ERROR" else \
+                 "rgba(59,130,246,0.04)"
+
+        rows_html += f"""
+        <div style="display:grid;grid-template-columns:80px 140px 100px 1fr;gap:0.5rem;
+                    padding:0.4rem 0.7rem;border-bottom:1px solid #1e2440;
+                    font-size:0.72rem;align-items:center;background:{row_bg}">
+            <div style="color:#475569;font-family:monospace">{time_str}</div>
+            <div style="color:#e2e8f0;font-weight:600">{icon} {step[:16]}</div>
+            <div>
+                <span style="background:rgba({int(s_color[1:3],16) if len(s_color)==7 else 59},
+                             {int(s_color[3:5],16) if len(s_color)==7 else 130},
+                             {int(s_color[5:7],16) if len(s_color)==7 else 246},0.15);
+                             border:1px solid {s_color}40;color:{s_color};
+                             padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">
+                    {status}
+                </span>
+            </div>
+            <div style="color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                 title="{details}">{details[:90]}</div>
+        </div>
+        """
+
+    st.markdown(f"""
+    <div style="border:1px solid #2d3148;border-radius:0 0 6px 6px;
+                max-height:380px;overflow-y:auto">
+        {rows_html}
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div style="font-size:0.68rem;color:#475569;margin-top:0.3rem">
+        Showing last {min(20, len(_log))} of {len(_log)} pipeline log entries.
+        Log is bounded to the last 100 entries (rolling window).
+    </div>
+    """, unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
+# Footer
+# ──────────────────────────────────────────────
+st.markdown("---")
+st.markdown(f"""
+<div style="text-align:center;color:#475569;font-size:0.72rem;padding-bottom:1rem">
+    FloodGuard AI — Agent Monitor | 6-Agent Pipeline |
+    🔵 MODEL predictions · 🟡 DEMO infrastructure · 🟢 LIVE weather (Open-Meteo)
+</div>
+""", unsafe_allow_html=True)

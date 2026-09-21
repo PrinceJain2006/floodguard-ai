@@ -14,10 +14,11 @@ from datetime import datetime
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, ai_disclaimer, demo_badge,
     simulated_badge, hybrid_badge, model_badge, section_header, COLORS, risk_badge,
-    render_granite_panel, render_agent_trace, risk_level_indicator,
+    render_granite_panel, render_agent_trace, risk_level_indicator, data_source_strip,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.granite_service import explain_why_zone_risky
+from agents.evidence_fusion import get_audit_trail
 from frontend.map_component import build_flood_map
 from streamlit_folium import st_folium
 from services.report_store import get_user_reports
@@ -41,6 +42,8 @@ if "war_scenario" not in st.session_state:
     st.session_state.war_scenario = "NORMAL"
 if "why_cache" not in st.session_state:
     st.session_state.why_cache = {}
+if "war_mod_notes" not in st.session_state:
+    st.session_state.war_mod_notes = {}
 
 @st.cache_resource
 def get_orch():
@@ -149,6 +152,12 @@ needs_approval = action_plan.get("approval_needed", 0)
 open_reports = report_analysis.get("open_reports", 0)
 available_teams = sum(1 for t in teams if t.get("status") == "AVAILABLE")
 approved_count = len(st.session_state.war_approved)
+
+# Data source transparency strip
+data_source_strip(
+    is_live_weather=_lws_is_live,
+    last_updated=state.get("last_updated", ""),
+)
 
 k1,k2,k3,k4,k5,k6,k7,k8 = st.columns(8)
 with k1: metric_card("Critical Zones",   str(critical),       color="#ef4444", icon="🔴")
@@ -267,14 +276,47 @@ with col_mid:
                         🔐 <strong>HUMAN APPROVAL REQUIRED</strong> — {action.get('approval_reason','')}
                     </div>
                     """, unsafe_allow_html=True)
-                    c1, c2 = st.columns(2)
+                    # Modification note input
+                    note_key = f"war_note_{aid}"
+                    if note_key not in st.session_state:
+                        st.session_state[note_key] = ""
+                    mod_note = st.text_input(
+                        "Optional note:", key=note_key,
+                        placeholder="e.g. Escalate to district officer...",
+                        label_visibility="collapsed",
+                    )
+                    c1, c2, c3 = st.columns(3)
+                    audit = get_audit_trail()
                     with c1:
                         if st.button("✅ Approve", key=f"war_app_{aid}", type="primary"):
                             st.session_state.war_approved.add(aid)
+                            # Record in shared audit trail
+                            _note = st.session_state.get(note_key, "") or "Approved via War Room."
+                            audit.record(
+                                {**action, "area": action.get("area", ""), "city": action.get("city", ""),
+                                 "priority_level": action.get("priority", ""), "priority_score": 0},
+                                "APPROVED", "War Room Operator", _note
+                            )
                             st.rerun()
                     with c2:
+                        if st.button("🔄 Modify", key=f"war_mod_{aid}"):
+                            st.session_state.war_approved.add(aid)
+                            _note = st.session_state.get(note_key, "") or "Modified scope."
+                            audit.record(
+                                {**action, "area": action.get("area", ""), "city": action.get("city", ""),
+                                 "priority_level": action.get("priority", ""), "priority_score": 0},
+                                "MODIFIED", "War Room Operator", _note
+                            )
+                            st.rerun()
+                    with c3:
                         if st.button("❌ Reject", key=f"war_rej_{aid}"):
                             st.session_state.war_rejected.add(aid)
+                            _note = st.session_state.get(note_key, "") or "Rejected by operator."
+                            audit.record(
+                                {**action, "area": action.get("area", ""), "city": action.get("city", ""),
+                                 "priority_level": action.get("priority", ""), "priority_score": 0},
+                                "REJECTED", "War Room Operator", _note
+                            )
                             st.rerun()
                 elif not action.get("requires_human_approval") and not approved:
                     if st.button("✅ Mark Executed", key=f"war_exec_{aid}", type="secondary"):
@@ -332,14 +374,45 @@ with col_right:
               <div style="font-size:0.7rem;color:#94a3b8">{_pa.get('description','')[:100]}</div>
             </div>
             """, unsafe_allow_html=True)
-            _pa_c1, _pa_c2 = st.columns(2)
+            _q_note_key = f"wr_qnote_{_pa['action_id']}"
+            if _q_note_key not in st.session_state:
+                st.session_state[_q_note_key] = ""
+            _q_note = st.text_input(
+                "Note:", key=_q_note_key,
+                placeholder="Optional modification note...",
+                label_visibility="collapsed",
+            )
+            _pa_c1, _pa_c2, _pa_c3 = st.columns(3)
+            _wr_audit = get_audit_trail()
             with _pa_c1:
                 if st.button("✅ Approve", key=f"wr_quick_app_{_pa['action_id']}", type="primary", use_container_width=True):
                     st.session_state.war_approved.add(_pa["action_id"])
+                    _wr_audit.record(
+                        {**_pa, "area": _pa.get("area", ""), "city": _pa.get("city", ""),
+                         "priority_level": _pa.get("priority", ""), "priority_score": 0},
+                        "APPROVED", "War Room Operator",
+                        st.session_state.get(_q_note_key, "") or "Quick approved."
+                    )
                     st.rerun()
             with _pa_c2:
+                if st.button("🔄 Modify", key=f"wr_quick_mod_{_pa['action_id']}", use_container_width=True):
+                    st.session_state.war_approved.add(_pa["action_id"])
+                    _wr_audit.record(
+                        {**_pa, "area": _pa.get("area", ""), "city": _pa.get("city", ""),
+                         "priority_level": _pa.get("priority", ""), "priority_score": 0},
+                        "MODIFIED", "War Room Operator",
+                        st.session_state.get(_q_note_key, "") or "Scope modified."
+                    )
+                    st.rerun()
+            with _pa_c3:
                 if st.button("❌ Reject", key=f"wr_quick_rej_{_pa['action_id']}", use_container_width=True):
                     st.session_state.war_rejected.add(_pa["action_id"])
+                    _wr_audit.record(
+                        {**_pa, "area": _pa.get("area", ""), "city": _pa.get("city", ""),
+                         "priority_level": _pa.get("priority", ""), "priority_score": 0},
+                        "REJECTED", "War Room Operator",
+                        st.session_state.get(_q_note_key, "") or "Rejected."
+                    )
                     st.rerun()
     elif approved_count > 0:
         st.markdown(f"""
@@ -487,6 +560,123 @@ with bot_col3:
             """, unsafe_allow_html=True)
     else:
         st.info("No active incidents.")
+
+# ──────────────────────────────────────────────
+# Civic Action Log — Audit Trail
+# ──────────────────────────────────────────────
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("---")
+
+_war_audit_entries = get_audit_trail().get_all()
+_total_approved = sum(1 for e in _war_audit_entries if e.get("human_decision") == "APPROVED")
+_total_modified = sum(1 for e in _war_audit_entries if e.get("human_decision") == "MODIFIED")
+_total_rejected = sum(1 for e in _war_audit_entries if e.get("human_decision") == "REJECTED")
+
+section_header("📋 CIVIC ACTION LOG — AUDIT TRAIL",
+    '<span style="background:#14532d;color:#bbf7d0;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700">APPLICATION LOG</span>')
+
+st.markdown("""
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    Every human approval, modification or rejection is recorded here for transparency.
+    This is an application-level log — <strong>no real emergency services are notified</strong>.
+    Use the Decision Intelligence page to add entries.
+</div>
+""", unsafe_allow_html=True)
+
+# Summary KPIs
+_alk1, _alk2, _alk3, _alk4 = st.columns(4)
+with _alk1:
+    st.markdown(f"""
+    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.65rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#e2e8f0">{len(_war_audit_entries)}</div>
+        <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">Total Decisions</div>
+    </div>
+    """, unsafe_allow_html=True)
+with _alk2:
+    st.markdown(f"""
+    <div style="background:#1a1d27;border:1px solid #22c55e40;border-radius:8px;padding:0.65rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#22c55e">{_total_approved}</div>
+        <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">✅ Approved</div>
+    </div>
+    """, unsafe_allow_html=True)
+with _alk3:
+    st.markdown(f"""
+    <div style="background:#1a1d27;border:1px solid #f9731640;border-radius:8px;padding:0.65rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#f97316">{_total_modified}</div>
+        <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">🔄 Modified</div>
+    </div>
+    """, unsafe_allow_html=True)
+with _alk4:
+    st.markdown(f"""
+    <div style="background:#1a1d27;border:1px solid #ef444440;border-radius:8px;padding:0.65rem;text-align:center">
+        <div style="font-size:1.5rem;font-weight:700;color:#ef4444">{_total_rejected}</div>
+        <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">❌ Rejected</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+if not _war_audit_entries:
+    st.markdown("""
+    <div style="background:#1a1d27;border:1px dashed #2d3148;border-radius:8px;
+                padding:1.5rem;text-align:center;color:#64748b;font-size:0.85rem">
+        No decisions recorded yet.<br>
+        <span style="font-size:0.78rem">Use the
+        <strong style="color:#7c3aed">Decision Intelligence → Human-in-the-Loop</strong>
+        tab to approve, modify, or reject AI recommendations.</span>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    # Render audit entries in a clean timeline style
+    _dec_colors = {"APPROVED": "#22c55e", "REJECTED": "#ef4444", "MODIFIED": "#f97316"}
+    _dec_icons  = {"APPROVED": "✅", "REJECTED": "❌", "MODIFIED": "🔄"}
+    _lvl_colors = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}
+
+    # Show in two columns for compactness
+    _acol1, _acol2 = st.columns(2)
+    for _idx, _entry in enumerate(_war_audit_entries[-12:]):  # show last 12
+        _dec   = _entry.get("human_decision", "?")
+        _dc    = _dec_colors.get(_dec, "#94a3b8")
+        _di    = _dec_icons.get(_dec, "•")
+        _zone  = _entry.get("zone", "Unknown Zone")
+        _ai_rec = _entry.get("ai_recommendation", "")
+        _note  = _entry.get("modification_note", "")
+        _ts    = _entry.get("timestamp", "")
+        _ts_short = _ts[11:19] if len(_ts) >= 19 else _ts
+        _ts_date  = _ts[:10] if len(_ts) >= 10 else ""
+        _lvl   = _entry.get("priority_level", "")
+        _lc    = _lvl_colors.get(_lvl, "#94a3b8")
+
+        _html_block = f"""
+        <div style="background:#1a1d27;border:1px solid {_dc}40;border-left:3px solid {_dc};
+                    border-radius:0 8px 8px 0;padding:0.55rem 0.7rem;margin-bottom:0.4rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.2rem">
+                <div style="font-size:0.82rem;font-weight:700;color:#e2e8f0">{_di} {_zone}</div>
+                <div style="display:flex;gap:0.3rem;align-items:center">
+                    <span style="background:{_lc};color:white;padding:1px 5px;border-radius:3px;font-size:0.6rem;font-weight:700">{_lvl}</span>
+                    <span style="background:{_dc};color:white;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">{_dec}</span>
+                </div>
+            </div>
+            <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.15rem">{_ai_rec[:70]}{"…" if len(_ai_rec) > 70 else ""}</div>
+            {f'<div style="font-size:0.7rem;color:{_dc};margin-bottom:0.1rem">Note: {_note[:60]}</div>' if _note else ""}
+            <div style="font-size:0.65rem;color:#475569">{_ts_date} {_ts_short} UTC</div>
+        </div>
+        """
+
+        if _idx % 2 == 0:
+            with _acol1:
+                st.markdown(_html_block, unsafe_allow_html=True)
+        else:
+            with _acol2:
+                st.markdown(_html_block, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div style="font-size:0.68rem;color:#475569;margin-top:0.2rem">
+        Showing last {min(12, len(_war_audit_entries))} of {len(_war_audit_entries)} log entries.
+        Full audit trail available in Decision Intelligence → Audit Trail tab.
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # ──────────────────────────────────────────────
 # Footer

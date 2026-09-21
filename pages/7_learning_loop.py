@@ -57,7 +57,50 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 header("Closed-Loop Learning", "Prediction → Incident → Response → Outcome tracking", "🔄")
 
-st.markdown("""
+# ── Pipeline flow visualization ──────────────────────────────────────────────
+_curr_scen = SCENARIOS.get(orch.current_scenario, {})
+_scen_label = _curr_scen.get("label", orch.current_scenario)
+_scen_emoji = _curr_scen.get("emoji", "🌦️")
+
+st.markdown(f"""
+<div style="background:#0d1020;border:1px solid #2d3148;border-radius:10px;
+            padding:0.8rem 1.2rem;margin-bottom:1rem">
+  <div style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;
+              letter-spacing:0.05em;margin-bottom:0.6rem">
+    📋 CLOSED-LOOP PIPELINE — Current Scenario: {_scen_emoji} {_scen_label}
+  </div>
+  <div style="display:flex;align-items:center;gap:0.3rem;flex-wrap:wrap">
+    <div style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:6px;
+                padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:700;color:#93c5fd">
+      🌊 ML PREDICTION<br>
+      <span style="font-weight:400;font-size:0.65rem;color:#64748b">Risk score per zone</span>
+    </div>
+    <div style="color:#475569;font-size:1rem">→</div>
+    <div style="background:#3a1a00;border:1px solid #f97316;border-radius:6px;
+                padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:700;color:#fdba74">
+      ⚡ INCIDENT DETECTED<br>
+      <span style="font-weight:400;font-size:0.65rem;color:#64748b">Real or simulated flood</span>
+    </div>
+    <div style="color:#475569;font-size:1rem">→</div>
+    <div style="background:#1a0f2e;border:1px solid #7c3aed;border-radius:6px;
+                padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:700;color:#c4b5fd">
+      🚒 RESPONSE DEPLOYED<br>
+      <span style="font-weight:400;font-size:0.65rem;color:#64748b">Human-approved action</span>
+    </div>
+    <div style="color:#475569;font-size:1rem">→</div>
+    <div style="background:#0d2818;border:1px solid #22c55e;border-radius:6px;
+                padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:700;color:#86efac">
+      ✅ OUTCOME RECORDED<br>
+      <span style="font-weight:400;font-size:0.65rem;color:#64748b">Resolution / escalation</span>
+    </div>
+    <div style="color:#475569;font-size:1rem">→</div>
+    <div style="background:#1a0f1f;border:1px solid #a855f7;border-radius:6px;
+                padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:700;color:#d8b4fe">
+      🔄 LEARNING SIGNAL<br>
+      <span style="font-weight:400;font-size:0.65rem;color:#64748b">Accuracy feedback</span>
+    </div>
+  </div>
+</div>
 <div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:0.9rem;
             font-size:0.75rem;color:#94a3b8">
     <span style="background:#3a2e00;color:#fde68a;padding:2px 7px;border-radius:4px;
