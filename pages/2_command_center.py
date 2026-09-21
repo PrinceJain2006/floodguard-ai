@@ -1017,11 +1017,10 @@ with tab2:
             st.session_state.cc_wx_city = _cc_city_sel
             st.rerun()
     with _wx_col_btn:
-        st.markdown("<div style='margin-top:1.6rem'>", unsafe_allow_html=True)
+        st.write("")   # vertical spacer to align button with the selectbox label
         if st.button("🔄 Refresh", key="cc_wx_refresh", use_container_width=True):
             st.session_state.cc_wx_force = True
             st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
     with _wx_col_info:
         _cc_age = cache_age_seconds(st.session_state.cc_wx_city)
         _cc_age_str = f"{int(_cc_age)}s ago" if _cc_age is not None else "not fetched yet"

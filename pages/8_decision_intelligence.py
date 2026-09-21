@@ -505,6 +505,19 @@ with tab_why:
                 d_color   = "#ef4444" if delta > 5 else "#22c55e" if delta < -5 else "#eab308"
                 d_arrow   = "↑" if delta > 0 else "↓" if delta < 0 else "→"
 
+                # Build all change items as a single HTML string so the whole
+                # card is emitted in one st.markdown call — no split open/close tags.
+                _changes_html = "".join(
+                    f'<div style="font-size:0.75rem;color:#e2e8f0;padding:2px 0;'
+                    f'padding-left:0.5rem;border-left:2px solid #3b82f6">• {change}</div>'
+                    for change in why_now["changes"]
+                )
+                _score_delta_text = (
+                    f"increased by {abs(delta):.1f}" if delta > 0
+                    else f"decreased by {abs(delta):.1f}" if delta < 0
+                    else "unchanged"
+                )
+                _level_changed_text = " | Level escalated" if why_now["level_changed"] else ""
                 st.markdown(f"""
                 <div style="background:#1a1d27;border:1px solid #3b82f6;
                             border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem">
@@ -524,19 +537,12 @@ with tab_why:
                         </div>
                     </div>
                     <div style="font-size:0.75rem;font-weight:600;color:{d_color};margin-bottom:0.5rem">
-                        Score {f"increased by {abs(delta):.1f}" if delta > 0 else f"decreased by {abs(delta):.1f}" if delta < 0 else "unchanged"}
-                        {' | Level escalated' if why_now['level_changed'] else ''}
+                        Score {_score_delta_text}{_level_changed_text}
                     </div>
                     <div style="font-size:0.75rem;color:#94a3b8;font-weight:600;margin-bottom:0.3rem">Key changes:</div>
+                    {_changes_html}
+                </div>
                 """, unsafe_allow_html=True)
-
-                for change in why_now["changes"]:
-                    st.markdown(f"""
-                    <div style="font-size:0.75rem;color:#e2e8f0;padding:2px 0;padding-left:0.5rem;
-                                border-left:2px solid #3b82f6">• {change}</div>
-                    """, unsafe_allow_html=True)
-
-                st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.markdown(f"""
                 <div style="background:#1a1d27;border:1px solid #2d3148;
