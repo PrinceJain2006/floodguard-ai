@@ -16,7 +16,10 @@ try:
     from agents.citizen_report_agent import get_citizen_agent
     from agents.response_coordination_agent import get_response_agent
     from agents.damage_assessment_agent import get_damage_agent
-    from agents.granite_service import generate_situation_report, answer_query, granite_status
+    from agents.granite_service import (
+        generate_situation_report, answer_query, granite_status,
+        invalidate_granite_status_cache,
+    )
     from agents.chief_response_agent import get_chief_agent
     from agents.closed_loop_learning import get_learning_store
     from data.seed_generator import (
@@ -30,7 +33,10 @@ except ImportError:
     from citizen_report_agent import get_citizen_agent
     from response_coordination_agent import get_response_agent
     from damage_assessment_agent import get_damage_agent
-    from granite_service import generate_situation_report, answer_query, granite_status
+    from granite_service import (
+        generate_situation_report, answer_query, granite_status,
+        invalidate_granite_status_cache,
+    )
     from chief_response_agent import get_chief_agent
     from closed_loop_learning import get_learning_store
     try:
@@ -223,15 +229,27 @@ class AgentOrchestrator:
                        f"{len(response_plan['top_recommendations'])} recommendations")
 
         # ── Step 6: Granite reasoning layer ───────────────────
+        # generate_situation_report uses the module-level generation cache so
+        # repeated pipeline runs with the same scenario / zone counts won't fire
+        # duplicate Granite requests.  We call granite_status() AFTER the
+        # generation attempt so the status accurately reflects whether generation
+        # succeeded (the status probe result is cached for _STATUS_CACHE_TTL).
         self._log_step("GRANITE", "IBM Granite", "RUNNING", "Generating situation summary")
-        g_status = granite_status()
         situation_report = generate_situation_report(
             city=city if city != "All" else "Ahmedabad & Surat",
             scenario=scenario,
             summary_data=response_plan["summary"],
         )
-        self._log_step("GRANITE", "IBM Granite", "COMPLETE",
-                       "Live" if g_status["available"] else "Fallback mode (configure WatsonX API key)")
+        # Invalidate the status cache so the next call reflects the generation
+        # outcome (either LIVE if the call succeeded, or RATE_LIMITED/FALLBACK).
+        invalidate_granite_status_cache()
+        g_status = granite_status()
+        self._log_step(
+            "GRANITE", "IBM Granite", "COMPLETE",
+            "🟢 Live — IBM Granite generation" if g_status["available"]
+            else "🟠 Rate limited — rule-based fallback" if g_status["rate_limited"]
+            else "⚙ Fallback mode (configure WatsonX credentials)",
+        )
 
         # ── Step 7: Chief Response Agent ──────────────────────
         self._log_step("CHIEF_RESPONSE", "Chief Response Agent", "RUNNING",
@@ -302,7 +320,36 @@ class AgentOrchestrator:
         return self.current_state
 
     def get_agent_statuses(self) -> list[dict]:
-        """Return current status of all agents."""
+        """Return current status of all agents.
+
+        Uses the cached granite_status() result — does NOT fire a new probe on
+        every call.  The cache is refreshed after each pipeline run.
+        """
+        # Single call — result is module-level cached for _STATUS_CACHE_TTL
+        g_st = granite_status()
+        g_avail       = g_st["available"]
+        g_rate        = g_st.get("rate_limited", False)
+        g_config_err  = g_st.get("config_error", False)
+
+        if g_avail:
+            g_status_label = "LIVE"
+        elif g_rate:
+            g_status_label = "RATE LIMITED"
+        elif g_config_err:
+            g_status_label = "CONFIG ERROR"
+        else:
+            g_status_label = "FALLBACK"
+
+        recent: list[str] = [f"Model: {g_st['model']}"]
+        if g_avail:
+            recent.append("🟢 IBM Granite — Live generation")
+        elif g_rate:
+            recent.append("🟠 Rate limited — rule-based fallback active")
+        elif g_config_err:
+            recent.append("🔴 Configuration error — check credentials")
+        else:
+            recent.append("⚙ Rule-based fallback — configure WatsonX credentials")
+
         return [
             self.flood_agent.get_status(),
             self.drain_agent.get_status(),
@@ -312,12 +359,9 @@ class AgentOrchestrator:
             self.chief_agent.get_status(),
             {
                 "agent": "IBM Granite",
-                "status": "ACTIVE" if granite_status()["available"] else "FALLBACK",
+                "status": g_status_label,
                 "last_run": self.current_state.get("last_updated") if self.current_state else None,
-                "recent_activity": [
-                    f"Model: {granite_status()['model']}",
-                    "Available" if granite_status()["available"] else "Running in fallback mode",
-                ],
+                "recent_activity": recent,
             },
         ]
 

@@ -3,6 +3,7 @@ FloodGuard AI — IBM Granite Integration Layer
 Provides LLM reasoning via WatsonX / Granite-3-8b-instruct.
 Falls back gracefully to rule-based responses when unavailable.
 """
+import hashlib
 import json
 import time
 import re
@@ -64,11 +65,31 @@ _iam_token_cache: dict = {"key": None, "token": None, "expires_at": 0}
 # making the congestion worse (more concurrent requests = more 429s).
 # The backoff is module-level so it applies to ALL callers in the same process,
 # including the granite_status() probe.
-_429_BACKOFF_SECONDS = 120          # wait 2 minutes before retrying after a 429
+#
+# Free-tier ibm/granite-4-h-small allows 2 requests/second concurrent.
+# We back off for 5 minutes to avoid a request storm on demo reruns.
+_429_BACKOFF_SECONDS = 300          # wait 5 minutes before retrying after a 429
 _rate_limit_state: dict = {
     "hit_at":    0.0,               # time.time() when 429 was last received
     "result":    None,              # the _GraniteResult from that 429 response
 }
+
+# ── Response generation cache ─────────────────────────────────────────────────
+# Caches successful (and fallback) generation results keyed by a stable hash
+# of the call type + key inputs.  TTL = 10 minutes.
+# This prevents repeated Granite calls when Streamlit reruns the page or the
+# user navigates between tabs without changing the underlying scenario.
+#
+# Schema: { cache_key: {"text": str, "granite_used": bool, "ts": float} }
+_GENERATION_CACHE: dict = {}
+_GENERATION_CACHE_TTL = 600         # 10 minutes
+
+# ── granite_status() result cache ─────────────────────────────────────────────
+# Caches the last status probe result for _STATUS_CACHE_TTL seconds so that
+# navigating between pages / Streamlit reruns do not each fire a live probe.
+# The cache is busted automatically when the result changes (e.g., a 429 clears).
+_status_cache: dict = {"result": None, "ts": 0.0}
+_STATUS_CACHE_TTL = 120             # cache status probe for 2 minutes
 
 _IAM_URL = "https://iam.cloud.ibm.com/identity/token"
 _PLACEHOLDER_KEY = "your_watsonx_api_key_here"
@@ -309,7 +330,9 @@ def _parse_error_response(resp: httpx.Response, url: str, model_id: str) -> _Gra
         reason = (
             f"HTTP 429 consumption_limit_reached on POST {endpoint_path} — "
             f"free-tier concurrent request limit reached for model '{model_id}'. "
-            f"Backing off for {_429_BACKOFF_SECONDS}s. IBM: {ibm_error_msg!r}"
+            f"Backing off for {_429_BACKOFF_SECONDS}s. "
+            "Using controlled backoff and existing rule-based fallback. "
+            f"IBM: {ibm_error_msg!r}"
         )
     elif code >= 500:
         reason = (
@@ -329,12 +352,26 @@ def _parse_error_response(resp: httpx.Response, url: str, model_id: str) -> _Gra
         failure_reason=reason,
     )
 
-    # Arm the backoff state on 429 so subsequent calls skip the network
+    # Arm the backoff state on 429 so subsequent calls skip the network.
+    # Log the 429 only once — subsequent calls within the backoff window
+    # are silently returned from the backoff gate without re-logging.
     if code == 429:
+        already_rate_limited = bool(
+            _rate_limit_state["hit_at"] and _rate_limit_state["result"] is not None
+        )
         _rate_limit_state["hit_at"]  = time.time()
         _rate_limit_state["result"]  = result
-
-    print(f"[Granite] {reason}")
+        # Also bust the status cache so the next granite_status() re-evaluates
+        _status_cache["result"] = None
+        _status_cache["ts"]     = 0.0
+        if not already_rate_limited:
+            print(
+                "[Granite] WatsonX Granite rate limited. "
+                "HTTP 429 consumption_limit_reached. "
+                "Using controlled backoff and existing fallback."
+            )
+    else:
+        print(f"[Granite] {reason}")
     return result
 
 
@@ -342,9 +379,14 @@ def _parse_error_response(resp: httpx.Response, url: str, model_id: str) -> _Gra
 # Public status check
 # ──────────────────────────────────────────────
 
-def granite_status() -> dict:
+def granite_status(force_probe: bool = False) -> dict:
     """
     Return a status dict that accurately reflects Granite connectivity.
+
+    Result is cached for _STATUS_CACHE_TTL seconds to avoid firing a live
+    WatsonX probe on every Streamlit rerun or every get_agent_statuses() call.
+    Pass force_probe=True to bypass the cache (e.g. after a successful pipeline
+    run, to surface the updated status immediately).
 
     Fields:
       api_key_configured  — True if a non-placeholder key is present
@@ -352,6 +394,7 @@ def granite_status() -> dict:
       iam_ok              — True if an IAM token was successfully obtained
       available           — True only when a real generation call succeeds
       rate_limited        — True when the last failure was a 429
+      config_error        — True when credentials/project are misconfigured
       model               — the model ID in use
       endpoint            — generation endpoint path (no credentials)
       http_status         — HTTP status of the probe generation call, or None
@@ -359,6 +402,15 @@ def granite_status() -> dict:
       ibm_error_msg       — IBM error message string, safe to display, or None
       error               — full human-readable failure reason, or None
     """
+    now = time.time()
+    # Return cached result if fresh and not forced
+    if (
+        not force_probe
+        and _status_cache["result"] is not None
+        and (now - _status_cache["ts"]) < _STATUS_CACHE_TTL
+    ):
+        return _status_cache["result"]
+
     api_key    = _api_key()
     project_id = _project_id()
     model      = _model_id()
@@ -374,6 +426,7 @@ def granite_status() -> dict:
         "iam_ok":             False,
         "available":          False,
         "rate_limited":       False,
+        "config_error":       False,
         "model":              model,
         "endpoint":           endpoint,
         "http_status":        None,
@@ -382,40 +435,97 @@ def granite_status() -> dict:
         "error":              None,
     }
 
-    if not key_ok:
-        return {**_base, "error": "WATSONX_API_KEY not configured"}
+    if not key_ok or not pid_ok:
+        result = {
+            **_base,
+            "config_error": True,
+            "error": (
+                "WATSONX_API_KEY not configured"
+                if not key_ok
+                else "WATSONX_PROJECT_ID not configured"
+            ),
+        }
+        _status_cache["result"] = result
+        _status_cache["ts"]     = now
+        return result
 
-    if not pid_ok:
-        return {**_base, "error": "WATSONX_PROJECT_ID not configured"}
+    # If a 429 backoff is still active, return RATE_LIMITED without probing
+    if _rate_limit_state["hit_at"] and _rate_limit_state["result"] is not None:
+        elapsed   = now - _rate_limit_state["hit_at"]
+        remaining = _429_BACKOFF_SECONDS - elapsed
+        if remaining > 0:
+            cached_r: _GraniteResult = _rate_limit_state["result"]
+            result = {
+                **_base,
+                "iam_ok":         True,   # we had IAM working when 429 hit
+                "available":      False,
+                "rate_limited":   True,
+                "http_status":    429,
+                "ibm_error_code": cached_r.ibm_error_code,
+                "ibm_error_msg":  cached_r.ibm_error_msg,
+                "error":          cached_r.failure_reason,
+            }
+            # Cache this for a short window — status will naturally re-evaluate
+            # once the backoff expires.
+            _status_cache["result"] = result
+            _status_cache["ts"]     = now
+            return result
 
     # Attempt to obtain IAM token
     token = _get_iam_token()
     if not token:
-        return {**_base, "error": "IAM token exchange failed — check WATSONX_API_KEY validity"}
+        result = {
+            **_base,
+            "config_error": True,
+            "error": "IAM token exchange failed — check WATSONX_API_KEY validity",
+        }
+        _status_cache["result"] = result
+        _status_cache["ts"]     = now
+        return result
 
     # Probe an actual generation call with a minimal prompt.
     # If the backoff gate is active this returns immediately without a network call.
-    probe = _call_granite_full("Reply with the single word: OK", max_tokens=5)
+    probe = _call_granite_full(
+        "<|user|>\nReply with the single word: OK\n<|assistant|>\n",
+        max_tokens=5,
+    )
 
     if probe.text is not None:
-        return {
+        result = {
             **_base,
-            "iam_ok":         True,
-            "available":      True,
-            "http_status":    200,
+            "iam_ok":      True,
+            "available":   True,
+            "http_status": 200,
         }
+        _status_cache["result"] = result
+        _status_cache["ts"]     = now
+        return result
 
-    # Generation failed — surface full structured diagnostic
-    return {
+    # Generation failed — classify and surface full structured diagnostic
+    is_rate_limited  = probe.http_status == 429
+    is_config_error  = probe.http_status in (401, 403) or (
+        probe.http_status is None and "WATSONX_API_KEY" in (probe.failure_reason or "")
+    )
+    result = {
         **_base,
         "iam_ok":         True,
         "available":      False,
-        "rate_limited":   probe.http_status == 429,
+        "rate_limited":   is_rate_limited,
+        "config_error":   is_config_error,
         "http_status":    probe.http_status,
         "ibm_error_code": probe.ibm_error_code,
         "ibm_error_msg":  probe.ibm_error_msg,
         "error":          probe.failure_reason,
     }
+    _status_cache["result"] = result
+    _status_cache["ts"]     = now
+    return result
+
+
+def invalidate_granite_status_cache() -> None:
+    """Force the next granite_status() call to re-probe WatsonX."""
+    _status_cache["result"] = None
+    _status_cache["ts"]     = 0.0
 
 
 # ──────────────────────────────────────────────
@@ -467,6 +577,9 @@ def explain_flood_risk(area: str, city: str, risk_data: dict) -> str:
     Generate a human-readable explanation for why an area is at risk.
     Uses Granite if available; otherwise rule-based.
     IMPORTANT: Only uses provided risk_data — never invents real sensor/govt data.
+
+    Result is cached keyed on area + city + risk_level + risk_score so repeated
+    UI tab switches don't re-fire a Granite request for the same zone.
     """
     reasons    = risk_data.get("main_reasons", [])
     score      = risk_data.get("risk_score", 0)
@@ -478,6 +591,11 @@ def explain_flood_risk(area: str, city: str, risk_data: dict) -> str:
     elevation  = features.get("elevation", "unknown")
     density    = features.get("population_density", "unknown")
     confidence = risk_data.get("confidence", 0.8)
+
+    cache_key = _gen_cache_key("explain", area, city, level, f"{score:.0f}")
+    cached = _gen_cache_get(cache_key)
+    if cached is not None:
+        return cached
 
     prompt = f"""You are the FloodGuard AI assistant for {city} Municipal Corporation.
 Only use the data provided below — do not invent or assume any values.
@@ -498,15 +616,18 @@ Keep it professional and under 80 words."""
 
     response = _call_granite(prompt, max_tokens=200)
     if response:
+        _gen_cache_put(cache_key, response)
         return response
 
     reason_str = "; ".join(reasons[:3]) if reasons else "multiple compounding risk factors"
     action = risk_data.get("recommended_action", "Monitor closely and pre-position response teams.")
-    return (
+    fallback = (
         f"Based on available data, {area} in {city} is at {level} flood risk (score {score:.0f}/100). "
         f"Key factors from the analysis: {reason_str}. "
         f"Recommended action: {action}"
     )
+    _gen_cache_put(cache_key, fallback)
+    return fallback
 
 
 def explain_why_zone_risky(zone_prediction: dict) -> str:
@@ -519,13 +640,51 @@ def explain_why_zone_risky(zone_prediction: dict) -> str:
     return explain_flood_risk(area, city, zone_prediction)
 
 
+# ── Generation cache helpers ──────────────────────────────────────────────────
+
+def _gen_cache_key(*parts: Any) -> str:
+    """Build a short stable cache key from the given string parts."""
+    raw = "|".join(str(p) for p in parts)
+    return hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+
+def _gen_cache_get(key: str) -> str | None:
+    """Return cached generation text if fresh, else None."""
+    entry = _GENERATION_CACHE.get(key)
+    if entry and (time.time() - entry["ts"]) < _GENERATION_CACHE_TTL:
+        return entry["text"]
+    return None
+
+
+def _gen_cache_put(key: str, text: str) -> None:
+    """Store a generation result in the cache."""
+    _GENERATION_CACHE[key] = {"text": text, "ts": time.time()}
+    # Evict stale entries to prevent unbounded growth (keep latest 50)
+    if len(_GENERATION_CACHE) > 50:
+        oldest_key = min(_GENERATION_CACHE, key=lambda k: _GENERATION_CACHE[k]["ts"])
+        _GENERATION_CACHE.pop(oldest_key, None)
+
+
 def generate_situation_report(city: str, scenario: str, summary_data: dict) -> str:
-    """Generate a comprehensive municipal flood situation report."""
+    """
+    Generate a comprehensive municipal flood situation report.
+
+    Result is cached for _GENERATION_CACHE_TTL (10 min) keyed on city + scenario
+    + critical/high zone counts so identical pipeline reruns reuse the result
+    without issuing a new Granite request.
+    """
     critical    = summary_data.get("critical_zones", 0)
     high        = summary_data.get("high_zones", 0)
     reports     = summary_data.get("citizen_reports", 0)
     avg_rainfall = summary_data.get("avg_rainfall_1h", 0)
     top_actions = summary_data.get("top_actions", [])
+
+    # Cache key: city + scenario + critical + high zones (coarse enough to hit
+    # on reruns with the same scenario, but distinct across real scenario changes)
+    cache_key = _gen_cache_key("sitrep", city, scenario, critical, high)
+    cached = _gen_cache_get(cache_key)
+    if cached is not None:
+        return cached
 
     prompt = f"""You are FloodGuard AI. Generate an official flood situation report for {city} Municipal Corporation.
 
@@ -546,9 +705,10 @@ Note: This is AI-generated preliminary assessment. Requires authorized human ver
 
     response = _call_granite(prompt, max_tokens=400)
     if response:
+        _gen_cache_put(cache_key, response)
         return response
 
-    return f"""FLOODGUARD AI — FLOOD SITUATION REPORT
+    fallback = f"""FLOODGUARD AI — FLOOD SITUATION REPORT
 City: {city} | Scenario: {scenario} | Generated: AI-Preliminary
 
 EXECUTIVE SUMMARY
@@ -564,6 +724,8 @@ RECOMMENDED NEXT STEPS
 Activate emergency response protocol for critical zones. Pre-position pump teams at high-risk areas. Issue public advisory for affected neighborhoods.
 
 [AI-GENERATED PRELIMINARY ASSESSMENT — Requires authorized human verification]"""
+    _gen_cache_put(cache_key, fallback)
+    return fallback
 
 
 def answer_query(question: str, context_data: dict) -> str:
