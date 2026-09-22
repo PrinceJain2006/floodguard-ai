@@ -193,6 +193,18 @@ portal_card(col8, "🧭", "Decision Intelligence",
             "8_decision_intelligence", "#14b8a6",
             '<span style="background:#042f2e;color:#5eead4;padding:1px 5px;border-radius:3px;font-weight:700;font-size:0.65rem">EXPLAINABILITY</span>')
 
+st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
+
+col9, col10, col11, col12 = st.columns(4)
+portal_card(col9, "🚨", "Alert History",
+            "Flood alerts · Evidence · Notifications · HITL",
+            "9_alert_history", "#ef4444",
+            '<span style="background:#450a0a;color:#fca5a5;padding:1px 5px;border-radius:3px;font-weight:700;font-size:0.65rem">ALERTS</span>')
+# Leave remaining columns empty
+with col10: st.empty()
+with col11: st.empty()
+with col12: st.empty()
+
 st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 st.markdown("---")
 
@@ -215,6 +227,8 @@ flow_html = """
   <div style="color:#475569;font-size:1rem">→</div>
   <div style="background:#1a0a1a;color:#c4b5fd;padding:4px 10px;border-radius:6px;font-weight:700;border:1px solid #7c3aed">📱 Citizen Report Agent</div>
   <div style="color:#475569;font-size:1rem">→</div>
+  <div style="background:#1a0a1a;color:#fde68a;padding:4px 10px;border-radius:6px;font-weight:700;border:1px solid #eab308">🔍 Damage Assessment</div>
+  <div style="color:#475569;font-size:1rem">→</div>
   <div style="background:#1a0a1a;color:#c4b5fd;padding:4px 10px;border-radius:6px;font-weight:700;border:1px solid #7c3aed">⚡ Response Agent</div>
   <div style="color:#475569;font-size:1rem">→</div>
   <div style="background:#0d2818;color:#bbf7d0;padding:4px 10px;border-radius:6px;font-weight:700;border:1px solid #22c55e">🧠 IBM GRANITE</div>
@@ -223,7 +237,7 @@ flow_html = """
   <div style="color:#475569;font-size:1rem">→</div>
   <div style="background:#450a0a;color:#fca5a5;padding:4px 10px;border-radius:6px;font-weight:700;border:1px solid #ef4444">👤 HUMAN APPROVAL</div>
   <div style="color:#475569;font-size:1rem">→</div>
-  <div style="background:#042f2e;color:#5eead4;padding:4px 10px;border-radius:6px;font-weight:700;border:1px solid #14b8a6">✅ RESPONSE</div>
+  <div style="background:#042f2e;color:#5eead4;padding:4px 10px;border-radius:6px;font-weight:700;border:1px solid #14b8a6">✅ ALERT + RESPONSE</div>
 </div>
 """
 st.markdown(flow_html, unsafe_allow_html=True)

@@ -55,7 +55,8 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 # Header
 # ──────────────────────────────────────────────
-header("Closed-Loop Learning", "Prediction → Incident → Response → Outcome tracking", "🔄")
+header("Prediction-to-Outcome Feedback Tracking",
+       "Records ML predictions and actual outcomes — NOT automated retraining", "🔄")
 
 # ── Pipeline flow visualization ──────────────────────────────────────────────
 _curr_scen = SCENARIOS.get(orch.current_scenario, {})
@@ -101,11 +102,17 @@ st.markdown(f"""
     </div>
   </div>
 </div>
-<div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:0.9rem;
-            font-size:0.75rem;color:#94a3b8">
-    <span style="background:#3a2e00;color:#fde68a;padding:2px 7px;border-radius:4px;
-                 font-weight:700;font-size:0.68rem;white-space:nowrap">🟡 DEMO HISTORICAL CYCLES</span>
-    Demonstration prediction → outcome data. Production: replace with real prediction store.
+<div style="background:rgba(234,179,8,0.07);border:1px solid #eab308;border-radius:8px;
+            padding:0.6rem 0.9rem;margin-bottom:0.9rem;font-size:0.75rem;color:#fde68a">
+    <strong>⚠️ IMPORTANT:</strong> This page tracks
+    <strong>prediction-to-outcome feedback</strong> for model improvement visibility.
+    The system does <em>NOT</em> automatically retrain itself — displayed cycles are
+    demonstration data based on the current scenario. In production, this connects to
+    a real prediction store. Manual retraining with verified historical data would
+    require a validation gate, model versioning, and performance comparison
+    before deployment.
+    <span style="margin-left:8px;background:#3a2e00;color:#fde68a;padding:2px 7px;
+                 border-radius:4px;font-weight:700;font-size:0.68rem">🟡 DEMO CYCLES</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -356,7 +363,8 @@ with tab3:
 st.markdown("---")
 st.markdown("""
 <div style="text-align:center;color:#475569;font-size:0.7rem;padding-bottom:0.75rem">
-    FloodGuard AI · 🔄 Closed-Loop Learning ·
-    <span style="background:#3a2e00;color:#fde68a;font-size:0.63rem;padding:1px 5px;border-radius:3px;font-weight:700">🟡 DEMO HISTORICAL CYCLES</span>
+    FloodGuard AI · 🔄 Prediction-to-Outcome Feedback Tracking ·
+    <span style="background:#3a2e00;color:#fde68a;font-size:0.63rem;padding:1px 5px;border-radius:3px;font-weight:700">🟡 DEMO CYCLES</span>
+    · This system does not automatically retrain itself
 </div>
 """, unsafe_allow_html=True)

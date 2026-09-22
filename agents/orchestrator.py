@@ -215,7 +215,29 @@ class AgentOrchestrator:
                        f"Processed {report_analysis['total_reports']} reports, "
                        f"{report_analysis['open_reports']} open")
 
-        # ── Step 5: Response Coordination Agent ───────────────
+        # ── Step 5: Damage Assessment Agent ───────────────────
+        # Runs BEFORE the response agent so damage intelligence informs response planning.
+        self._log_step("DAMAGE_ASSESSMENT", "Damage Assessment Agent", "RUNNING",
+                       "Assessing damage from incident reports")
+        damage_assessment_result: dict = {"assessments": [], "summary": {}, "is_preliminary": True}
+        try:
+            active_incidents = [
+                inc for inc in incidents
+                if inc.get("status") in ("ACTIVE", "RESOLVED")
+            ]
+            if active_incidents:
+                damage_assessment_result = self.damage_agent.batch_assess(active_incidents)
+                severe_count = damage_assessment_result["summary"].get("severe_count", 0)
+                total_assessed = damage_assessment_result["summary"].get("total_assessed", 0)
+                self._log_step("DAMAGE_ASSESSMENT", "Damage Assessment Agent", "COMPLETE",
+                               f"Assessed {total_assessed} incidents — {severe_count} severe/high damage")
+            else:
+                self._log_step("DAMAGE_ASSESSMENT", "Damage Assessment Agent", "COMPLETE",
+                               "No active/resolved incidents to assess")
+        except Exception as exc:
+            self._log_step("DAMAGE_ASSESSMENT", "Damage Assessment Agent", "ERROR", str(exc))
+
+        # ── Step 6: Response Coordination Agent ───────────────
         self._log_step("RESPONSE", "Response Coordination Agent", "RUNNING", "Generating response plan")
         response_plan = self.response_agent.coordinate(
             risk_predictions=risk_predictions,
@@ -228,7 +250,7 @@ class AgentOrchestrator:
                        f"Generated {len(response_plan['incidents'])} incidents, "
                        f"{len(response_plan['top_recommendations'])} recommendations")
 
-        # ── Step 6: Granite reasoning layer ───────────────────
+        # ── Step 7: Granite reasoning layer ───────────────────
         # generate_situation_report uses the module-level generation cache so
         # repeated pipeline runs with the same scenario / zone counts won't fire
         # duplicate Granite requests.  We call granite_status() AFTER the
@@ -251,7 +273,7 @@ class AgentOrchestrator:
             else "⚙ Fallback mode (configure WatsonX credentials)",
         )
 
-        # ── Step 7: Chief Response Agent ──────────────────────
+        # ── Step 8: Chief Response Agent ──────────────────────
         self._log_step("CHIEF_RESPONSE", "Chief Response Agent", "RUNNING",
                        "Generating unified emergency action plan")
         action_plan = self.chief_agent.generate_action_plan(
@@ -270,7 +292,7 @@ class AgentOrchestrator:
         self._log_step("CHIEF_RESPONSE", "Chief Response Agent", "COMPLETE",
                        f"{action_plan['total_actions']} actions, {action_plan['approval_needed']} need approval")
 
-        # ── Step 8: Closed-loop learning ──────────────────────
+        # ── Step 9: Closed-loop learning ──────────────────────
         self._log_step("LEARNING", "Closed-Loop Learning", "RUNNING",
                        "Seeding prediction-outcome cycles")
         # Reset learning store on each new pipeline run
@@ -282,8 +304,34 @@ class AgentOrchestrator:
         self._log_step("LEARNING", "Closed-Loop Learning", "COMPLETE",
                        f"{len(learning_cycles)} cycles recorded")
 
-        # ── Step 9: Build alerts ───────────────────────────────
+        # ── Step 10: Build alerts (legacy simple alerts) ──────
         alerts = _generate_alerts(risk_predictions, response_plan, scenario)
+
+        # ── Step 11: Flood Alert Engine ───────────────────────
+        # The alert engine runs risk fusion and generates structured alerts
+        # with de-duplication, expected risk window, and notification dispatch.
+        alert_engine = None
+        rich_alerts: list[dict] = []
+        try:
+            from services.flood_alert_engine import get_alert_engine
+            alert_engine = get_alert_engine()
+            rich_alerts = alert_engine.process_pipeline_output(
+                state={
+                    "risk_predictions": risk_predictions,
+                    "drain_analysis": drain_analysis,
+                    "report_analysis": report_analysis,
+                    "rainfall_data": rainfall,
+                    "scenario": scenario,
+                },
+                is_simulation=(scenario != "NORMAL"),
+            )
+            self._log_step(
+                "ALERT_ENGINE", "Flood Alert Engine", "COMPLETE",
+                f"Generated {len(rich_alerts)} new alert(s). "
+                f"Active: {len(alert_engine.get_active_alerts())}",
+            )
+        except Exception as exc:
+            self._log_step("ALERT_ENGINE", "Flood Alert Engine", "ERROR", str(exc))
 
         # ── Assemble state ─────────────────────────────────────
         elapsed = round(time.time() - t_start, 2)
@@ -293,12 +341,14 @@ class AgentOrchestrator:
             "risk_predictions": risk_predictions,
             "drain_analysis": drain_analysis,
             "report_analysis": report_analysis,
+            "damage_assessment": damage_assessment_result,
             "response_plan": response_plan,
             "situation_report": situation_report,
             "action_plan": action_plan,
             "resource_recommendations": resource_recs,
             "learning_cycles": learning_cycles,
             "alerts": alerts,
+            "rich_alerts": alert_engine.get_active_alerts() if alert_engine else [],
             "teams": teams,
             "rainfall_data": rainfall,
             "raw_reports": reports,

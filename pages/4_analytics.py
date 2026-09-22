@@ -551,11 +551,11 @@ with tab5:
     fig_comp = go.Figure()
     fig_comp.add_trace(go.Bar(
         name="Critical Zones (simulated ref)",
-        x=scenario_labels, y=critical_zones_sim, marker_color="#ef444488",
+        x=scenario_labels, y=critical_zones_sim, marker_color="rgba(239,68,68,0.53)",
     ))
     fig_comp.add_trace(go.Bar(
         name="High Risk Zones (simulated ref)",
-        x=scenario_labels, y=high_zones_sim, marker_color="#f9731688",
+        x=scenario_labels, y=high_zones_sim, marker_color="rgba(249,115,22,0.53)",
     ))
 
     # Overlay current real pipeline value
@@ -588,6 +588,53 @@ with tab5:
 # ═══════════════════════════════════════════════
 with tab6:
     section_header("RANDOM FOREST ML MODEL — EVALUATION & EXPLAINABILITY", model_badge())
+
+    # ── Model metadata card ─────────────────────────────────────────────────
+    st.markdown("""
+    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:10px;
+                padding:1rem 1.2rem;margin-bottom:1rem">
+        <div style="font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;
+                    letter-spacing:0.05em;margin-bottom:0.7rem">📋 MODEL METADATA</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.8rem">
+            <div>
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:2px">MODEL</div>
+                <div style="font-size:0.85rem;font-weight:700;color:#3b82f6">Random Forest</div>
+            </div>
+            <div>
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:2px">VERSION</div>
+                <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">v1.0 (DEMO)</div>
+            </div>
+            <div>
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:2px">TRAINING SOURCE</div>
+                <div style="font-size:0.85rem;font-weight:700;color:#eab308">
+                    <span style="background:#3a2e00;padding:1px 6px;border-radius:3px;font-size:0.72rem">
+                        🟡 SYNTHETIC DATA
+                    </span>
+                </div>
+            </div>
+            <div>
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:2px">TRAINING SAMPLES</div>
+                <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">5,000 (synthetic)</div>
+            </div>
+            <div>
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:2px">FEATURES</div>
+                <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">10</div>
+            </div>
+            <div>
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:2px">CLASSES</div>
+                <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">4 (LOW/MED/HIGH/CRIT)</div>
+            </div>
+            <div>
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:2px">VALIDATION METHOD</div>
+                <div style="font-size:0.85rem;font-weight:700;color:#eab308">Synthetic validation</div>
+            </div>
+            <div>
+                <div style="font-size:0.65rem;color:#64748b;margin-bottom:2px">STATUS</div>
+                <div style="font-size:0.85rem;font-weight:700;color:#22c55e">🟢 LOADED</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Model info header
     ml_info_cols = st.columns(4)
@@ -626,8 +673,11 @@ with tab6:
         <strong>🔵 IMPORTANT — MODEL DATA</strong> — The Random Forest model is trained on
         <strong>5,000 synthetic records</strong> generated from realistic flood parameter distributions
         for Ahmedabad &amp; Surat. Metrics below are computed from the actual held-out test split (20% = 1,000 samples).
-        <br><strong style="color:#eab308">SYNTHETIC DATA NOTICE:</strong> Training data is simulated — not real government sensor measurements.
+        <br><strong style="color:#eab308">🟡 SYNTHETIC VALIDATION NOTICE:</strong>
+        Training data is simulated — not real government sensor measurements.
         All metrics are genuine calculated values from the model, not hard-coded placeholders.
+        Do NOT claim real-world accuracy based on these synthetic test results.
+        The model must be retrained on verified historical flood data before operational use.
     </div>
     """, unsafe_allow_html=True)
 

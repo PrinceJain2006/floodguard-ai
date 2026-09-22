@@ -1,393 +1,314 @@
 # 🌊 FloodGuard AI
 
-## AI-Powered Urban Flood Intelligence & Decision Support System
+## AI-Assisted Urban Flood-Risk and Decision-Support System
 
-FloodGuard AI is an **agentic AI platform** for urban flood emergency management, built for Ahmedabad and Surat, Gujarat.
-It combines ML flood-risk prediction, multi-agent analysis, IBM Granite reasoning, citizen intelligence, geospatial mapping, evidence fusion, and human-in-the-loop decision support into a single operational workflow.
+FloodGuard AI is an **AI-assisted urban flood-risk and decision-support prototype** for Ahmedabad and Surat, Gujarat. It combines live weather data, ML flood-risk prediction, a multi-agent AI pipeline, IBM Granite reasoning, citizen intelligence, structured alerts, and human-in-the-loop decision support into a single operational workflow.
 
-> **FloodGuard AI doesn't just predict flooding — it converts prediction + citizen reports + drainage intelligence into prioritized, explainable, human-approved civic actions.**
+> **Technical honesty notice:** FloodGuard AI is a hackathon prototype and does not constitute an official municipal emergency system. All AI recommendations require authorized human verification before real-world implementation.
 
 ---
 
 ## ⚡ End-to-End Decision Workflow
 
-```text
+```
 DATA SOURCES
- Live Weather (Open-Meteo) · Citizen Reports · Drainage · Incidents
+ 🟢 Live Weather (Open-Meteo API — free, no key required)
+ 🟡 Water Level (rainfall-derived estimate — no live sensor available)
+ 🟠 Drainage (configured demo infrastructure data)
+ USER Citizen Reports (real user-submitted + demo seed data)
         │
         ▼
- ML FLOOD-RISK PREDICTION  (Random Forest — 5,000 synthetic training samples)
+ ML FLOOD-RISK PREDICTION  (Random Forest — 5,000 SYNTHETIC training samples)
+ 🟡 SYNTHETIC VALIDATION — not real government sensor data
         │
         ▼
- MULTI-AGENT ANALYSIS
- Flood Risk Agent → Drainage Agent → Citizen Report Agent → Response Coord Agent
+ MULTI-AGENT ANALYSIS PIPELINE
+ Flood Risk Agent
+     → Drainage Agent
+         → Citizen Report Agent
+             → Damage Assessment Agent  ← properly integrated
+                 → Response Coordination Agent
         │
         ▼
  IBM GRANITE REASONING (ibm/granite-4-h-small via WatsonX API)
+ 🟢 LIVE when WATSONX_API_KEY configured | 🟡 Rule-based FALLBACK otherwise
         │
         ▼
- EVIDENCE FUSION  (ML 35% · Rainfall 20% · Drainage 18% · Reports 12% · History 10% · Water Level 5%)
+ CHIEF RESPONSE AGENT  →  FLOOD ALERT ENGINE
+        │                      │
+        ▼                      ▼
+ EVIDENCE FUSION          STRUCTURED ALERTS
+ (Prototype weights)      Expected Risk Window
+        │                      │
+        ▼                      ▼
+ ZONE PRIORITIZATION   NOTIFICATION DISPATCH
+ WHY THIS ZONE         (Email / SMS / Webhook)
         │
         ▼
- ZONE PRIORITIZATION  +  WHY THIS ZONE / WHY NOW
+ HUMAN APPROVAL  (Approve / Modify / Reject)
         │
         ▼
- AI RECOMMENDATION
-        │
-        ▼
- HUMAN APPROVAL  (APPROVE / MODIFY / REJECT with modification notes)
-        │
-        ▼
- CIVIC ACTION LOG  +  AUDIT TRAIL
+ CIVIC ACTION LOG + AUDIT TRAIL + SQLite PERSISTENCE
 ```
 
 ---
 
-## 🖥️ Application Pages (8 Modules)
+## 🖥️ Application Pages (9 Modules)
 
 | Page | Module | Key Features |
 |------|---------|-------------|
-| Landing | FloodGuard AI Hub | 8-page portal · 6-agent architecture visualization · IBM Granite status |
-| 1 | Citizen Portal | EN/हिं/ગુ multilingual reporting · 7-step pipeline · Zone risk context |
-| 2 | Command Center | Live map · ACTIVE FLOOD EVENT header · Zone risk cards · Data source strip |
+| Landing | FloodGuard AI Hub | 9-page portal · 7-agent architecture · IBM Granite status |
+| 1 | Citizen Portal | EN/हिं/ગુ multilingual reporting · Zone risk context |
+| 2 | Command Center | Live map · Active alerts panel · Data source strip |
 | 3 | Agent Monitor | INPUT→PROCESS→OUTPUT per agent · Pipeline execution log · NL query |
-| 4 | Analytics & ML | Risk trends · Confusion matrix · Feature importance · Scenario comparison |
+| 4 | Analytics & ML | Risk trends · Model metadata · Synthetic validation notice · Confusion matrix |
 | 5 | Emergency War Room | HITL approve/modify/reject · Civic Action Log · Granite WHY |
-| 6 | Flood Simulator | BEFORE/AFTER scenario · What-if sliders · Drainage simulation · Forecast |
-| 7 | Learning Loop | Prediction vs outcome · Accuracy tracking · Closed-loop feedback |
+| 6 | Flood Simulator | BEFORE/AFTER what-if · Scenario sliders · **Clearly labelled SIMULATION** |
+| 7 | Learning Loop | **Prediction-to-outcome feedback tracking** (not automated retraining) |
 | 8 | Decision Intelligence | Evidence fusion · Why This Zone/Why Now · Agent trace · Audit trail |
+| 9 | Alert History | Alert database · Notification status · HITL controls · Test alerts |
 
 ---
 
-## 🤖 6-Agent Architecture
+## 🤖 7-Agent AI Architecture (Updated Pipeline)
 
-```text
-📡 DATA SOURCES → 🌊 Flood Risk Agent → 🔧 Drainage Agent → 📱 Citizen Report Agent
-→ ⚡ Response Coord Agent → 🧠 IBM Granite → 🎯 Chief Response Agent → 👤 HUMAN APPROVAL
+```
+📡 DATA SOURCES
+    → 🌊 Flood Risk Agent      (ML prediction per zone)
+    → 🔧 Drainage Agent        (drain maintenance priority)
+    → 📱 Citizen Report Agent  (multilingual NLP)
+    → 🔍 Damage Assessment Agent  ← NOW PROPERLY INTEGRATED
+    → ⚡ Response Coord Agent  (incident response plan)
+    → 🧠 IBM Granite           (AI reasoning layer)
+    → 🎯 Chief Response Agent  (unified action plan)
+    → 👤 HUMAN APPROVAL
+    → ✅ ALERT + RESPONSE
 ```
 
-### Agent Details
-
-| Agent | Responsibility |
-|-------|---------------|
-| **Flood Risk Agent** | Random Forest ML prediction per zone — 10 input features |
-| **Drainage Agent** | Drain maintenance priority scoring using actual DrainageAgent formula |
-| **Citizen Report Agent** | Multilingual NLP classification of citizen-submitted flood reports |
-| **Response Coord Agent** | Incident response plan + resource recommendations |
-| **Chief Response Agent** | Unified emergency action plan requiring human approval |
-| **Damage Assessment Agent** | Post-event damage scoring and assessment |
-
----
-
-## 🧠 Machine Learning
-
-**Model:** Random Forest (classifier + regressor)  
-**Training data:** 5,000 synthetic samples (realistic Gujarat flood parameter distributions)  
-**Features (10):** rainfall_1h, rainfall_3h, rainfall_6h, rainfall_24h, drainage_capacity, historical_flood_freq, water_level, elevation, road_density, citizen_reports  
-**Classes:** LOW / MEDIUM / HIGH / CRITICAL  
-**Artifacts:** Saved to `ml/models/` (classifier.pkl, regressor.pkl)
-
-All ML metrics (accuracy, precision, recall, F1, confusion matrix, feature importance) are **computed from the actual model on a real 20% held-out test split** — never hard-coded.
-
-> **Data transparency:** Training data is synthetic — not real government sensor measurements. Clearly disclosed throughout the application.
+| Agent | Responsibility | Data Type |
+|-------|---------------|-----------|
+| **Flood Risk Agent** | Random Forest ML prediction per zone | ML prediction |
+| **Drainage Agent** | Drain maintenance priority scoring | Rule-based domain logic |
+| **Citizen Report Agent** | Multilingual NLP classification | Agent orchestration |
+| **Damage Assessment Agent** | Post-event damage scoring | AI-assisted + rule-based |
+| **Response Coord Agent** | Incident response plan + resource recommendations | Agent orchestration |
+| **IBM Granite** | Situation summary · risk explanation · recommendations | AI reasoning |
+| **Chief Response Agent** | Unified emergency action plan (requires human approval) | Orchestration |
 
 ---
 
-## 🔍 Evidence Fusion & Explainability
+## 📡 Data Sources & Status
 
-FloodGuard AI fuses evidence from all agents before producing priority scores:
-
-| Evidence Source | Weight | Data Status |
-|----------------|--------|-------------|
-| ML Risk Score | 35% | 🔵 MODEL |
-| Rainfall Intensity | 20% | 🟢 LIVE (Open-Meteo) or 🟡 DEMO |
-| Drainage Status | 18% | 🟡 DEMO |
-| Citizen Reports | 12% | 🟠 USER SUBMITTED or 🟡 DEMO |
-| Historical Vulnerability | 10% | 🟡 DEMO |
-| Water Level Proxy | 5% | 🟡 DEMO |
-
-The **WHY THIS ZONE** explanation shows actual evidence values, ML feature importances, and significant fused factors with source badges (LIVE/DEMO/MODEL).
-
-The **WHY NOW** comparison shows score deltas between scenarios with urgency flags.
+| Source | Status | Description |
+|--------|--------|-------------|
+| **Open-Meteo** | 🟢 LIVE (no API key required) | Live weather/rainfall for 10 Gujarat cities |
+| **Water Level** | 🟡 ESTIMATED | Rainfall-derived proxy — no live sensor available for AHM/SRT |
+| **Drainage** | 🟠 STATIC/DEMO | Configured demo infrastructure data |
+| **Citizen Reports** | 🟢 REAL (user) + 🟡 DEMO (seed) | Real user submissions + labelled demo data |
+| **ML Model** | 🟡 SYNTHETIC VALIDATION | Trained on 5,000 synthetic samples |
+| **IBM Granite** | 🟢 LIVE / 🟡 FALLBACK | Live when WatsonX credentials configured |
+| **Database** | 🟢 SQLite | Persistent storage for alerts, predictions, feedback |
 
 ---
 
-## 🔐 Human-in-the-Loop
+## 🚨 Flood Alert Engine
 
-Every AI recommendation requiring intervention goes through human review:
+The Flood Alert Engine combines all evidence sources into structured alerts:
 
-```text
-AI Recommendation (priority_level + urgency)
-        ↓
-Human Decision  →  APPROVE / MODIFY / REJECT
-        ↓        ↑
-Modification note (optional)
-        ↓
-Application state updated
-        ↓
-Civic Action Log entry
-        ↓
-Audit Trail record
-```
+- **Risk levels**: GREEN / YELLOW / ORANGE / RED
+- **Expected flood-risk window**: heuristic estimate (NOT a precise hydrological prediction)
+- **De-duplication**: 30-minute cooldown per location/level
+- **Evidence fusion weights**: labelled as PROTOTYPE — not calibrated with real historical data
+- **Notifications**: Email / SMS (Twilio) / Webhook — all require explicit configuration
 
-HITL is available in both the **Emergency War Room** (quick approval panel) and **Decision Intelligence** (full approval workflow). Both write to the **same shared audit trail** (`agents/evidence_fusion.py` → `get_audit_trail()`).
-
-> AI approval buttons update application state only — no real emergency services are contacted.
+### Alert wording discipline
+- ✅ "Expected flood-risk window: 14:00–17:00 IST"
+- ❌ ~~"Flood will definitely occur at 3 PM"~~
+- ✅ "Alert generated — notification dispatched to configured channels"
+- ❌ ~~"Government authorities have been alerted"~~ (unless authorized integration exists)
 
 ---
 
-## ☁️ IBM Granite Integration
-
-**Model:** `ibm/granite-4-h-small` via WatsonX API (`us-south.ml.cloud.ibm.com`)  
-**Configure:** Set `WATSONX_API_KEY` + `WATSONX_PROJECT_ID` in `.env`
-
-The Granite layer provides:
-- Situation report generation
-- WHY this zone is risky explanations  
-- Incident classification
-- Natural language Q&A over application data
-
-**Status transparency:**
-- 🟢 **IBM GRANITE — LIVE**: Real WatsonX generation confirmed
-- ⚠️ **RATE LIMITED**: 429 backoff active — credentials valid  
-- 🟡 **GRANITE FALLBACK**: Rule-based responses (WatsonX inactive/unavailable)
-
-Fallback output is **never** presented as Granite-generated. The application remains fully functional without Granite.
-
----
-
-## 🌐 Live Data
-
-| Source | API | Status |
-|--------|-----|--------|
-| Weather | Open-Meteo (open-meteo.com) | 🟢 LIVE when reachable |
-| Rainfall blend | Live values overlaid on synthetic for NORMAL scenario | 🟢 LIVE → 🟡 DEMO fallback |
-| Drainage assets | Synthetic seed data | 🟡 DEMO |
-| Response teams | Synthetic seed data | 🟡 DEMO |
-| Citizen reports | User-submitted via portal + demo seed | 🟠 USER + 🟡 DEMO |
-
----
-
-## 🌧️ Flood Scenario Simulator
-
-The simulator supports five scenarios:
-
-| Scenario | Rainfall Multiplier | Use |
-|----------|--------------------|----|
-| Normal Rain | 1.0× | Baseline monitoring |
-| Heavy Rainfall | 2.5× | Elevated risk |
-| Extreme Rainfall | 5.0× | CRITICAL zones |
-| Citizen Surge | 2.0× | High report volume |
-| Emergency Response | 4.5× | Maximum deployment |
-
-For each scenario, the app shows:
-- **BEFORE** state snapshot
-- **SCENARIO** applied
-- **AFTER** state: critical/high zones, drains, reports, teams
-- Agent analysis outputs  
-- Granite situation report (LIVE or FALLBACK badge)
-- **SIMULATION MODE** label
-
-The **Drainage Simulation** tab uses the real `DrainageAgent.score_drain()` formula for both before and after scores — no hard-coded improvement values.
-
----
-
-## 📱 Citizen Pipeline
-
-```text
-Citizen Report  (EN / हिं / ગુ)
-        ↓
-VALIDATE (format + severity check)
-        ↓
-CLASSIFY (NLP category + priority)
-        ↓
-IBM GRANITE / FALLBACK (analysis)
-        ↓
-EVIDENCE FUSION (zone risk updated)
-        ↓
-ZONE RISK UPDATE (ML pipeline re-incorporates report count)
-        ↓
-COMMAND CENTER (operator notified)
-```
-
----
-
-## 🗺️ Geospatial Intelligence
-
-Interactive Folium map in Command Center:
-- Colour-coded risk zones (CRITICAL/HIGH/MEDIUM/LOW)
-- Live weather overlay points (when Open-Meteo is active)
-- Drainage asset markers
-- Citizen report locations
-
----
-
-## 📊 Analytics & ML Evaluation
-
-**Tab 1 — Risk Trends:** Horizontal bar chart by zone, risk level distribution donut, simulated risk trend
-
-**Tab 2 — Rainfall Analysis:** City-level rainfall comparison, zone-level breakdown
-
-**Tab 3 — Report Analytics:** Report category distribution, resolution rates
-
-**Tab 4 — Damage Assessment:** Incident severity, damage cost estimates
-
-**Tab 5 — Scenario Comparison:** Simulated reference bars + live pipeline annotation
-
-**Tab 6 — ML Model & Explainability:**
-- Accuracy, Precision, Recall, F1, MAE, 3-fold CV — all computed from real model
-- Per-class performance table
-- Normalized confusion matrix heatmap
-- Feature importance bar chart (Gini impurity from Random Forest)
-- Zone-level feature value vs importance visualization
-- Class probability bars (predict_proba output)
-
----
-
-## 🔄 Closed-Loop Learning
-
-Tracks prediction → incident → response → outcome for each zone:
-- Predicted vs actual risk score scatter plot
-- Outcome distribution (RESOLVED / MITIGATED / ONGOING / ESCALATED / FALSE_ALARM)
-- Accuracy by risk level (CRITICAL / HIGH / MEDIUM / LOW)
-- Score delta (prediction error) distribution
-- Average response time by outcome
-
-> Data is demo/simulated for the hackathon environment.
-
----
-
-## 🏗️ Project Structure
-
-```text
-floodguard-ai/
-├── app.py                          # Landing page (Streamlit entry point)
-├── pages/
-│   ├── 1_citizen_portal.py         # Citizen flood reporting
-│   ├── 2_command_center.py         # Main command dashboard + live map
-│   ├── 3_agent_monitor.py          # Agent pipeline monitor + NL query + pipeline log
-│   ├── 4_analytics.py              # Analytics + ML evaluation
-│   ├── 5_war_room.py               # Emergency HITL + Civic Action Log
-│   ├── 6_simulator.py              # Scenario simulator + drainage before/after
-│   ├── 7_learning_loop.py          # Prediction vs outcome tracking
-│   └── 8_decision_intelligence.py  # Evidence fusion + WHY + audit trail
-├── agents/
-│   ├── orchestrator.py             # Central pipeline coordinator
-│   ├── flood_risk_agent.py         # ML flood risk per zone
-│   ├── drainage_agent.py           # Drain scoring + maintenance priority
-│   ├── citizen_report_agent.py     # NLP report classification
-│   ├── response_coordination_agent.py  # Response plan generation
-│   ├── chief_response_agent.py     # Unified emergency action plan
-│   ├── damage_assessment_agent.py  # Post-event damage scoring
-│   ├── evidence_fusion.py          # Evidence fusion + audit trail
-│   ├── granite_service.py          # IBM Granite / WatsonX integration
-│   └── closed_loop_learning.py     # Prediction-outcome tracking
-├── ml/
-│   ├── flood_risk_model.py         # Random Forest classifier + regressor
-│   └── models/                     # Saved model artifacts (PKL)
-├── frontend/
-│   ├── ui_utils.py                 # Global CSS, metric cards, badges, charts
-│   └── map_component.py            # Folium flood map
-├── services/
-│   ├── live_data_manager.py        # Open-Meteo live weather integration
-│   ├── report_store.py             # Persistent citizen report storage
-│   └── weather_dashboard.py        # Weather display helpers
-├── data/
-│   └── seed_generator.py           # Synthetic data generation
-├── tests/                          # 133 tests — pytest
-├── requirements.txt
-└── .env.example                    # WATSONX_API_KEY, WATSONX_PROJECT_ID
-```
-
----
-
-## 🛠️ Setup
-
-### Requirements
-
-```bash
-pip install -r requirements.txt
-```
-
-### Configuration
+## 🔧 Environment Variables
 
 Copy `.env.example` to `.env` and configure:
 
-```env
-WATSONX_API_KEY=your_ibm_cloud_api_key
-WATSONX_PROJECT_ID=your_watsonx_project_id
+### Required (for IBM Granite)
+```
+WATSONX_API_KEY=your_api_key
+WATSONX_PROJECT_ID=your_project_id
+WATSONX_URL=https://us-south.ml.cloud.ibm.com
 ```
 
-> IBM Granite is **optional** — the application runs fully in fallback mode without credentials.
+### Optional — Notifications
+```
+# Email (SMTP)
+EMAIL_ENABLED=true
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your_email@gmail.com
+SMTP_PASSWORD=your_app_password
+ALERT_RECIPIENTS=ops@example.com,manager@example.com
 
-### Run
+# SMS (Twilio)
+SMS_ENABLED=true
+SMS_PROVIDER=twilio
+SMS_API_KEY=your_twilio_account_sid
+SMS_API_SECRET=your_twilio_auth_token
+SMS_SENDER=+1xxxxxxxxxx
+SMS_RECIPIENTS=+91xxxxxxxxxx
+
+# Webhook
+WEBHOOK_ENABLED=true
+WEBHOOK_URL=https://your-system.example.com/flood-alert
+
+# Test mode (demo only — never in production)
+TEST_NOTIFICATION_MODE=false
+```
+
+### Weather & Alerts
+```
+DEMO_MODE=true          # Set false to use live weather
+LIVE_WEATHER_ENABLED=true
+ALERT_THRESHOLD_RED=75  # Risk score threshold for RED alert
+ALERT_COOLDOWN_SECONDS=1800
+```
+
+---
+
+## 🚀 Running Locally
 
 ```bash
 cd floodguard-ai
+pip install -r requirements.txt
+cp .env.example .env
+# Edit .env with your credentials
 streamlit run app.py
 ```
 
-### Tests
+### On Streamlit Cloud
+Set secrets via App settings → Secrets (same keys as .env).
 
-```bash
-cd floodguard-ai
-python -m pytest tests/ -q
+---
+
+## 🏗️ Architecture
+
+```
+floodguard-ai/
+├── app.py                          # Landing page + navigation
+├── pages/
+│   ├── 1_citizen_portal.py         # Multilingual citizen reporting
+│   ├── 2_command_center.py         # Live command center + alerts
+│   ├── 3_agent_monitor.py          # Agent pipeline monitor
+│   ├── 4_analytics.py              # Analytics + ML evaluation
+│   ├── 5_war_room.py               # Emergency war room (HITL)
+│   ├── 6_simulator.py              # What-if scenario simulator
+│   ├── 7_learning_loop.py          # Prediction-to-outcome feedback
+│   ├── 8_decision_intelligence.py  # Evidence fusion + explainability
+│   └── 9_alert_history.py          # Alert history + notifications
+├── agents/
+│   ├── orchestrator.py             # 11-step multi-agent pipeline
+│   ├── flood_risk_agent.py         # Agent 1: ML flood prediction
+│   ├── drainage_agent.py           # Agent 2: drainage prioritization
+│   ├── citizen_report_agent.py     # Agent 3: NLP report analysis
+│   ├── damage_assessment_agent.py  # Agent 4: damage scoring (now in pipeline)
+│   ├── response_coordination_agent.py # Agent 5: response planning
+│   ├── chief_response_agent.py     # Agent 6: unified action plan
+│   ├── granite_service.py          # IBM Granite / WatsonX integration
+│   ├── evidence_fusion.py          # Decision intelligence layer
+│   └── closed_loop_learning.py     # Prediction-outcome feedback
+├── services/
+│   ├── live_weather.py             # Open-Meteo API client
+│   ├── live_data_manager.py        # Live data cache + fallback
+│   ├── water_level_service.py      # Water level abstraction (NEW)
+│   ├── flood_alert_engine.py       # Alert generation + dedup (NEW)
+│   ├── notification_service.py     # Email/SMS/Webhook dispatch (NEW)
+│   ├── database.py                 # SQLite persistence layer (NEW)
+│   ├── health_check.py             # System observability (NEW)
+│   ├── report_store.py             # Citizen report persistence
+│   └── weather_dashboard.py        # Weather UI components
+├── ml/
+│   ├── flood_risk_model.py         # Random Forest model
+│   └── models/                     # Serialised model files
+├── data/
+│   ├── seed_generator.py           # Synthetic demo data
+│   ├── user_reports.json           # Persisted citizen reports
+│   └── *.json                      # Demo scenario data
+├── backend/
+│   └── config.py                   # Credential resolution (env/secrets)
+├── frontend/
+│   ├── ui_utils.py                 # UI components + styling
+│   └── map_component.py            # Folium map builder
+├── .env.example                    # All env vars documented
+├── .gitignore                      # Protects .env + secrets
+└── requirements.txt
 ```
 
-Expected: **133 tests pass**
+---
+
+## 🔬 ML Model Details
+
+| Attribute | Value |
+|-----------|-------|
+| Algorithm | Random Forest (classifier + regressor) |
+| Training data | **5,000 SYNTHETIC samples** (not real sensor data) |
+| Validation | **Synthetic validation only** |
+| Features | 10 (rainfall, drainage, water level, elevation, historical frequency, citizen reports) |
+| Classes | LOW / MEDIUM / HIGH / CRITICAL |
+| Status | DEMO — must be retrained on verified historical data for operational use |
+
+**⚠️ Do NOT claim real-world accuracy from synthetic test metrics.**
 
 ---
 
-## 📊 Data Transparency
+## ⚖️ Evidence Fusion Weights (Prototype)
 
-All data in FloodGuard AI is clearly labelled:
+```
+ML Risk Score:            35%  ← Random Forest prediction
+Rainfall Intensity:       20%  ← Current/forecast rainfall
+Water Level Stress:       15%  ← River/channel level
+Drainage Stress:          15%  ← Capacity/blockage
+Citizen Report Signals:   10%  ← Report volume & severity
+Historical Vulnerability:  5%  ← Historical flood frequency
+```
 
-| Badge | Meaning |
-|-------|---------|
-| 🟢 **LIVE** | Live data from Open-Meteo API |
-| 🔵 **MODEL** | ML Random Forest predictions |
-| 🟠 **USER SUBMITTED** | Real citizen reports entered via portal |
-| 🟡 **DEMO / SIMULATED** | Synthetic seed data (drains, teams, incidents) |
-
-The application never presents demo data as live government data.
-
----
-
-## ⚠️ Disclaimer
-
-FloodGuard AI is a **hackathon demonstration system**.
-
-- AI recommendations are decision-support tools only — not authorised emergency orders
-- Human approval buttons update application state only — no real emergency services are contacted
-- Drainage/team/incident data is synthetic — not real municipal infrastructure data
-- ML training data is synthetic — not real government sensor measurements
-- The system is not validated for operational emergency response use
+**⚠️ These are PROTOTYPE weights** — not scientifically calibrated with real historical data.
 
 ---
 
-## 🏆 Hackathon Features Summary
+## 📋 Known Limitations
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| ML Flood Risk Prediction | ✅ | Random Forest, 5k synthetic samples, real metrics |
-| 6-Agent Multi-Agent System | ✅ | Orchestrator + 6 specialised agents |
-| IBM Granite Integration | ✅ | Live WatsonX + graceful fallback |
-| Evidence Fusion | ✅ | 6-source weighted fusion with explanations |
-| WHY THIS ZONE / WHY NOW | ✅ | Feature importance + delta comparison |
-| Human-in-the-Loop | ✅ | Approve/Modify/Reject + modification notes |
-| Audit Trail | ✅ | Shared across War Room + Decision Intelligence |
-| Civic Action Log | ✅ | Timeline view of all HITL decisions |
-| Citizen Pipeline | ✅ | EN/हिं/ગુ + 7-step pipeline visualization |
-| Live Weather | ✅ | Open-Meteo blended into NORMAL scenario |
-| Flood Simulator | ✅ | 5 scenarios + before/after + drainage sim |
-| Drainage Before/After | ✅ | Real DrainageAgent scoring formula |
-| Forecast Timeline | ✅ | +0/30/60/90/120 min heatmap |
-| Geospatial Map | ✅ | Folium with risk zones + weather overlay |
-| Agent Execution Log | ✅ | Live pipeline trace in Agent Monitor |
-| ML Evaluation | ✅ | Confusion matrix, F1, CV, feature importance |
-| Closed-Loop Learning | ✅ | Prediction vs outcome tracking |
-| Data Source Transparency | ✅ | LIVE/MODEL/USER/DEMO badges throughout |
+1. **Water level**: No live river/drainage sensor API available for Ahmedabad/Surat. Values are rainfall-derived estimates.
+2. **ML model**: Trained on synthetic data. Real-world accuracy is unknown until verified historical data is used.
+3. **Evidence fusion weights**: Prototype values — require calibration with historical flood data.
+4. **Risk window timing**: Heuristic estimate only. Not a physically accurate hydrological/hydraulic model.
+5. **Drainage data**: Demo infrastructure data, not real municipal sensor readings.
+6. **No government integration**: System generates alerts but does NOT contact emergency services unless an authorized integration is explicitly configured.
+7. **Database persistence**: SQLite — ephemeral on Streamlit Cloud between deployments.
 
 ---
 
-*FloodGuard AI — Agentic AI for Urban Flood Management | Ahmedabad & Surat, Gujarat*
+## 🔮 Future Scope
+
+- [ ] Connect to CWC (Central Water Commission) official flood forecasts when API access is available
+- [ ] Integrate GloFAS river discharge forecasts for major rivers
+- [ ] Retrain ML model on verified IMD/AMC/SMC historical flood data
+- [ ] Calibrate evidence fusion weights with historical flood outcomes
+- [ ] Replace drainage demo data with actual municipal infrastructure data
+- [ ] Integrate authorized government notification systems
+- [ ] Add IoT sensor feed support in `water_level_service.py`
+- [ ] PostgreSQL / Supabase for production persistence
+- [ ] Hydraulic model integration for physically accurate flood timing
+
+---
+
+## 🔐 Security
+
+- All credentials stored in `.env` / Streamlit secrets — never in code
+- `.env` is in `.gitignore` — never committed
+- No hard-coded API keys, tokens, or passwords in source code
+- Notification credentials fetched at call-time (not module-level cached)
+
+---
+
+*FloodGuard AI is an AI-assisted urban flood-risk and decision-support prototype. It does not constitute an official government emergency management system. All recommendations require human verification.*

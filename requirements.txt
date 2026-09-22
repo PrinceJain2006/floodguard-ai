@@ -15,6 +15,9 @@ requests==2.32.3
 
 python-dotenv==1.0.1
 
+# SMS notifications (Twilio) — optional, only needed if SMS_ENABLED=true
+twilio>=8.0.0
+
 pytest>=7.4
 
 Pillow==11.1.0

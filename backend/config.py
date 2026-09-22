@@ -114,6 +114,48 @@ LIVE_DATA_REQUEST_TIMEOUT: int = int(_secret("LIVE_DATA_REQUEST_TIMEOUT", "8"))
 LIVE_DATA_STALE_THRESHOLD: int = int(_secret("LIVE_DATA_STALE_THRESHOLD", "1800"))  # 30 min
 
 # ──────────────────────────────────────────────
+# Flood Alert Engine
+# ──────────────────────────────────────────────
+ALERT_THRESHOLD_GREEN:  float = float(_secret("ALERT_THRESHOLD_GREEN",  "25"))
+ALERT_THRESHOLD_YELLOW: float = float(_secret("ALERT_THRESHOLD_YELLOW", "40"))
+ALERT_THRESHOLD_ORANGE: float = float(_secret("ALERT_THRESHOLD_ORANGE", "60"))
+ALERT_THRESHOLD_RED:    float = float(_secret("ALERT_THRESHOLD_RED",    "75"))
+ALERT_COOLDOWN_SECONDS: int   = int(_secret("ALERT_COOLDOWN_SECONDS", "1800"))
+
+# ──────────────────────────────────────────────
+# Email notifications (optional)
+# ──────────────────────────────────────────────
+EMAIL_ENABLED:    bool = _secret("EMAIL_ENABLED",    "false").lower() == "true"
+SMTP_HOST:        str  = _secret("SMTP_HOST")
+SMTP_PORT:        int  = int(_secret("SMTP_PORT", "587"))
+SMTP_USERNAME:    str  = _secret("SMTP_USERNAME")
+# SMTP_PASSWORD: never read here — always fetched at call time via _secret()
+# to avoid caching credentials in the module-level namespace.
+SMTP_FROM:        str  = _secret("SMTP_FROM")
+ALERT_RECIPIENTS: str  = _secret("ALERT_RECIPIENTS")
+
+# ──────────────────────────────────────────────
+# SMS notifications (optional — Twilio)
+# ──────────────────────────────────────────────
+SMS_ENABLED:    bool = _secret("SMS_ENABLED",    "false").lower() == "true"
+SMS_PROVIDER:   str  = _secret("SMS_PROVIDER",   "twilio")
+# SMS_API_KEY / SMS_API_SECRET: fetched at call time — not cached here.
+SMS_SENDER:     str  = _secret("SMS_SENDER")
+SMS_RECIPIENTS: str  = _secret("SMS_RECIPIENTS")
+
+# ──────────────────────────────────────────────
+# Webhook notifications (optional)
+# ──────────────────────────────────────────────
+WEBHOOK_ENABLED: bool = _secret("WEBHOOK_ENABLED", "false").lower() == "true"
+WEBHOOK_URL:     str  = _secret("WEBHOOK_URL")
+# WEBHOOK_SECRET: fetched at call time — not cached here.
+
+# ──────────────────────────────────────────────
+# Test mode
+# ──────────────────────────────────────────────
+TEST_NOTIFICATION_MODE: bool = _secret("TEST_NOTIFICATION_MODE", "false").lower() == "true"
+
+# ──────────────────────────────────────────────
 # Paths
 # ──────────────────────────────────────────────
 BASE_DIR: Path      = Path(__file__).parent.parent

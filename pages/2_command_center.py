@@ -46,6 +46,10 @@ if "rejected_recs" not in st.session_state:
     st.session_state.rejected_recs = set()
 if "pipeline_running" not in st.session_state:
     st.session_state.pipeline_running = False
+if "auto_refresh" not in st.session_state:
+    st.session_state.auto_refresh = False
+if "refresh_interval" not in st.session_state:
+    st.session_state.refresh_interval = 300   # seconds
 
 
 @st.cache_resource
@@ -106,6 +110,46 @@ with st.sidebar:
         Ahmedabad &amp; Surat only
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("### ⏱️ Auto-Refresh")
+    st.session_state.auto_refresh = st.toggle(
+        "Enable auto-refresh",
+        value=st.session_state.auto_refresh,
+        key="auto_refresh_toggle",
+        help="Periodically fetch live weather and re-run pipeline",
+    )
+    if st.session_state.auto_refresh:
+        st.session_state.refresh_interval = st.select_slider(
+            "Interval (seconds)",
+            options=[60, 120, 300, 600, 900],
+            value=st.session_state.refresh_interval,
+            key="refresh_interval_slider",
+        )
+        st.caption(f"🔄 Refresh every {st.session_state.refresh_interval}s")
+        # Use fragment-safe auto-rerun: store last refresh time
+        import time as _time
+        _last_refresh_key = "last_auto_refresh"
+        if _last_refresh_key not in st.session_state:
+            st.session_state[_last_refresh_key] = _time.time()
+        _elapsed = _time.time() - st.session_state[_last_refresh_key]
+        if _elapsed >= st.session_state.refresh_interval:
+            st.session_state[_last_refresh_key] = _time.time()
+            try:
+                from services.live_data_manager import get_live_data_manager as _get_ldm_ar
+                _get_ldm_ar().refresh(force=True)
+                orch.run_pipeline(
+                    scenario=st.session_state.scenario,
+                    city=st.session_state.city_filter,
+                )
+            except Exception:
+                pass
+            st.rerun()
+        _remaining = max(0, int(st.session_state.refresh_interval - _elapsed))
+        st.markdown(
+            f'<div style="font-size:0.68rem;color:#64748b">Next refresh in {_remaining}s</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
     role = st.selectbox("👤 Viewing as", ["Municipal Operator", "Administrator", "Observer"])
@@ -256,6 +300,58 @@ with k7: metric_card("Active Incidents", str(len(incidents)), color="#7c3aed", i
 with k8: metric_card("Teams Available", str(available_teams), color="#22c55e", icon="🚒")
 
 st.markdown("<br>", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
+# Active Flood Alerts Panel
+# ──────────────────────────────────────────────
+rich_alerts = state.get("rich_alerts", [])
+if rich_alerts:
+    st.markdown("""
+    <div style="background:rgba(239,68,68,0.08);border:2px solid #ef4444;border-radius:10px;
+                padding:0.8rem 1.2rem;margin-bottom:0.75rem">
+        <div style="font-size:0.8rem;font-weight:800;color:#fca5a5;margin-bottom:0.6rem">
+            🚨 ACTIVE FLOOD ALERTS
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    for _ra in rich_alerts[:3]:
+        _rl = _ra.get("risk_level","GREEN")
+        _rl_colors = {"RED":"#ef4444","ORANGE":"#f97316","YELLOW":"#eab308","GREEN":"#22c55e"}
+        _rl_c = _rl_colors.get(_rl,"#22c55e")
+        _is_sim = _ra.get("is_simulation",False)
+        _badge = "🟣 SIMULATION" if _is_sim else "🟢 LIVE"
+        _badge_bg = "rgba(124,58,237,0.15)" if _is_sim else "rgba(34,197,94,0.15)"
+        st.markdown(f"""
+        <div style="background:#1a1d27;border:1px solid {_rl_c}40;border-left:4px solid {_rl_c};
+                    border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.4rem">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:0.4rem">
+                <div>
+                    <div style="font-size:0.85rem;font-weight:700;color:{_rl_c}">
+                        {_rl} ALERT — {_ra.get('location','Unknown')}
+                    </div>
+                    <div style="font-size:0.73rem;color:#94a3b8;margin-top:0.2rem">
+                        Score: {_ra.get('risk_score',0):.0f}/100 &nbsp;·&nbsp;
+                        Confidence: {round(_ra.get('confidence',0)*100)}% &nbsp;·&nbsp;
+                        Window: <span style="color:#fde68a">{_ra.get('expected_window','Unknown')[:50]}</span>
+                    </div>
+                </div>
+                <div style="display:flex;gap:0.3rem;align-items:center">
+                    <span style="background:{_badge_bg};color:{'#c4b5fd' if _is_sim else '#bbf7d0'};
+                                 font-size:0.62rem;padding:2px 7px;border-radius:3px;font-weight:600">
+                        {_badge}
+                    </span>
+                    <span style="font-size:0.65rem;color:#475569">{_ra.get('timestamp','')[:16]} UTC</span>
+                </div>
+            </div>
+            <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">
+                {_ra.get('recommended_action','')[:120]}…
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    if len(rich_alerts) > 3:
+        st.caption(f"+ {len(rich_alerts)-3} more alerts — see Alert History page")
+    if st.button("📋 View Alert History & Notifications", key="goto_alert_history"):
+        st.switch_page("pages/9_alert_history.py")
 
 # ──────────────────────────────────────────────
 # Live Agent Activity Panel (above tabs)
@@ -1351,6 +1447,83 @@ with tab2:
                           <div style="font-size:0.6rem;color:#a78bfa">{int(_dprob)}%</div>
                         </div>
                         """, unsafe_allow_html=True)
+
+            # ── Water Level Panel ──────────────────────────────────────────
+            st.markdown("---")
+            section_header(
+                "💧 WATER LEVEL STATUS",
+                '<span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;'
+                'padding:1px 6px;border-radius:3px;font-weight:700">🟡 ESTIMATED</span>',
+            )
+            st.markdown("""
+            <div style="background:rgba(234,179,8,0.07);border:1px solid #eab30840;
+                        border-radius:8px;padding:0.5rem 0.8rem;margin-bottom:0.7rem;
+                        font-size:0.75rem;color:#fde68a">
+                ⚠️ <strong>ESTIMATED</strong> — Real-time river/drainage sensor data is not
+                currently available for Ahmedabad/Surat. Water level values are
+                <em>derived from Open-Meteo rainfall data via a simple runoff proxy</em>
+                and are NOT direct measurements. Do not use for official flood management.
+            </div>
+            """, unsafe_allow_html=True)
+            try:
+                from services.water_level_service import get_water_level_service as _get_wls
+                _wls_svc = _get_wls()
+                # Build rainfall lookup from current pipeline data
+                _rf_lookup = {}
+                for _rf in rainfall_data:
+                    _city = _rf.get("city", "")
+                    if _city and _city not in _rf_lookup:
+                        _rf_lookup[_city] = {
+                            "rainfall_1h":  _rf.get("rainfall_1h", 0.0),
+                            "rainfall_6h":  _rf.get("rainfall_6h", 0.0),
+                            "rainfall_24h": _rf.get("rainfall_24h", 0.0),
+                        }
+                _wl_records = _wls_svc.get_all_locations(rainfall_by_city=_rf_lookup)
+                if _wl_records:
+                    _wl_cols = st.columns(len(_wl_records))
+                    for _wl_col, _wl_rec in zip(_wl_cols, _wl_records):
+                        with _wl_col:
+                            _lvl   = _wl_rec.get("level_m", 0.0)
+                            _tier  = _wl_rec.get("tier", "NORMAL")
+                            _warn  = _wl_rec.get("warning_level_m", 7.5)
+                            _dang  = _wl_rec.get("danger_level_m", 9.0)
+                            _norm  = _wl_rec.get("normal_level_m", 5.0)
+                            _above = _wl_rec.get("above_normal_m", 0.0)
+                            _tier_c = {
+                                "EXTREME": "#ef4444", "DANGER": "#f97316",
+                                "WARNING": "#eab308", "NORMAL": "#22c55e",
+                            }.get(_tier, "#22c55e")
+                            _pct = min(100, (_lvl / max(_dang + 1, 1)) * 100)
+                            st.markdown(f"""
+                            <div style="background:#1a1d27;border:1px solid {_tier_c}40;
+                                        border-top:3px solid {_tier_c};border-radius:8px;
+                                        padding:0.8rem 0.9rem;text-align:center">
+                                <div style="font-size:0.72rem;font-weight:700;color:#94a3b8;
+                                            margin-bottom:0.3rem;text-transform:uppercase">
+                                    {_wl_rec.get('location','')[:25]}
+                                </div>
+                                <div style="font-size:1.6rem;font-weight:800;color:{_tier_c}">
+                                    {_lvl:.2f}<span style="font-size:0.85rem;color:#64748b">m</span>
+                                </div>
+                                <div style="background:{_tier_c};color:white;font-size:0.65rem;
+                                            font-weight:700;padding:1px 8px;border-radius:10px;
+                                            display:inline-block;margin:0.3rem 0">{_tier}</div>
+                                <div style="background:#111827;border-radius:6px;height:8px;
+                                            margin:0.4rem 0;overflow:hidden">
+                                    <div style="width:{_pct:.0f}%;background:{_tier_c};
+                                                height:100%;border-radius:6px"></div>
+                                </div>
+                                <div style="font-size:0.62rem;color:#64748b;line-height:1.5">
+                                    Normal: {_norm:.1f}m &nbsp;|&nbsp;
+                                    Warning: {_warn:.1f}m &nbsp;|&nbsp;
+                                    Danger: {_dang:.1f}m<br>
+                                    Above normal: +{_above:.2f}m<br>
+                                    <span style="color:#eab308">🟡 ESTIMATED — not a sensor reading</span>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+            except Exception as _wl_exc:
+                st.warning(f"Water level service unavailable: {_wl_exc}")
 
             # ── Footer note ────────────────────────────────────────────────
             st.markdown(
