@@ -860,25 +860,25 @@ else:
                  "rgba(239,68,68,0.05)" if status == "ERROR" else \
                  "rgba(59,130,246,0.04)"
 
-        rows_html += f"""
-        <div style="display:grid;grid-template-columns:80px 140px 100px 1fr;gap:0.5rem;
-                    padding:0.4rem 0.7rem;border-bottom:1px solid #1e2440;
-                    font-size:0.72rem;align-items:center;background:{row_bg}">
-            <div style="color:#475569;font-family:monospace">{time_str}</div>
-            <div style="color:#e2e8f0;font-weight:600">{icon} {step[:16]}</div>
-            <div>
-                <span style="background:rgba({int(s_color[1:3],16) if len(s_color)==7 else 59},
-                             {int(s_color[3:5],16) if len(s_color)==7 else 130},
-                             {int(s_color[5:7],16) if len(s_color)==7 else 246},0.15);
-                             border:1px solid {s_color}40;color:{s_color};
-                             padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">
-                    {status}
-                </span>
-            </div>
-            <div style="color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                 title="{details}">{details[:90]}</div>
-        </div>
-        """
+        if len(s_color) == 7:
+            sr, sg, sb = int(s_color[1:3], 16), int(s_color[3:5], 16), int(s_color[5:7], 16)
+        else:
+            sr, sg, sb = 59, 130, 246
+        badge_bg = f"rgba({sr},{sg},{sb},0.15)"
+
+        rows_html += (
+            f'<div style="display:grid;grid-template-columns:80px 140px 100px 1fr;gap:0.5rem;'
+            f'padding:0.4rem 0.7rem;border-bottom:1px solid #1e2440;'
+            f'font-size:0.72rem;align-items:center;background:{row_bg}">'
+            f'<div style="color:#475569;font-family:monospace">{time_str}</div>'
+            f'<div style="color:#e2e8f0;font-weight:600">{icon} {step[:16]}</div>'
+            f'<div><span style="background:{badge_bg};border:1px solid {s_color}40;color:{s_color};'
+            f'padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:700">'
+            f'{status}</span></div>'
+            f'<div style="color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"'
+            f' title="{details}">{details[:90]}</div>'
+            f'</div>\n'
+        )
 
     st.markdown(f"""
     <div style="border:1px solid #2d3148;border-radius:0 0 6px 6px;

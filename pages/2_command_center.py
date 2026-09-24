@@ -405,20 +405,21 @@ with st.expander("⚡ LIVE AGENT ACTIVITY — Pipeline Execution Trace", expande
                         badge = '<span style="background:#2a1a00;color:#fdba74;font-size:0.6rem;padding:1px 4px;border-radius:3px;font-weight:700">FALLBACK</span>'
                 else:
                     badge = ""
-                st.markdown(f"""
-                <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:6px;
-                            padding:0.4rem 0.6rem;margin-bottom:0.3rem">
-                    <div style="display:flex;align-items:center;gap:0.4rem">
-                        <span>{ag_icon}</span>
-                        <span style="font-size:0.72rem;font-weight:600;color:#e2e8f0;flex:1">{ag_name}</span>
-                        {badge}
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.2rem">
-                        <span style="color:{st_color};font-size:0.65rem;font-weight:700">● {st_val}</span>
-                    </div>
-                    {f'<div style="font-size:0.62rem;color:#64748b;margin-top:0.15rem">{detail}</div>' if detail else ''}
-                </div>
-                """, unsafe_allow_html=True)
+                detail_row = f'<div style="font-size:0.62rem;color:#64748b;margin-top:0.15rem">{detail}</div>' if detail else ''
+                st.markdown(
+                    f'<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.3rem">'
+                    f'<div style="display:flex;align-items:center;gap:0.4rem">'
+                    f'<span>{ag_icon}</span>'
+                    f'<span style="font-size:0.72rem;font-weight:600;color:#e2e8f0;flex:1">{ag_name}</span>'
+                    f'{badge}'
+                    f'</div>'
+                    f'<div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.2rem">'
+                    f'<span style="color:{st_color};font-size:0.65rem;font-weight:700">&#9679; {st_val}</span>'
+                    f'</div>'
+                    f'{detail_row}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
 # ──────────────────────────────────────────────
 # IBM Granite Flow Indicator
