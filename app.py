@@ -99,7 +99,7 @@ except Exception:
     _hp_ready = False
 
 st.markdown(f"""
-<div class="cmd-hero">
+<div style="background:linear-gradient(135deg,#0a0f1e 0%,#0f1a2e 50%,#0a1020 100%);border:1px solid #1e3a5f;border-radius:12px;padding:2.5rem 2rem 2rem;margin-bottom:1.5rem;position:relative;overflow:hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
     <div>
       <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem">
@@ -256,7 +256,7 @@ agents = [
 for col, (emoji, name, color, desc) in zip(cols, agents):
     with col:
         st.markdown(f"""
-        <div class="cmd-agent-chip" style="border-top:2px solid {color}">
+        <div style="background:#0f1420;border:1px solid #1e3a5f;border-radius:8px;padding:0.6rem 0.8rem;text-align:center;border-top:2px solid {color}">
             <div style="font-size:1.5rem;margin-bottom:0.2rem">{emoji}</div>
             <div style="font-size:0.72rem;font-weight:700;color:#e2e8f0;margin-bottom:0.2rem">{name}</div>
             <div style="font-size:0.64rem;color:#475569">{desc}</div>

@@ -215,7 +215,6 @@ st.markdown(f"""
 <div style="background:linear-gradient(135deg,#080c18 0%,#0d1428 50%,#080c18 100%);
             border:2px solid {_sys_color};border-radius:14px;
             padding:1.2rem 1.5rem;margin-bottom:0.75rem;position:relative;overflow:hidden">
-    <!-- Color accent line -->
     <div style="position:absolute;top:0;left:0;right:0;height:3px;
                 background:linear-gradient(90deg,{_sys_color},{_sys_color}88,transparent)"></div>
     <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap">
@@ -229,7 +228,6 @@ st.markdown(f"""
                 &nbsp;·&nbsp; {_scen_info['emoji']} <strong style="color:#e2e8f0">{_scen_info['label']}</strong>
                 &nbsp;·&nbsp; City: <strong style="color:#e2e8f0">{st.session_state.city_filter}</strong>
             </div>
-            <!-- Key live metrics inline -->
             <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem">
                 <span style="background:rgba(239,68,68,0.15);border:1px solid #ef444440;
                              color:#fca5a5;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
@@ -572,8 +570,6 @@ with tab1:
             st.markdown(f"""
             <div style="background:{_sel_bg};border:1px solid {_sel_rc}40;
                         border-top:3px solid {_sel_rc};border-radius:8px;padding:0.8rem;">
-
-              <!-- Header: zone name + level badge -->
               <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.4rem">
                 <div>
                   <div style="font-weight:800;color:#e2e8f0;font-size:0.9rem">{_sel_pred['area']}</div>
@@ -582,8 +578,6 @@ with tab1:
                 <div style="background:{_sel_rc};color:white;padding:2px 8px;
                             border-radius:8px;font-size:0.68rem;font-weight:700">{_sel_rl}</div>
               </div>
-
-              <!-- FLOOD RISK SCORE -->
               <div style="font-size:0.6rem;color:#64748b;text-transform:uppercase;
                           letter-spacing:0.07em;margin-bottom:0.1rem">FLOOD RISK SCORE</div>
               <div style="font-size:1.9rem;font-weight:900;color:{_sel_rc};line-height:1;margin-bottom:0.05rem">
@@ -593,8 +587,6 @@ with tab1:
               <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.6rem">
                 confidence: {_sel_pred.get('confidence', 0):.0%} &nbsp;|&nbsp; 🔵 Random Forest ML
               </div>
-
-              <!-- Evidence grid -->
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;font-size:0.72rem;margin-bottom:0.5rem">
                 <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
                   <div style="color:#64748b;font-size:0.58rem">🌧️ RAINFALL 1H</div>
@@ -621,19 +613,11 @@ with tab1:
                   <div style="color:#94a3b8;font-weight:700">{_sel_feats.get('elevation', 0):.0f} m</div>
                 </div>
               </div>
-
-              <!-- Risk factors -->
               <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.25rem;
                           text-transform:uppercase;font-weight:700">🤖 ML Risk Factors</div>
               {"".join(["<div style='display:flex;align-items:center;gap:0.4rem;padding:1px 0;font-size:0.72rem'><span style='color:" + ("#ef4444" if any(w in r.lower() for w in ["extreme","critical","dangerously"]) else "#f97316" if "high" in r.lower() else "#eab308") + "'>▸</span><span style='color:#94a3b8'>" + r + "</span></div>" for r in _sel_pred.get("main_reasons", [])[:3]])}
-
-              <!-- Feature importance -->
               {('<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440"><div style="font-size:0.62rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">🔬 Feature Importance (RF)</div>' + _fi_html + '</div>') if _sel_top_fi else ''}
-
-              <!-- Probabilities -->
               {('<div style="margin-top:0.4rem;padding-top:0.35rem;border-top:1px solid #1e2440"><div style="font-size:0.62rem;color:#64748b;margin-bottom:0.25rem;text-transform:uppercase;font-weight:700">📊 Class Probabilities</div>' + _prob_html + '</div>') if _sel_probs else ''}
-
-              <!-- Recommended action -->
               <div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440">
                 <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;
                             text-transform:uppercase;font-weight:700">📋 AI Action</div>
@@ -662,16 +646,21 @@ with tab1:
         if alerts:
             st.markdown("---")
             section_header("ACTIVE ALERTS", model_badge())
+            _cc_alert_styles = {
+                "CRITICAL": "background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.6);border-left:4px solid #ef4444",
+                "HIGH":     "background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.6);border-left:4px solid #f97316",
+            }
             for alert in alerts[:3]:
                 level = alert.get("alert_level", "INFO")
-                cls = {"CRITICAL": "alert-critical", "HIGH": "alert-high"}.get(level, "alert-info")
-                st.markdown(f"""
-                <div class="{cls}" style="font-size:0.78rem">
-                    <b>{alert.get('title','')}</b><br>
-                    <span style="color:#cbd5e1">{alert.get('message','')[:100]}</span>
-                    <div style="font-size:0.65rem;color:#64748b;margin-top:0.2rem">🔵 MODEL GENERATED — SIMULATED DATA</div>
-                </div>
-                """, unsafe_allow_html=True)
+                _astyle = _cc_alert_styles.get(level, "background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.5);border-left:4px solid #3b82f6")
+                st.markdown(
+                    f'<div style="{_astyle};border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem;font-size:0.78rem">'
+                    f'<b>{alert.get("title","")}</b><br>'
+                    f'<span style="color:#cbd5e1">{alert.get("message","")[:100]}</span>'
+                    f'<div style="font-size:0.65rem;color:#64748b;margin-top:0.2rem">&#x1F535; MODEL GENERATED &#x2014; SIMULATED DATA</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
 # ── Tab 3: Incidents ──────────────────────────
 with tab3:
@@ -787,7 +776,7 @@ with tab4:
                 status_html = '<span style="background:#eab308;color:#1a1d27;padding:2px 8px;border-radius:8px;font-size:0.7rem">⏳ PENDING</span>'
 
             st.markdown(f"""
-            <div class="fg-card" style="border-left:4px solid {p_color}">
+            <div style="background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;border-left:4px solid {p_color}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
                     <div>
                         <span style="background:{p_color};color:{'black' if priority=='MEDIUM' else 'white'};
@@ -863,7 +852,7 @@ with tab4:
     situation_report = state.get("situation_report", "")
     if situation_report:
         st.markdown(f"""
-        <div class="fg-card-blue" style="font-family:monospace;font-size:0.82rem;
+        <div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;font-family:monospace;font-size:0.82rem;
                     white-space:pre-wrap;color:#e2e8f0;line-height:1.6">
 {situation_report}
         </div>
@@ -923,7 +912,7 @@ with tab5:
                 score = drain.get("computed_risk_score", 0)
                 cond = drain.get("condition", "UNKNOWN")
                 st.markdown(f"""
-                <div class="fg-card-danger" style="padding:0.7rem;text-align:center">
+                <div style="background:#150b0b;border:1px solid #7f1d1d;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;padding:0.7rem;text-align:center">
                     <div style="font-size:1.3rem;font-weight:800;color:#ef4444">{score:.0f}</div>
                     <div style="font-size:0.7rem;color:#94a3b8">Risk Score</div>
                     <div style="font-weight:700;color:#e2e8f0;font-size:0.8rem;margin:0.3rem 0">{drain.get('drain_id')}</div>
@@ -1566,36 +1555,37 @@ with tab_granite:
             gstatus_color = "#64748b"
             gstatus_label = "⚙ GRANITE FALLBACK MODE"
             gstatus_icon  = "⚙"
-        st.markdown(f"""
-        <div class="fg-metric">
-            <div class="fg-metric-value" style="color:{gstatus_color};font-size:1.0rem">
-                {gstatus_icon} {gstatus_label}
-            </div>
-            <div class="fg-metric-label">IBM Granite Status</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="background:#131620;border:1px solid #1e2440;border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.5rem;text-align:center">'
+            f'<div style="font-size:1.0rem;font-weight:700;color:{gstatus_color};margin-bottom:0.15rem">{gstatus_icon} {gstatus_label}</div>'
+            f'<div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em">IBM Granite Status</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
     with col_gst2:
-        st.markdown(f"""
-        <div class="fg-metric">
-            <div class="fg-metric-value" style="color:#a78bfa;font-size:0.85rem">{_g_model}</div>
-            <div class="fg-metric-label">Model</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="background:#131620;border:1px solid #1e2440;border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.5rem;text-align:center">'
+            f'<div style="font-size:0.85rem;font-weight:700;color:#a78bfa;margin-bottom:0.15rem">{_g_model}</div>'
+            f'<div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em">Model</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
     with col_gst3:
         if _g_avail2:
-            _g_endpoint = "🟢 WatsonX REST API — Live"
+            _g_endpoint = "&#x1F7E2; WatsonX REST API &#x2014; Live"
         elif _g_rate2:
-            _g_endpoint = "🟠 WatsonX REST API — Rate Limited"
+            _g_endpoint = "&#x1F7E0; WatsonX REST API &#x2014; Rate Limited"
         elif _g_config2:
-            _g_endpoint = "🔴 WatsonX — Configuration Error"
+            _g_endpoint = "&#x1F534; WatsonX &#x2014; Configuration Error"
         else:
-            _g_endpoint = "⚙ Rule-based fallback"
-        st.markdown(f"""
-        <div class="fg-metric">
-            <div class="fg-metric-value" style="color:#64748b;font-size:0.85rem">{_g_endpoint}</div>
-            <div class="fg-metric-label">Inference Endpoint</div>
-        </div>
-        """, unsafe_allow_html=True)
+            _g_endpoint = "&#x2699; Rule-based fallback"
+        st.markdown(
+            f'<div style="background:#131620;border:1px solid #1e2440;border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.5rem;text-align:center">'
+            f'<div style="font-size:0.85rem;font-weight:700;color:#64748b;margin-bottom:0.15rem">{_g_endpoint}</div>'
+            f'<div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em">Inference Endpoint</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
@@ -1651,7 +1641,7 @@ with tab_granite:
             _rl = _zone_g["risk_level"]
             _rc = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_rl, "#94a3b8")
             st.markdown(f"""
-            <div class="fg-card" style="border-top:3px solid {_rc}">
+            <div style="background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;border-top:3px solid {_rc}">
               <div style="font-size:1.1rem;font-weight:800;color:{_rc};margin-bottom:0.3rem">
                 {risk_level_indicator(_rl)}
               </div>
@@ -1689,57 +1679,75 @@ with tab_granite:
         with _zone_explain_col:
             # Generate or show cached Granite explanation for this zone
             _reasons_g = _zone_g.get("main_reasons", [])
-            _probs_g = _zone_g.get("probabilities", {})
+            _probs_g   = _zone_g.get("probabilities", {})
+            _rec_action_g = _zone_g.get("recommended_action", "")
 
+            # Build reason rows as a string (avoids split st.markdown calls)
+            _reasons_html = ""
+            for _r in _reasons_g[:5]:
+                _r_color = (
+                    "#ef4444" if "extreme" in _r.lower() or "critical" in _r.lower()
+                    else "#f97316" if "high" in _r.lower()
+                    else "#eab308"
+                )
+                _reasons_html += (
+                    f'<div style="padding:0.2rem 0;font-size:0.82rem;color:{_r_color}">▸ {_r}</div>'
+                )
+
+            # Build probability bars as a string
+            _probs_html = ""
+            if _probs_g:
+                _probs_html += (
+                    '<div style="font-size:0.75rem;font-weight:700;color:#64748b;'
+                    'margin:0.5rem 0 0.3rem;text-transform:uppercase">'
+                    'Model Confidence Distribution</div>'
+                )
+                for _lvl in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+                    _pv = _probs_g.get(_lvl, 0)
+                    _pc = {"CRITICAL": "#ef4444", "HIGH": "#f97316",
+                           "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_lvl, "#94a3b8")
+                    _probs_html += (
+                        f'<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem">'
+                        f'<div style="min-width:70px;font-size:0.72rem;font-weight:600;color:{_pc}">{_lvl}</div>'
+                        f'<div style="flex:1;background:#1e2440;border-radius:3px;height:10px">'
+                        f'<div style="width:{_pv*100:.0f}%;background:{_pc};height:100%;border-radius:3px"></div>'
+                        f'</div>'
+                        f'<div style="min-width:40px;font-size:0.72rem;color:#94a3b8;text-align:right">{_pv:.0%}</div>'
+                        f'</div>'
+                    )
+
+            # Build recommended action block as a string
+            _rec_html = ""
+            if _rec_action_g:
+                _rec_html = (
+                    '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);'
+                    'border-radius:6px;padding:0.6rem 0.8rem;margin-top:0.5rem">'
+                    '<div style="font-size:0.7rem;font-weight:700;color:#94a3b8;margin-bottom:0.2rem">'
+                    'AI RECOMMENDED ACTION</div>'
+                    f'<div style="font-size:0.82rem;color:#fca5a5">{_rec_action_g}</div>'
+                    '</div>'
+                )
+
+            # Single consolidated st.markdown call — no split/orphaned tags
+            _expl_bg     = "#060e10" if _g_avail2 else "#0a0a0a"
+            _expl_border = "#22c55e" if _g_avail2 else "#1e2440"
+            _expl_title  = "🧠 IBM GRANITE EXPLANATION" if _g_avail2 else "⚙ RULE-BASED EXPLANATION (Granite not connected)"
             st.markdown(f"""
-            <div style="background:{'#060e10' if _g_avail2 else '#0a0a0a'};
-                        border:1px solid {'#22c55e' if _g_avail2 else '#1e2440'};
+            <div style="background:{_expl_bg};border:1px solid {_expl_border};
                         border-radius:8px;padding:0.9rem;margin-bottom:0.5rem">
               <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase">
-                {'🧠 IBM GRANITE EXPLANATION' if _g_avail2 else '⚙ RULE-BASED EXPLANATION (Granite not connected)'}
+                {_expl_title}
               </div>
               <div style="font-size:0.85rem;color:#e2e8f0;margin-bottom:0.5rem;font-weight:600">
                 WHY IS {_zone_g['area'].upper()} CRITICAL/HIGH RISK?
               </div>
               <div style="font-size:0.82rem;color:#94a3b8;line-height:1.6">
+                {_reasons_html}
+              </div>
+            </div>
+            {_probs_html}
+            {_rec_html}
             """, unsafe_allow_html=True)
-
-            for _r in _reasons_g[:5]:
-                _r_color = "#ef4444" if "extreme" in _r.lower() or "critical" in _r.lower() else "#f97316" if "high" in _r.lower() else "#eab308"
-                st.markdown(f'<div style="padding:0.2rem 0;font-size:0.82rem;color:{_r_color}">▸ {_r}</div>', unsafe_allow_html=True)
-
-            st.markdown("</div></div>", unsafe_allow_html=True)
-
-            # Probability breakdown
-            if _probs_g:
-                st.markdown("""
-                <div style="font-size:0.75rem;font-weight:700;color:#64748b;margin:0.5rem 0 0.3rem;text-transform:uppercase">
-                  Model Confidence Distribution
-                </div>
-                """, unsafe_allow_html=True)
-                for _lvl in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
-                    _pv = _probs_g.get(_lvl, 0)
-                    _pc = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_lvl, "#94a3b8")
-                    st.markdown(f"""
-                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem">
-                      <div style="min-width:70px;font-size:0.72rem;font-weight:600;color:{_pc}">{_lvl}</div>
-                      <div style="flex:1;background:#1e2440;border-radius:3px;height:10px">
-                        <div style="width:{_pv*100:.0f}%;background:{_pc};height:100%;border-radius:3px"></div>
-                      </div>
-                      <div style="min-width:40px;font-size:0.72rem;color:#94a3b8;text-align:right">{_pv:.0%}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # Recommended action
-            _rec_action_g = _zone_g.get("recommended_action", "")
-            if _rec_action_g:
-                st.markdown(f"""
-                <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);
-                            border-radius:6px;padding:0.6rem 0.8rem;margin-top:0.5rem">
-                  <div style="font-size:0.7rem;font-weight:700;color:#94a3b8;margin-bottom:0.2rem">AI RECOMMENDED ACTION</div>
-                  <div style="font-size:0.82rem;color:#fca5a5">{_rec_action_g}</div>
-                </div>
-                """, unsafe_allow_html=True)
     else:
         st.info("No high or critical risk zones currently. Run a high-rainfall scenario to see Granite analysis.")
 

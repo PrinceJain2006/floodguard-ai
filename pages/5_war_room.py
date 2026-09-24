@@ -66,20 +66,7 @@ dot_color = "#ef4444" if scenario in ("EXTREME", "EMERGENCY") else "#f97316" if 
 dot_anim = "animation:blink 1s infinite;" if scenario in ("EXTREME", "EMERGENCY") else ""
 
 st.markdown(f"""
-<style>
-@keyframes blink {{ 0%,100% {{opacity:1}} 50% {{opacity:0.2}} }}
-.war-room-header {{
-    background: linear-gradient(135deg, #0d0d1a 0%, #1a0f2e 100%);
-    border: 1px solid #ef4444;
-    border-radius: 10px;
-    padding: 1rem 1.5rem;
-    margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-}}
-</style>
-<div class="war-room-header">
+<div style="background:linear-gradient(135deg,#0d0d1a 0%,#1a0f2e 100%);border:1px solid #ef4444;border-radius:10px;padding:1rem 1.5rem;margin-bottom:1rem;display:flex;align-items:center;gap:1.5rem">
     <div style="font-size:2.5rem">🚨</div>
     <div style="flex:1">
         <div style="font-size:1.5rem;font-weight:800;color:#e2e8f0;letter-spacing:0.05em">
@@ -206,15 +193,20 @@ with col_left:
     if alerts:
         st.markdown("---")
         section_header("🔔 ACTIVE ALERTS", model_badge())
+        _wr_alert_styles = {
+            "CRITICAL": "background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.6);border-left:4px solid #ef4444",
+            "HIGH":     "background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.6);border-left:4px solid #f97316",
+        }
         for alert in alerts[:3]:
             level = alert.get("alert_level", "INFO")
-            cls = {"CRITICAL": "alert-critical", "HIGH": "alert-high"}.get(level, "alert-warning")
-            st.markdown(f"""
-            <div class="{cls}" style="font-size:0.8rem;margin-bottom:0.3rem">
-                <strong>{alert.get('title','')}</strong><br>
-                <span style="color:#cbd5e1;font-size:0.75rem">{alert.get('message','')[:120]}</span>
-            </div>
-            """, unsafe_allow_html=True)
+            _astyle = _wr_alert_styles.get(level, "background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.5);border-left:4px solid #eab308")
+            st.markdown(
+                f'<div style="{_astyle};border-radius:6px;padding:0.6rem 0.9rem;font-size:0.8rem;margin-bottom:0.3rem">'
+                f'<strong>{alert.get("title","")}</strong><br>'
+                f'<span style="color:#cbd5e1;font-size:0.75rem">{alert.get("message","")[:120]}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 # ── MIDDLE: Chief Response Action Plan ───────
 with col_mid:
@@ -496,7 +488,7 @@ with bot_col1:
                     explanation = explain_why_zone_risky(zone_pred)
                     st.session_state.why_cache[cache_key] = explanation
             st.markdown(f"""
-            <div class="fg-card-blue" style="margin-top:0.5rem;font-size:0.82rem;line-height:1.6">
+            <div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;margin-top:0.5rem;font-size:0.82rem;line-height:1.6">
                 <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:0.3rem">🧠 IBM Granite WHY Analysis</div>
                 <div style="color:#e2e8f0">{st.session_state.why_cache.get(cache_key,'')}</div>
                 <div style="font-size:0.65rem;color:#475569;margin-top:0.4rem">

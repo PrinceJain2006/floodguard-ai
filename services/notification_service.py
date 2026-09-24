@@ -66,10 +66,28 @@ from typing import Any
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _env(key: str, default: str = "") -> str:
-    """Read from env / Streamlit secrets. Never crashes."""
+    """Read from env / Streamlit secrets. Never crashes.
+
+    st.secrets is only consulted when:
+      1. Streamlit is already imported in sys.modules, AND
+      2. An active ScriptRunContext exists for this thread.
+    This prevents the "No secrets files found" warning that Streamlit emits
+    when st.secrets is accessed outside a running app worker (e.g. on import,
+    during pytest, or in background threads).
+    """
+    import sys
     try:
-        import streamlit as st  # type: ignore
-        val = st.secrets.get(key, "")
+        _st = sys.modules.get("streamlit")
+        if _st is None:
+            raise LookupError("streamlit not imported")
+        # Only access st.secrets inside an active Streamlit script-run thread
+        _scriptrunner = sys.modules.get("streamlit.runtime.scriptrunner")
+        if _scriptrunner is None:
+            raise LookupError("scriptrunner not imported")
+        _get_ctx = getattr(_scriptrunner, "get_script_run_ctx", None)
+        if _get_ctx is None or _get_ctx() is None:
+            raise LookupError("no active ScriptRunContext")
+        val = _st.secrets.get(key, "")
         if val:
             return str(val)
     except Exception:

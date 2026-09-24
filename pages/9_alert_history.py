@@ -184,19 +184,21 @@ else:
         is_sim  = alert.get("is_simulation", False)
         is_test = alert.get("is_test", False)
         state_v = alert.get("alert_state", "NEW")
-        state_html = {
-            "NEW":          '<span class="state-new">NEW</span>',
-            "ACKNOWLEDGED": '<span class="state-ack">ACKNOWLEDGED</span>',
-            "RESOLVED":     '<span class="state-res">RESOLVED</span>',
-        }.get(state_v, f'<span class="state-new">{state_v}</span>')
+        _state_styles = {
+            "NEW":          "background:#1e3a5f;color:#93c5fd;padding:1px 7px;border-radius:3px;font-size:0.7rem;font-weight:600",
+            "ACKNOWLEDGED": "background:#3a2e00;color:#fde68a;padding:1px 7px;border-radius:3px;font-size:0.7rem;font-weight:600",
+            "RESOLVED":     "background:#14532d;color:#bbf7d0;padding:1px 7px;border-radius:3px;font-size:0.7rem;font-weight:600",
+        }
+        _s_style = _state_styles.get(state_v, _state_styles["NEW"])
+        state_html = f'<span style="{_s_style}">{state_v}</span>'
 
         badge_html = ""
         if is_test:
-            badge_html = '<span class="badge-test">⚠️ TEST</span>'
+            badge_html = '<span style="background:#3a1a00;color:#fdba74;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">&#x26A0; TEST</span>'
         elif is_sim:
-            badge_html = '<span class="badge-sim">🟣 SIMULATION</span>'
+            badge_html = '<span style="background:#2e1065;color:#c4b5fd;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">&#x1F7E3; SIMULATION</span>'
         else:
-            badge_html = '<span class="badge-live">🟢 LIVE</span>'
+            badge_html = '<span style="background:#14532d;color:#bbf7d0;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">&#x1F7E2; LIVE</span>'
 
         evidence_html = "".join(
             f"<li style='color:#94a3b8;font-size:0.73rem'>{e}</li>"
@@ -211,8 +213,15 @@ else:
         event_id = alert.get("event_id", "")
         rec_action = alert.get("recommended_action", "Review dashboard.")
 
+        _alert_card_styles = {
+            "alert-red":    "border-left:4px solid #ef4444;background:rgba(239,68,68,0.07)",
+            "alert-orange": "border-left:4px solid #f97316;background:rgba(249,115,22,0.07)",
+            "alert-yellow": "border-left:4px solid #eab308;background:rgba(234,179,8,0.07)",
+            "alert-green":  "border-left:4px solid #22c55e;background:rgba(34,197,94,0.07)",
+        }
+        _card_style = _alert_card_styles.get(css_class, _alert_card_styles["alert-green"])
         st.markdown(f"""
-        <div class="alert-card {css_class}">
+        <div style="border-radius:8px;padding:1rem 1.2rem;margin-bottom:0.8rem;{_card_style}">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
                 <div>
                     <div style="font-size:1rem;font-weight:800;color:#e2e8f0;margin-bottom:0.3rem">

@@ -485,8 +485,7 @@ for i, agent in enumerate(agent_statuses):
         _ipo_data = _ipo.get(name, {})
 
         st.markdown(f"""
-        <style>@keyframes pulse {{0%,100%{{opacity:1}}50%{{opacity:0.5}}}}</style>
-        <div class="fg-card" style="min-height:200px">
+        <div style="background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;min-height:200px">
             <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem">
                 <span style="font-size:1.5rem">{icon}</span>
                 <div style="flex:1;min-width:0">
@@ -499,7 +498,6 @@ for i, agent in enumerate(agent_statuses):
                     {data_label_html}
                 </div>
             </div>
-            <!-- INPUT → PROCESS → OUTPUT -->
             <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:0.4rem">
               <div style="background:#0a1020;border:1px solid #1e2440;border-radius:5px;padding:3px 6px">
                 <div style="font-size:0.56rem;color:#475569;font-weight:700;text-transform:uppercase">INPUT</div>
@@ -566,110 +564,102 @@ else:
 st.markdown("<br>", unsafe_allow_html=True)
 section_header("AGENT ORCHESTRATION ARCHITECTURE")
 
-st.markdown("""
-<div style="background:#13151f;border:1px solid #2d3148;border-radius:10px;padding:1.5rem 1.5rem 1rem">
+st.markdown(
+    '<div style="background:#13151f;border:1px solid #2d3148;border-radius:10px;padding:1.5rem 1.5rem 1rem">'
 
-  <!-- Row 0: DATA SOURCES -->
-  <div style="font-size:0.65rem;font-weight:700;color:#475569;text-transform:uppercase;
-              letter-spacing:0.1em;margin-bottom:0.5rem">Data Sources</div>
-  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
-    <span style="background:#0f2d1a;color:#6ee7b7;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #22c55e;white-space:nowrap">🟢 Rainfall (Open-Meteo LIVE)</span>
-    <span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #3b82f6;white-space:nowrap">🔵 Flood Risk (ML Model)</span>
-    <span style="background:#3a2e00;color:#fde68a;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #eab308;white-space:nowrap">🟡 Drainage Infrastructure (DEMO)</span>
-    <span style="background:#3a1a00;color:#fdba74;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #f97316;white-space:nowrap">🟠 Citizen Reports (USER SUBMITTED)</span>
-    <span style="background:#3a2e00;color:#fde68a;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #eab308;white-space:nowrap">🟡 Response Teams (DEMO)</span>
-  </div>
+    '<div style="font-size:0.65rem;font-weight:700;color:#475569;text-transform:uppercase;'
+    'letter-spacing:0.1em;margin-bottom:0.5rem">Data Sources</div>'
+    '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">'
+    '<span style="background:#0f2d1a;color:#6ee7b7;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #22c55e;white-space:nowrap">&#x1F7E2; Rainfall (Open-Meteo LIVE)</span>'
+    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #3b82f6;white-space:nowrap">&#x1F535; Flood Risk (ML Model)</span>'
+    '<span style="background:#3a2e00;color:#fde68a;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #eab308;white-space:nowrap">&#x1F7E1; Drainage Infrastructure (DEMO)</span>'
+    '<span style="background:#3a1a00;color:#fdba74;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #f97316;white-space:nowrap">&#x1F7E0; Citizen Reports (USER SUBMITTED)</span>'
+    '<span style="background:#3a2e00;color:#fde68a;font-size:0.68rem;padding:3px 8px;border-radius:4px;border:1px solid #eab308;white-space:nowrap">&#x1F7E1; Response Teams (DEMO)</span>'
+    '</div>'
 
-  <!-- Arrow down -->
-  <div style="text-align:center;color:#2d3148;font-size:1.4rem;line-height:1;margin-bottom:0.5rem">▼</div>
+    '<div style="text-align:center;color:#2d3148;font-size:1.4rem;line-height:1;margin-bottom:0.5rem">&#x25BC;</div>'
 
-  <!-- Row 1: ORCHESTRATOR label -->
-  <div style="border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem;background:#1a1d27;margin-bottom:0.5rem">
-    <div style="font-size:0.65rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.6rem">
-      Agent Orchestrator — Sequential Pipeline
-    </div>
+    '<div style="border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem;background:#1a1d27;margin-bottom:0.5rem">'
+    '<div style="font-size:0.65rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.6rem">'
+    'Agent Orchestrator &#x2014; Sequential Pipeline'
+    '</div>'
 
-    <!-- Row 1: specialist agents -->
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
-      <div style="background:#0f1117;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
-        <div style="font-size:0.78rem">🌊</div>
-        <div style="font-size:0.72rem;font-weight:700;color:#93c5fd">Flood Risk Agent</div>
-        <div style="font-size:0.62rem;color:#475569">ML · Random Forest · risk scores</div>
-      </div>
-      <div style="background:#0f1117;border:1px solid #eab308;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
-        <div style="font-size:0.78rem">🔧</div>
-        <div style="font-size:0.72rem;font-weight:700;color:#fde68a">Drainage Agent</div>
-        <div style="font-size:0.62rem;color:#475569">blockage priority · maintenance schedule</div>
-      </div>
-      <div style="background:#0f1117;border:1px solid #f97316;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
-        <div style="font-size:0.78rem">📱</div>
-        <div style="font-size:0.72rem;font-weight:700;color:#fdba74">Citizen Report Agent</div>
-        <div style="font-size:0.62rem;color:#475569">EN/HI/GU · classify · route</div>
-      </div>
-      <div style="background:#0f1117;border:1px solid #7c3aed;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
-        <div style="font-size:0.78rem">⚡</div>
-        <div style="font-size:0.72rem;font-weight:700;color:#c4b5fd">Response Coord. Agent</div>
-        <div style="font-size:0.62rem;color:#475569">incidents · priority queue · teams</div>
-      </div>
-      <div style="background:#0f1117;border:1px solid #94a3b8;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">
-        <div style="font-size:0.78rem">🔍</div>
-        <div style="font-size:0.72rem;font-weight:700;color:#cbd5e1">Damage Assessment Agent</div>
-        <div style="font-size:0.62rem;color:#475569">post-flood infra impact scoring</div>
-      </div>
-    </div>
+    '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">'
+    '<div style="background:#0f1117;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">'
+    '<div style="font-size:0.78rem">&#x1F30A;</div>'
+    '<div style="font-size:0.72rem;font-weight:700;color:#93c5fd">Flood Risk Agent</div>'
+    '<div style="font-size:0.62rem;color:#475569">ML &#xB7; Random Forest &#xB7; risk scores</div>'
+    '</div>'
+    '<div style="background:#0f1117;border:1px solid #eab308;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">'
+    '<div style="font-size:0.78rem">&#x1F527;</div>'
+    '<div style="font-size:0.72rem;font-weight:700;color:#fde68a">Drainage Agent</div>'
+    '<div style="font-size:0.62rem;color:#475569">blockage priority &#xB7; maintenance schedule</div>'
+    '</div>'
+    '<div style="background:#0f1117;border:1px solid #f97316;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">'
+    '<div style="font-size:0.78rem">&#x1F4F1;</div>'
+    '<div style="font-size:0.72rem;font-weight:700;color:#fdba74">Citizen Report Agent</div>'
+    '<div style="font-size:0.62rem;color:#475569">EN/HI/GU &#xB7; classify &#xB7; route</div>'
+    '</div>'
+    '<div style="background:#0f1117;border:1px solid #7c3aed;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">'
+    '<div style="font-size:0.78rem">&#x26A1;</div>'
+    '<div style="font-size:0.72rem;font-weight:700;color:#c4b5fd">Response Coord. Agent</div>'
+    '<div style="font-size:0.62rem;color:#475569">incidents &#xB7; priority queue &#xB7; teams</div>'
+    '</div>'
+    '<div style="background:#0f1117;border:1px solid #94a3b8;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px">'
+    '<div style="font-size:0.78rem">&#x1F50D;</div>'
+    '<div style="font-size:0.72rem;font-weight:700;color:#cbd5e1">Damage Assessment Agent</div>'
+    '<div style="font-size:0.62rem;color:#475569">post-flood infra impact scoring</div>'
+    '</div>'
+    '</div>'
 
-    <!-- Arrow down -->
-    <div style="text-align:center;color:#2d3148;font-size:1.1rem;line-height:1;margin-bottom:0.5rem">▼</div>
+    '<div style="text-align:center;color:#2d3148;font-size:1.1rem;line-height:1;margin-bottom:0.5rem">&#x25BC;</div>'
 
-    <!-- Row 2: Chief + Granite side by side -->
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.35rem">
-      <div style="background:#0f1117;border:1px solid #22c55e;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:140px">
-        <div style="font-size:0.78rem">🎯</div>
-        <div style="font-size:0.72rem;font-weight:700;color:#86efac">Chief Response Agent</div>
-        <div style="font-size:0.62rem;color:#475569">unified action plan · resource allocation</div>
-      </div>
-      <div style="background:#0f1117;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:2;min-width:160px">
-        <div style="font-size:0.78rem">🧠</div>
-        <div style="font-size:0.72rem;font-weight:700;color:#93c5fd">IBM Granite (WatsonX)</div>
-        <div style="font-size:0.62rem;color:#475569">situation report · WHY explanations · NL query · incident classification</div>
-      </div>
-    </div>
-  </div>
+    '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.35rem">'
+    '<div style="background:#0f1117;border:1px solid #22c55e;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:140px">'
+    '<div style="font-size:0.78rem">&#x1F3AF;</div>'
+    '<div style="font-size:0.72rem;font-weight:700;color:#86efac">Chief Response Agent</div>'
+    '<div style="font-size:0.62rem;color:#475569">unified action plan &#xB7; resource allocation</div>'
+    '</div>'
+    '<div style="background:#0f1117;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:2;min-width:160px">'
+    '<div style="font-size:0.78rem">&#x1F9E0;</div>'
+    '<div style="font-size:0.72rem;font-weight:700;color:#93c5fd">IBM Granite (WatsonX)</div>'
+    '<div style="font-size:0.62rem;color:#475569">situation report &#xB7; WHY explanations &#xB7; NL query &#xB7; incident classification</div>'
+    '</div>'
+    '</div>'
+    '</div>'
 
-  <!-- Arrow down -->
-  <div style="text-align:center;color:#2d3148;font-size:1.4rem;line-height:1;margin-bottom:0.5rem">▼</div>
+    '<div style="text-align:center;color:#2d3148;font-size:1.4rem;line-height:1;margin-bottom:0.5rem">&#x25BC;</div>'
 
-  <!-- Row 3: Decision flow -->
-  <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
-    <div style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">
-      <div style="font-size:0.68rem;font-weight:700;color:#93c5fd">🤖 AI Recommendations</div>
-    </div>
-    <div style="color:#475569;font-size:1rem">→</div>
-    <div style="background:#3a1a00;border:1px solid #f97316;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">
-      <div style="font-size:0.68rem;font-weight:700;color:#fdba74">🔐 Human Approval</div>
-    </div>
-    <div style="color:#475569;font-size:1rem">→</div>
-    <div style="background:#14532d;border:1px solid #22c55e;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">
-      <div style="font-size:0.68rem;font-weight:700;color:#86efac">🏙️ Civic Action Logged</div>
-    </div>
-    <div style="color:#475569;font-size:1rem">→</div>
-    <div style="background:#1a0f1f;border:1px solid #7c3aed;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:140px;text-align:center">
-      <div style="font-size:0.68rem;font-weight:700;color:#c4b5fd">🔄 Prediction–Outcome Feedback</div>
-    </div>
-  </div>
+    '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">'
+    '<div style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">'
+    '<div style="font-size:0.68rem;font-weight:700;color:#93c5fd">&#x1F916; AI Recommendations</div>'
+    '</div>'
+    '<div style="color:#475569;font-size:1rem">&#x2192;</div>'
+    '<div style="background:#3a1a00;border:1px solid #f97316;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">'
+    '<div style="font-size:0.68rem;font-weight:700;color:#fdba74">&#x1F510; Human Approval</div>'
+    '</div>'
+    '<div style="color:#475569;font-size:1rem">&#x2192;</div>'
+    '<div style="background:#14532d;border:1px solid #22c55e;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:120px;text-align:center">'
+    '<div style="font-size:0.68rem;font-weight:700;color:#86efac">&#x1F3D9; Civic Action Logged</div>'
+    '</div>'
+    '<div style="color:#475569;font-size:1rem">&#x2192;</div>'
+    '<div style="background:#1a0f1f;border:1px solid #7c3aed;border-radius:6px;padding:0.4rem 0.7rem;flex:1;min-width:140px;text-align:center">'
+    '<div style="font-size:0.68rem;font-weight:700;color:#c4b5fd">&#x1F504; Prediction&#x2013;Outcome Feedback</div>'
+    '</div>'
+    '</div>'
 
-  <!-- Row 4: Outputs -->
-  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">📊 Live Risk Map</span>
-    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">🔔 Alerts</span>
-    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">📋 Situation Report</span>
-    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">🌧️ Rainfall Data</span>
-    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">🚒 Response Teams</span>
-    <span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">📱 Citizen Reports</span>
-  </div>
+    '<div style="display:flex;gap:0.5rem;flex-wrap:wrap">'
+    '<span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">&#x1F4CA; Live Risk Map</span>'
+    '<span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">&#x1F514; Alerts</span>'
+    '<span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">&#x1F4CB; Situation Report</span>'
+    '<span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">&#x1F327; Rainfall Data</span>'
+    '<span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">&#x1F692; Response Teams</span>'
+    '<span style="background:#0f1117;border:1px solid #2d3148;border-radius:4px;padding:3px 8px;font-size:0.66rem;color:#94a3b8">&#x1F4F1; Citizen Reports</span>'
+    '</div>'
 
-</div>
-""", unsafe_allow_html=True)
+    '</div>',
+    unsafe_allow_html=True,
+)
 
 # ──────────────────────────────────────────────
 # NL Query
@@ -703,7 +693,7 @@ with col_q:
         with st.spinner("Querying agents + Granite..."):
             answer = orch.query(query)
         st.markdown(f"""
-        <div class="fg-card-blue" style="margin-top:0.5rem">
+        <div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;margin-top:0.5rem">
             <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.3rem">
                 🧠 IBM Granite Response {'(Live)' if g_available else '(Fallback)'}
             </div>
@@ -723,7 +713,7 @@ with col_e:
             with st.spinner("Querying..."):
                 answer = orch.query(q)
             st.markdown(f"""
-            <div class="fg-card-blue" style="font-size:0.85rem;color:#e2e8f0">{answer}</div>
+            <div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;font-size:0.85rem;color:#e2e8f0">{answer}</div>
             """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
@@ -773,7 +763,7 @@ with why_col2:
         l_color = level_colors.get(level, "#94a3b8")
         features = zone_pred.get("input_features", {})
         st.markdown(f"""
-        <div class="fg-card-blue">
+        <div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
                 <div style="font-weight:700;color:#e2e8f0">{zone_pred['area']}, {zone_pred['city']}</div>
                 <span style="background:{l_color};color:white;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600">{level} RISK</span>
@@ -795,7 +785,7 @@ with why_col2:
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
-        <div class="fg-card" style="text-align:center;padding:2rem;color:#64748b;font-size:0.85rem">
+        <div style="background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;text-align:center;padding:2rem;color:#64748b;font-size:0.85rem">
             Select a zone and click "Explain WHY" to see IBM Granite's risk explanation.
         </div>
         """, unsafe_allow_html=True)

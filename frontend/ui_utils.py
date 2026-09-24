@@ -42,6 +42,10 @@ def apply_global_css():
        FloodGuard AI — Premium Command Center Global Styles
     ═══════════════════════════════════════════════════════════════════ */
 
+    /* Shared animations */
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+    @keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.2 } }
+
     /* Global dark theme */
     .stApp { background-color: #0a0d14; color: #e2e8f0; }
     .main .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1440px; }
@@ -312,13 +316,16 @@ def header(title: str, subtitle: str = "", icon: str = ""):
 
 
 def metric_card(label: str, value: str, delta: str = "", color: str = "#3b82f6", icon: str = ""):
-    st.markdown(f"""
-    <div class="fg-metric">
-        <div class="fg-metric-value" style="color:{color}">{icon} {value}</div>
-        <div class="fg-metric-label">{label}</div>
-        {f'<div style="font-size:0.75rem;color:#94a3b8;margin-top:0.2rem">{delta}</div>' if delta else ''}
-    </div>
-    """, unsafe_allow_html=True)
+    delta_html = f'<div style="font-size:0.75rem;color:#94a3b8;margin-top:0.2rem">{delta}</div>' if delta else ""
+    st.markdown(
+        f'<div style="background:#131620;border:1px solid #1e2440;border-radius:8px;'
+        f'padding:0.75rem 1rem;margin-bottom:0.5rem;text-align:center">'
+        f'<div style="font-size:1.5rem;font-weight:700;color:{color};margin-bottom:0.15rem">{icon} {value}</div>'
+        f'<div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em">{label}</div>'
+        f'{delta_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def risk_badge(level: str) -> str:
@@ -330,7 +337,10 @@ def risk_badge(level: str) -> str:
 
 
 def demo_badge():
-    return '<span class="demo-label">DEMO DATA</span>'
+    return (
+        '<span style="background:#4c1d95;color:#ddd6fe;font-size:0.68rem;'
+        'padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.05em">DEMO DATA</span>'
+    )
 
 
 def hybrid_badge():
@@ -361,19 +371,22 @@ def model_badge():
 
 
 def simulated_badge():
-    return '<span class="simulated-label">⚙ SIMULATED</span>'
+    return (
+        '<span style="background:#0f4c75;color:#7ec8e3;font-size:0.68rem;'
+        'padding:2px 8px;border-radius:4px;font-weight:700">&#x2699; SIMULATED</span>'
+    )
 
 
 def card(content: str, variant: str = "default"):
-    variants = {
-        "default": "fg-card",
-        "danger":  "fg-card-danger",
-        "warn":    "fg-card-warn",
-        "success": "fg-card-success",
-        "blue":    "fg-card-blue",
+    _card_styles = {
+        "default": "background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem",
+        "danger":  "background:#150b0b;border:1px solid #7f1d1d;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem",
+        "warn":    "background:#141000;border:1px solid #78350f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem",
+        "success": "background:#071310;border:1px solid #14532d;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem",
+        "blue":    "background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem",
     }
-    cls = variants.get(variant, "fg-card")
-    st.markdown(f'<div class="{cls}">{content}</div>', unsafe_allow_html=True)
+    style = _card_styles.get(variant, _card_styles["default"])
+    st.markdown(f'<div style="{style}">{content}</div>', unsafe_allow_html=True)
 
 
 def section_header(title: str, badge: str = ""):
@@ -596,33 +609,56 @@ def render_agent_trace(pipeline_log: list[dict], granite_available: bool = False
             "ERROR": "#ef4444",
         }.get(st_val, "#94a3b8")
 
+        # Outer card border colour derived from status / agent type
+        # (replaces CSS class references — Streamlit sanitizer strips class= attributes)
+        if ag_name == "IBM Granite":
+            card_bg = "#0a0d18"
+            card_border_left = "#7c3aed"
+        elif st_val == "COMPLETE":
+            card_bg = "#0d1020"
+            card_border_left = "#22c55e"
+        elif st_val == "FALLBACK":
+            card_bg = "#0d1020"
+            card_border_left = "#eab308"
+        elif st_val == "ERROR":
+            card_bg = "#0d1020"
+            card_border_left = "#ef4444"
+        else:
+            card_bg = "#0d1020"
+            card_border_left = "#3b82f6"
+
         # Special granite badge
         extra_badge = ""
         if ag_name == "IBM Granite":
             if granite_available:
-                extra_badge = '<span style="background:#14532d;color:#bbf7d0;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">✅ LIVE</span>'
+                extra_badge = '<span style="background:#14532d;color:#bbf7d0;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">&#x2705; LIVE</span>'
             elif granite_rate_limited:
-                extra_badge = '<span style="background:#3a2e00;color:#fde68a;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">⏳ RATE LIMITED</span>'
+                extra_badge = '<span style="background:#3a2e00;color:#fde68a;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">&#x23F3; RATE LIMITED</span>'
             else:
-                extra_badge = '<span style="background:#2a1a00;color:#fdba74;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">⚙ FALLBACK</span>'
+                extra_badge = '<span style="background:#2a1a00;color:#fdba74;font-size:0.6rem;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">&#x2699; FALLBACK</span>'
 
-        trace_class = "complete" if st_val == "COMPLETE" else "fallback" if st_val == "FALLBACK" else "error" if st_val == "ERROR" else ""
-        if ag_name == "IBM Granite":
-            trace_class += " granite"
+        detail_html = (
+            f'<div style="font-size:0.78rem;color:#94a3b8;margin-top:0.3rem;'
+            f'padding-top:0.3rem;border-top:1px solid #1e2440">{detail}</div>'
+            if detail else ""
+        )
 
-        st.markdown(f"""
-        <div class="agent-trace-step {trace_class}">
-          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">
-            <span style="font-size:1.1rem">{meta['icon']}</span>
-            <span style="font-size:0.85rem;font-weight:700;color:#e2e8f0">{ag_name}</span>
-            {extra_badge}
-            <span style="margin-left:auto;font-size:0.65rem;color:{st_color};font-weight:700;letter-spacing:0.04em">● {st_val}</span>
-            <span style="font-size:0.62rem;color:#475569;margin-left:0.5rem">{ts}</span>
-          </div>
-          <div style="font-size:0.72rem;color:#64748b">{meta['desc']}</div>
-          {f'<div style="font-size:0.78rem;color:#94a3b8;margin-top:0.3rem;padding-top:0.3rem;border-top:1px solid #1e2440">{detail}</div>' if detail else ''}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="background:{card_bg};border:1px solid #1e2440;'
+            f'border-left:3px solid {card_border_left};border-radius:0 8px 8px 0;'
+            f'padding:0.7rem 1rem;margin-bottom:0.5rem">'
+            f'<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">'
+            f'<span style="font-size:1.1rem">{meta["icon"]}</span>'
+            f'<span style="font-size:0.85rem;font-weight:700;color:#e2e8f0">{ag_name}</span>'
+            f'{extra_badge}'
+            f'<span style="margin-left:auto;font-size:0.65rem;color:{st_color};font-weight:700;letter-spacing:0.04em">&#x25CF; {st_val}</span>'
+            f'<span style="font-size:0.62rem;color:#475569;margin-left:0.5rem">{ts}</span>'
+            f'</div>'
+            f'<div style="font-size:0.72rem;color:#64748b">{meta["desc"]}</div>'
+            f'{detail_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_granite_panel(
@@ -662,7 +698,7 @@ def render_granite_panel(
         {f' · Scenario: <strong style="color:#94a3b8">{scenario_label}</strong>' if scenario_label else ''}
       </div>
       {f'<div style="font-size:0.75rem;color:#475569;margin-bottom:0.5rem;padding:0.4rem 0.6rem;background:#080c14;border-radius:4px;border:1px solid #1e2440"><strong style="color:#64748b">INPUT CONTEXT:</strong> {input_summary}</div>' if input_summary else ''}
-      <div class="granite-output">{situation_report or "No situation report available. Run a scenario to generate Granite analysis."}</div>
+      <div style="background:#050810;border:1px solid #1e3a5f;border-radius:6px;padding:0.8rem 1rem;font-size:0.85rem;color:#c7d2fe;line-height:1.65;white-space:pre-wrap;font-family:Segoe UI,system-ui,sans-serif">{situation_report or "No situation report available. Run a scenario to generate Granite analysis."}</div>
     </div>
     """, unsafe_allow_html=True)
 

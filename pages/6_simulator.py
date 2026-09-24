@@ -280,8 +280,6 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
                       text-transform:uppercase;letter-spacing:0.05em">
             🎬 SCENARIO TRANSITION
           </div>
-
-          <!-- BEFORE state -->
           <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
             <div style="background:#1e2440;border:1px solid #2d3148;border-radius:6px;
                         padding:0.4rem 0.8rem;flex:1">
@@ -292,11 +290,7 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
               </div>
             </div>
           </div>
-
-          <!-- Arrow -->
           <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
-
-          <!-- SCENARIO -->
           <div style="background:{sys_bg};border:1px solid {sys_color};border-radius:6px;
                       padding:0.4rem 0.8rem;margin-bottom:0.4rem;
                       display:flex;align-items:center;gap:0.5rem">
@@ -307,11 +301,7 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
               <div style="font-size:0.68rem;color:#94a3b8">{_narrative}</div>
             </div>
           </div>
-
-          <!-- Arrow -->
           <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
-
-          <!-- AFTER state -->
           <div style="background:#1e2440;border:2px solid {sys_color};border-radius:6px;padding:0.4rem 0.8rem">
             <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">AFTER — SYSTEM STATE: {sys_status}</div>
             <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_emoji} {_sc_label}</div>
@@ -319,8 +309,6 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
               Critical: {aft["critical"]} &nbsp;|&nbsp; High: {aft["high"]} &nbsp;|&nbsp; Avg score: {aft["avg_score"]:.0f}
             </div>
           </div>
-
-          <!-- SIMULATION MODE badge -->
           <div style="margin-top:0.6rem;text-align:center">
             <span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;
                          border-radius:4px;font-weight:700">🟡 SIMULATION MODE</span>
@@ -345,7 +333,6 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
                       text-transform:uppercase;letter-spacing:0.05em">
             🤖 AGENT ANALYSIS OUTPUTS
           </div>
-          <!-- Agent outputs grid -->
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.35rem;margin-bottom:0.6rem">
             <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
               <div style="font-size:0.6rem;color:#64748b">ML Risk Zones</div>
@@ -378,7 +365,6 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
               <div style="font-size:0.58rem;color:#475569">approvals</div>
             </div>
           </div>
-          <!-- Top risk zones -->
           <div style="font-size:0.68rem;font-weight:700;color:#94a3b8;margin-bottom:0.3rem;
                       text-transform:uppercase;letter-spacing:0.04em">Top Risk Zones (AI Recommendation)</div>
           {"".join([f'<div style="display:flex;align-items:center;gap:0.5rem;padding:3px 0;border-bottom:1px solid #1e2440"><div style="font-size:0.72rem;font-weight:600;color:#e2e8f0;flex:1">{p["area"]}, {p["city"]}</div><div style="font-size:0.72rem;font-weight:700;color:' + ({"CRITICAL":"#ef4444","HIGH":"#f97316","MEDIUM":"#eab308","LOW":"#22c55e"}.get(p["risk_level"],"#94a3b8")) + '">' + str(p["risk_score"]) + '/100 ' + p["risk_level"] + '</div></div>' for p in _top_preds])}
@@ -387,12 +373,9 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
 
         # Granite situation report (if available)
         if _sit_rep:
-            _granite_badge = (
-                '<span style="background:#14532d;color:#bbf7d0;font-size:0.62rem;padding:1px 5px;border-radius:3px;font-weight:700">🧠 IBM GRANITE</span>'
-                if _g_avail else
-                '<span style="background:#1a1500;color:#fde68a;font-size:0.62rem;padding:1px 5px;border-radius:3px;font-weight:700">⚙ FALLBACK</span>'
-            )
-            with st.expander(f"🧠 Situation Report {_granite_badge}", expanded=False):
+            # Use plain text label in expander (HTML not rendered in expander titles)
+            _granite_label_plain = "🧠 IBM GRANITE — LIVE" if _g_avail else "⚙ FALLBACK"
+            with st.expander(f"🧠 Situation Report — {_granite_label_plain}", expanded=False):
                 st.markdown(f"""
                 <div style="background:#0a0f1e;border-radius:6px;padding:0.7rem;
                             font-family:monospace;font-size:0.76rem;color:#e2e8f0;

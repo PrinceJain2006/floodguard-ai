@@ -637,35 +637,28 @@ with tab6:
     """, unsafe_allow_html=True)
 
     # Model info header
+    _fm = 'background:#131620;border:1px solid #1e2440;border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.5rem;text-align:center'
     ml_info_cols = st.columns(4)
     with ml_info_cols[0]:
-        st.markdown("""
-        <div class="fg-metric">
-          <div class="fg-metric-value" style="color:#3b82f6;font-size:1.1rem">Random Forest</div>
-          <div class="fg-metric-label">Model Type</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="{_fm}"><div style="font-size:1.1rem;font-weight:700;color:#3b82f6;margin-bottom:0.15rem">Random Forest</div>'
+            f'<div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em">Model Type</div></div>',
+            unsafe_allow_html=True)
     with ml_info_cols[1]:
-        st.markdown("""
-        <div class="fg-metric">
-          <div class="fg-metric-value" style="color:#f97316;font-size:1.1rem">5,000</div>
-          <div class="fg-metric-label">Synthetic Training Samples</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="{_fm}"><div style="font-size:1.1rem;font-weight:700;color:#f97316;margin-bottom:0.15rem">5,000</div>'
+            f'<div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em">Synthetic Training Samples</div></div>',
+            unsafe_allow_html=True)
     with ml_info_cols[2]:
-        st.markdown("""
-        <div class="fg-metric">
-          <div class="fg-metric-value" style="color:#7c3aed;font-size:1.1rem">4 Classes</div>
-          <div class="fg-metric-label">LOW / MEDIUM / HIGH / CRITICAL</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="{_fm}"><div style="font-size:1.1rem;font-weight:700;color:#7c3aed;margin-bottom:0.15rem">4 Classes</div>'
+            f'<div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em">LOW / MEDIUM / HIGH / CRITICAL</div></div>',
+            unsafe_allow_html=True)
     with ml_info_cols[3]:
-        st.markdown("""
-        <div class="fg-metric">
-          <div class="fg-metric-value" style="color:#eab308;font-size:1.1rem">10 Features</div>
-          <div class="fg-metric-label">Input Feature Dimensions</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="{_fm}"><div style="font-size:1.1rem;font-weight:700;color:#eab308;margin-bottom:0.15rem">10 Features</div>'
+            f'<div style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.04em">Input Feature Dimensions</div></div>',
+            unsafe_allow_html=True)
 
     st.markdown("""
     <div style="background:rgba(59,130,246,0.08);border:1px solid #1e3a5f;border-left:3px solid #3b82f6;

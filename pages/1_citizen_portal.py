@@ -120,11 +120,18 @@ citizen_alerts = [a for a in alerts if a.get("alert_type") == "citizen" and a.ge
 
 if citizen_alerts:
     st.markdown(f"### {lbl['alerts_section']}")
+    _alert_styles = {
+        "alert-critical": "background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.6);border-left:4px solid #ef4444",
+        "alert-high":     "background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.6);border-left:4px solid #f97316",
+        "alert-warning":  "background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.5);border-left:4px solid #eab308",
+        "alert-info":     "background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.5);border-left:4px solid #3b82f6",
+    }
     for alert in citizen_alerts[:3]:
         level = alert.get("alert_level", "INFO")
         cls = {"CRITICAL": "alert-critical", "HIGH": "alert-high", "WARNING": "alert-warning"}.get(level, "alert-info")
+        _astyle = _alert_styles.get(cls, _alert_styles["alert-info"])
         st.markdown(f"""
-        <div class="{cls}">
+        <div style="{_astyle};border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem">
             <div style="font-weight:700;color:#e2e8f0">{alert.get('title')}</div>
             <div style="font-size:0.85rem;color:#cbd5e1;margin-top:0.2rem">{alert.get('message')}</div>
             <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">MODEL GENERATED — Not a real emergency notification</div>
@@ -239,17 +246,59 @@ with col_form:
                 )
                 _sev_icon = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(sev, "⚪")
 
+                # Build zone risk HTML as a string to keep the whole card in one st.markdown call
+                _cp_state2 = orch.current_state or {}
+                _area_pred = next(
+                    (p for p in _cp_state2.get("risk_predictions", [])
+                     if p.get("area") == area and p.get("city") == city_choice),
+                    None
+                )
+                if _area_pred:
+                    _zrl = _area_pred.get("risk_level", "UNKNOWN")
+                    _zrs = _area_pred.get("risk_score", 0)
+                    _zrc = {"CRITICAL": "#ef4444", "HIGH": "#f97316",
+                            "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_zrl, "#94a3b8")
+                    _zone_msg = (
+                        "The zone is already at elevated risk — response team may be dispatched soon."
+                        if _zrl in ("CRITICAL", "HIGH")
+                        else "Continue monitoring — your report helps improve AI accuracy."
+                    )
+                    _zone_risk_html = (
+                        f'<div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">'
+                        f'<div>'
+                        f'<div style="font-size:0.65rem;color:#64748b">Current Zone Risk (ML Model)</div>'
+                        f'<div style="font-size:1.1rem;font-weight:800;color:{_zrc}">'
+                        f'{_zrs:.0f}/100'
+                        f'<span style="font-size:0.7rem;background:{_zrc};color:white;padding:1px 6px;'
+                        f'border-radius:4px;margin-left:4px">{_zrl}</span>'
+                        f'</div>'
+                        f'</div>'
+                        f'<div style="font-size:0.72rem;color:#94a3b8;flex:1">'
+                        f'Your report has been recorded in the citizen intelligence layer. {_zone_msg}'
+                        f'</div>'
+                        f'</div>'
+                    )
+                else:
+                    _zone_risk_html = (
+                        f'<div style="font-size:0.72rem;color:#94a3b8">'
+                        f'Zone risk data not available for {area}. Your report is recorded.'
+                        f'</div>'
+                    )
+
+                # Granite badge in pipeline row
+                _granite_bg  = "#0d2818" if granite_used else "#1a1500"
+                _granite_col = "#bbf7d0" if granite_used else "#fde68a"
+                _granite_lbl = "🧠 IBM GRANITE" if granite_used else "⚙ FALLBACK"
+
+                # Single consolidated st.markdown — no split/orphaned tags
                 st.markdown(f"""
                 <div style="background:{bg};border:2px solid {color}40;border-top:3px solid {color};
                             border-radius:10px;padding:1rem;margin-top:0.5rem">
-                  <!-- Header row -->
                   <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">
                     <span style="font-size:0.78rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em">🤖 AI CLASSIFICATION</span>
                     {_proc_badge}
                     <span style="font-size:0.65rem;color:#475569">USER SUBMITTED — not real emergency data</span>
                   </div>
-
-                  <!-- Main classification grid -->
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:0.6rem">
                     <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
                       <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Incident Type</div>
@@ -278,17 +327,9 @@ with col_form:
                   </div>
 
                   {"<div style='background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.5rem;font-size:0.78rem;color:#fca5a5'><strong>🚨 CRITICAL:</strong> Requires immediate response. Emergency team notified. (DEMO — no real emergency services contacted)</div>" if sev == "CRITICAL" else ""}
-
-                  <!-- AI keywords -->
                   {("<div style='margin-bottom:0.5rem'><div style='font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700'>Keywords Detected</div><div style='display:flex;flex-wrap:wrap;gap:4px'>" + "".join(['<span style="background:#1e2440;color:#93c5fd;padding:1px 7px;border-radius:12px;font-size:0.68rem">' + kw + "</span>" for kw in keywords[:6]]) + "</div></div>") if keywords else ""}
-
-                  <!-- AI summary -->
                   {("<div style='background:#050810;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem;margin-bottom:0.5rem'><div style='font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700'>" + ("🧠 Granite AI Summary" if granite_used else "⚙ AI Summary") + "</div><div style='font-size:0.8rem;color:#c7d2fe;line-height:1.5'>" + str(ai_summary) + "</div></div>") if ai_summary else ""}
-
-                  <!-- Suggested action -->
                   {("<div style='background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:0.45rem 0.7rem'><div style='font-size:0.62rem;color:#64748b;margin-bottom:0.15rem;text-transform:uppercase;font-weight:700'>Suggested Response</div><div style='font-size:0.8rem;color:#fbbf24'>" + str(suggested_action) + "</div></div>") if suggested_action else ""}
-
-                  <!-- Pipeline flow -->
                   <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
                     <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">🔀 Processing Pipeline</div>
                     <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:0.68rem">
@@ -298,7 +339,7 @@ with col_form:
                       <span style="color:#475569">→</span>
                       <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">📊 CLASSIFY</span>
                       <span style="color:#475569">→</span>
-                      <span style="background:{'#0d2818' if granite_used else '#1a1500'};color:{'#bbf7d0' if granite_used else '#fde68a'};padding:2px 6px;border-radius:4px;font-weight:700">{'🧠 IBM GRANITE' if granite_used else '⚙ FALLBACK'}</span>
+                      <span style="background:{_granite_bg};color:{_granite_col};padding:2px 6px;border-radius:4px;font-weight:700">{_granite_lbl}</span>
                       <span style="color:#475569">→</span>
                       <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🔀 EVIDENCE FUSION</span>
                       <span style="color:#475569">→</span>
@@ -307,46 +348,9 @@ with col_form:
                       <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🖥️ COMMAND CENTER</span>
                     </div>
                   </div>
-
-                  <!-- Evidence impact on zone risk -->
                   <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
                     <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">📍 Zone Risk Context ({area})</div>
-                """, unsafe_allow_html=True)
-
-                # Show zone risk for this area
-                _cp_state2 = orch.current_state or {}
-                _area_pred = next(
-                    (p for p in _cp_state2.get("risk_predictions", [])
-                     if p.get("area") == area and p.get("city") == city_choice),
-                    None
-                )
-                if _area_pred:
-                    _zrl = _area_pred.get("risk_level", "UNKNOWN")
-                    _zrs = _area_pred.get("risk_score", 0)
-                    _zrc = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_zrl, "#94a3b8")
-                    st.markdown(f"""
-                    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
-                      <div>
-                        <div style="font-size:0.65rem;color:#64748b">Current Zone Risk (ML Model)</div>
-                        <div style="font-size:1.1rem;font-weight:800;color:{_zrc}">
-                          {_zrs:.0f}/100
-                          <span style="font-size:0.7rem;background:{_zrc};color:white;padding:1px 6px;
-                                       border-radius:4px;margin-left:4px">{_zrl}</span>
-                        </div>
-                      </div>
-                      <div style="font-size:0.72rem;color:#94a3b8;flex:1">
-                        Your report has been recorded in the citizen intelligence layer.
-                        {"The zone is already at elevated risk — response team may be dispatched soon." if _zrl in ("CRITICAL","HIGH") else "Continue monitoring — your report helps improve AI accuracy."}
-                      </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div style="font-size:0.72rem;color:#94a3b8">
-                      Zone risk data not available for {area}. Your report is recorded.
-                    </div>""", unsafe_allow_html=True)
-
-                st.markdown(f"""
+                    {_zone_risk_html}
                   </div>
                   <div style="font-size:0.62rem;color:#475569;margin-top:0.4rem">
                     Report ID: {report['report_id']} · Location: {area}, {city_choice}
@@ -433,25 +437,28 @@ with col_map:
     high_zones = sum(1 for p in city_preds if p["risk_level"] == "HIGH")
 
     if critical_zones > 0:
-        st.markdown(f"""
-        <div class="alert-critical">
-            <strong>{critical_zones} CRITICAL risk zone(s)</strong> in {city_choice}.
-            Avoid low-lying areas and flooded roads.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.6);'
+            f'border-left:4px solid #ef4444;border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem">'
+            f'<strong>{critical_zones} CRITICAL risk zone(s)</strong> in {city_choice}. '
+            f'Avoid low-lying areas and flooded roads.</div>',
+            unsafe_allow_html=True,
+        )
     elif high_zones > 0:
-        st.markdown(f"""
-        <div class="alert-high">
-            <strong>{high_zones} HIGH risk zone(s)</strong> in {city_choice}.
-            Exercise caution and stay updated.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.6);'
+            f'border-left:4px solid #f97316;border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem">'
+            f'<strong>{high_zones} HIGH risk zone(s)</strong> in {city_choice}. '
+            f'Exercise caution and stay updated.</div>',
+            unsafe_allow_html=True,
+        )
     else:
-        st.markdown(f"""
-        <div class="alert-info">
-            No critical flood zones currently in {city_choice}. Continue monitoring.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.5);'
+            f'border-left:4px solid #3b82f6;border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem">'
+            f'No critical flood zones currently in {city_choice}. Continue monitoring.</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown(
         '<div style="font-size:0.7rem;color:#64748b">FLOOD RISK: ML MODEL PREDICTION — '
