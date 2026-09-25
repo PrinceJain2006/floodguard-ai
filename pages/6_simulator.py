@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
     simulated_badge, section_header, COLORS, ai_disclaimer, model_badge,
-    render_agent_trace, render_granite_panel,
+    render_agent_trace, render_granite_panel, _now_ist, _utc_to_ist,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.drainage_agent import get_drainage_agent
@@ -60,6 +60,11 @@ if "custom_sim_results" not in st.session_state:
     st.session_state.custom_sim_results = None
 if "custom_sim_params" not in st.session_state:
     st.session_state.custom_sim_params = {}
+# Sub-Task H: Granite narrative cache (reset when scenario changes)
+if "sim_granite_narrative" not in st.session_state:
+    st.session_state.sim_granite_narrative = ""
+if "sim_granite_scenario_key" not in st.session_state:
+    st.session_state.sim_granite_scenario_key = ""
 
 @st.cache_resource
 def _get_ml_model_sim():
@@ -192,21 +197,21 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
         sys_status = "NORMAL";   sys_color = "#22c55e"; sys_bg = "rgba(34,197,94,0.10)"
 
     st.markdown(f"""
-    <div style="background:{sys_bg};border:2px solid {sys_color};border-radius:10px;
-                padding:0.8rem 1.2rem;margin:0.5rem 0 1rem 0">
-        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
-            <div style="font-size:1.5rem;font-weight:900;color:{sys_color};letter-spacing:0.06em">
-                ● SYSTEM STATUS: {sys_status}
-            </div>
-            <div style="flex:1;font-size:0.82rem;color:#94a3b8">
-                Scenario: {SCENARIOS.get(aft['scenario'], {}).get('emoji', '')} {SCENARIOS.get(aft['scenario'], {}).get('label', aft['scenario'])}
-                &nbsp;·&nbsp; Pipeline run at {datetime.now(timezone.utc).strftime('%H:%M UTC')}
-            </div>
-            <span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:4px;font-size:0.72rem;font-weight:700">
-                🔵 PIPELINE OUTPUT
-            </span>
+<div style="background:{sys_bg};border:2px solid {sys_color};border-radius:10px;
+            padding:0.8rem 1.2rem;margin:0.5rem 0 1rem 0">
+    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+        <div style="font-size:1.5rem;font-weight:900;color:{sys_color};letter-spacing:0.06em">
+            ● SYSTEM STATUS: {sys_status}
         </div>
+        <div style="flex:1;font-size:0.82rem;color:#94a3b8">
+            Scenario: {SCENARIOS.get(aft['scenario'], {}).get('emoji', '')} {SCENARIOS.get(aft['scenario'], {}).get('label', aft['scenario'])}
+            &nbsp;·&nbsp; Pipeline run at {_now_ist('%H:%M IST')}
+        </div>
+        <span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:4px;font-size:0.72rem;font-weight:700">
+            🔵 PIPELINE OUTPUT
+        </span>
     </div>
+</div>
     """, unsafe_allow_html=True)
 
     # Before / After metrics
@@ -225,7 +230,21 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
             color = "#ef4444" if diff > 0 else "#22c55e"
         return f'<span style="color:{color};font-size:0.72rem">{arrow} {abs(diff):.0f}</span>'
 
-    st.markdown("**State Transition — Before vs After:**")
+    # Sub-Task I: Data provenance badge in simulation results
+    _sim_is_live = state.get("live_weather_status", {}).get("is_live", False)
+    _sim_data_label = state.get("data_label", "DEMO/SIMULATED")
+    _sim_badge = (
+        '<span style="background:#14532d;color:#bbf7d0;padding:1px 7px;border-radius:3px;font-size:0.68rem;font-weight:700">🟢 LIVE Weather</span>'
+        if _sim_is_live
+        else f'<span style="background:#3a2e00;color:#fde68a;padding:1px 7px;border-radius:3px;font-size:0.68rem;font-weight:700">🟡 {_sim_data_label}</span>'
+    )
+    st.markdown(
+        f'<div style="margin-bottom:0.4rem;font-weight:700;color:#e2e8f0;display:flex;align-items:center;gap:0.5rem">'
+        f'State Transition — Before vs After: {_sim_badge}'
+        f' <span style="font-size:0.62rem;color:#475569">Last run: {_utc_to_ist(state.get("last_updated",""), "%d %b %H:%M IST") or "N/A"}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     ba1, ba2, ba3, ba4, ba5, ba6 = st.columns(6)
     pairs = [
         (ba1, "Critical Zones",    "#ef4444", bef.get("critical"), aft["critical"],       False),
@@ -240,13 +259,13 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
             display_val = f"{a_val:.0f}" if isinstance(a_val, float) else str(a_val)
             delta_html = _delta_html(b_val, a_val, invert=inv)
             st.markdown(f"""
-            <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;
-                        padding:0.8rem;text-align:center">
-                <div style="font-size:1.6rem;font-weight:700;color:{color}">{display_val}</div>
-                <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase;
-                            letter-spacing:0.04em;margin:0.2rem 0">{label}</div>
-                <div style="min-height:1rem">{delta_html}</div>
-            </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;
+            padding:0.8rem;text-align:center">
+    <div style="font-size:1.6rem;font-weight:700;color:{color}">{display_val}</div>
+    <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase;
+                letter-spacing:0.04em;margin:0.2rem 0">{label}</div>
+    <div style="min-height:1rem">{delta_html}</div>
+</div>
             """, unsafe_allow_html=True)
 
     # ── Agent Analysis summary + Granite situation report ──
@@ -254,7 +273,7 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
     _sc_label = _sc_info.get("label", aft["scenario"])
     _sc_emoji = _sc_info.get("emoji", "")
 
-    # Scenario narratives
+    # Scenario narratives (fallback template)
     _sc_narratives = {
         "NORMAL":        "Baseline monitoring conditions. Rainfall within normal parameters. All systems operating nominally.",
         "HEAVY":         "Heavy rainfall detected. Drainage systems under increased load. Some zones showing elevated risk.",
@@ -262,7 +281,39 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
         "CITIZEN_SURGE": "High volume of citizen flood reports received. AI cross-referencing reports with sensor data.",
         "EMERGENCY":     "EMERGENCY protocol active. Multiple CRITICAL zones. Maximum resource deployment required.",
     }
-    _narrative = _sc_narratives.get(aft["scenario"], "Scenario analysis complete.")
+    _template_narrative = _sc_narratives.get(aft["scenario"], "Scenario analysis complete.")
+
+    # Sub-Task H: Try Granite-generated narrative for this scenario run
+    _sim_key = f"{aft['scenario']}_{aft.get('critical',0)}_{aft.get('high',0)}"
+    if st.session_state.sim_granite_scenario_key != _sim_key:
+        # New run — reset cached narrative
+        st.session_state.sim_granite_narrative = ""
+        st.session_state.sim_granite_scenario_key = _sim_key
+
+    if not st.session_state.sim_granite_narrative:
+        _g_status_sim = state.get("granite_status", {})
+        if _g_status_sim.get("available") and not _g_status_sim.get("rate_limited"):
+            try:
+                from agents.granite_service import generate_situation_report as _gen_sitrep
+                _bef = st.session_state.sim_before_state or {}
+                _sim_summary_data = {
+                    "before_critical": _bef.get("critical", 0),
+                    "after_critical": aft.get("critical", 0),
+                    "before_high": _bef.get("high", 0),
+                    "after_high": aft.get("high", 0),
+                    "before_avg_score": round(_bef.get("avg_score", 0), 1),
+                    "after_avg_score": round(aft.get("avg_score", 0), 1),
+                    "scenario": aft["scenario"],
+                }
+                _city_sim = aft.get("city", state.get("city", "Unknown"))
+                _gran_text = _gen_sitrep(str(_city_sim), aft["scenario"], _sim_summary_data)
+                if _gran_text and len(_gran_text) > 50:
+                    st.session_state.sim_granite_narrative = _gran_text
+            except Exception:
+                pass  # Never block the UI
+
+    _narrative = st.session_state.sim_granite_narrative or _template_narrative
+    _narrative_source = "GRANITE" if st.session_state.sim_granite_narrative else "TEMPLATE"
 
     # Scenario flow visualization
     bef_label = SCENARIOS.get(bef.get("scenario", "NORMAL"), {}).get("label", "Previous") if bef else "—"
@@ -275,45 +326,48 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
 
     with col_flow:
         st.markdown(f"""
-        <div style="background:#131620;border:1px solid #2d3148;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.5rem">
-          <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.7rem;
-                      text-transform:uppercase;letter-spacing:0.05em">
-            🎬 SCENARIO TRANSITION
-          </div>
-          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
-            <div style="background:#1e2440;border:1px solid #2d3148;border-radius:6px;
-                        padding:0.4rem 0.8rem;flex:1">
-              <div style="font-size:0.62rem;color:#475569;text-transform:uppercase;font-weight:700">BEFORE</div>
-              <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">{bef_emoji} {bef_label}</div>
-              <div style="font-size:0.68rem;color:#64748b">
-                Critical: {bef.get("critical", "—")} &nbsp;|&nbsp; High: {bef.get("high", "—")} &nbsp;|&nbsp; Avg score: {bef.get("avg_score", 0):.0f}
-              </div>
-            </div>
-          </div>
-          <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
-          <div style="background:{sys_bg};border:1px solid {sys_color};border-radius:6px;
-                      padding:0.4rem 0.8rem;margin-bottom:0.4rem;
-                      display:flex;align-items:center;gap:0.5rem">
-            <span style="font-size:1.2rem">{_sc_emoji}</span>
-            <div>
-              <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">SCENARIO APPLIED</div>
-              <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_label}</div>
-              <div style="font-size:0.68rem;color:#94a3b8">{_narrative}</div>
-            </div>
-          </div>
-          <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
-          <div style="background:#1e2440;border:2px solid {sys_color};border-radius:6px;padding:0.4rem 0.8rem">
-            <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">AFTER — SYSTEM STATE: {sys_status}</div>
-            <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_emoji} {_sc_label}</div>
-            <div style="font-size:0.68rem;color:#94a3b8">
-              Critical: {aft["critical"]} &nbsp;|&nbsp; High: {aft["high"]} &nbsp;|&nbsp; Avg score: {aft["avg_score"]:.0f}
-            </div>
-          </div>
-          <div style="margin-top:0.6rem;text-align:center">
-            <span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;
-                         border-radius:4px;font-weight:700">🟡 SIMULATION MODE</span>
-          </div>
-        </div>
+<div style="background:#131620;border:1px solid #2d3148;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.5rem">
+  <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.7rem;
+              text-transform:uppercase;letter-spacing:0.05em">
+    🎬 SCENARIO TRANSITION
+  </div>
+  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
+    <div style="background:#1e2440;border:1px solid #2d3148;border-radius:6px;
+                padding:0.4rem 0.8rem;flex:1">
+      <div style="font-size:0.62rem;color:#475569;text-transform:uppercase;font-weight:700">BEFORE</div>
+      <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">{bef_emoji} {bef_label}</div>
+      <div style="font-size:0.68rem;color:#64748b">
+        Critical: {bef.get("critical", "—")} &nbsp;|&nbsp; High: {bef.get("high", "—")} &nbsp;|&nbsp; Avg score: {bef.get("avg_score", 0):.0f}
+      </div>
+    </div>
+  </div>
+  <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
+  <div style="background:{sys_bg};border:1px solid {sys_color};border-radius:6px;
+              padding:0.4rem 0.8rem;margin-bottom:0.4rem;
+              display:flex;align-items:center;gap:0.5rem">
+    <span style="font-size:1.2rem">{_sc_emoji}</span>
+    <div>
+      <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">
+        SCENARIO APPLIED
+        {"<span style='background:#0d2818;color:#86efac;padding:0px 5px;border-radius:3px;margin-left:4px;font-size:0.6rem'>🧠 GRANITE</span>" if _narrative_source == "GRANITE" else ""}
+      </div>
+      <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_label}</div>
+      <div style="font-size:0.68rem;color:#94a3b8">{_narrative}</div>
+    </div>
+  </div>
+  <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
+  <div style="background:#1e2440;border:2px solid {sys_color};border-radius:6px;padding:0.4rem 0.8rem">
+    <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">AFTER — SYSTEM STATE: {sys_status}</div>
+    <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_emoji} {_sc_label}</div>
+    <div style="font-size:0.68rem;color:#94a3b8">
+      Critical: {aft["critical"]} &nbsp;|&nbsp; High: {aft["high"]} &nbsp;|&nbsp; Avg score: {aft["avg_score"]:.0f}
+    </div>
+  </div>
+  <div style="margin-top:0.6rem;text-align:center">
+    <span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;
+                 border-radius:4px;font-weight:700">🟡 SIMULATION MODE</span>
+  </div>
+</div>
         """, unsafe_allow_html=True)
 
     with col_analysis:
@@ -328,61 +382,61 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
         _top_preds = sorted(state.get("risk_predictions", []), key=lambda x: x["risk_score"], reverse=True)[:3]
 
         st.markdown(f"""
-        <div style="background:#131620;border:1px solid #2d3148;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.5rem">
-          <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.7rem;
-                      text-transform:uppercase;letter-spacing:0.05em">
-            🤖 AGENT ANALYSIS OUTPUTS
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.35rem;margin-bottom:0.6rem">
-            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
-              <div style="font-size:0.6rem;color:#64748b">ML Risk Zones</div>
-              <div style="font-size:0.9rem;font-weight:700;color:#ef4444">{aft["critical"]}</div>
-              <div style="font-size:0.58rem;color:#475569">CRITICAL</div>
-            </div>
-            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
-              <div style="font-size:0.6rem;color:#64748b">Critical Drains</div>
-              <div style="font-size:0.9rem;font-weight:700;color:#f97316">{_drain_crit}</div>
-              <div style="font-size:0.58rem;color:#475569">Immediate</div>
-            </div>
-            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
-              <div style="font-size:0.6rem;color:#64748b">Citizen Reports</div>
-              <div style="font-size:0.9rem;font-weight:700;color:#eab308">{_rpt_total}</div>
-              <div style="font-size:0.58rem;color:#475569">{_rpt_crit} critical</div>
-            </div>
-            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
-              <div style="font-size:0.6rem;color:#64748b">Incidents</div>
-              <div style="font-size:0.9rem;font-weight:700;color:#7c3aed">{_incidents}</div>
-              <div style="font-size:0.58rem;color:#475569">Response plans</div>
-            </div>
-            <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
-              <div style="font-size:0.6rem;color:#64748b">AI Actions</div>
-              <div style="font-size:0.9rem;font-weight:700;color:#3b82f6">{_actions}</div>
-              <div style="font-size:0.58rem;color:#475569">{_needs_appr} need approval</div>
-            </div>
-            <div style="background:#0d1117;border:1px solid {"#22c55e" if _needs_appr == 0 else "#ef4444"};border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
-              <div style="font-size:0.6rem;color:#64748b">HITL Pending</div>
-              <div style="font-size:0.9rem;font-weight:700;color:{"#22c55e" if _needs_appr == 0 else "#ef4444"}">{_needs_appr}</div>
-              <div style="font-size:0.58rem;color:#475569">approvals</div>
-            </div>
-          </div>
-          <div style="font-size:0.68rem;font-weight:700;color:#94a3b8;margin-bottom:0.3rem;
-                      text-transform:uppercase;letter-spacing:0.04em">Top Risk Zones (AI Recommendation)</div>
-          {"".join([f'<div style="display:flex;align-items:center;gap:0.5rem;padding:3px 0;border-bottom:1px solid #1e2440"><div style="font-size:0.72rem;font-weight:600;color:#e2e8f0;flex:1">{p["area"]}, {p["city"]}</div><div style="font-size:0.72rem;font-weight:700;color:' + ({"CRITICAL":"#ef4444","HIGH":"#f97316","MEDIUM":"#eab308","LOW":"#22c55e"}.get(p["risk_level"],"#94a3b8")) + '">' + str(p["risk_score"]) + '/100 ' + p["risk_level"] + '</div></div>' for p in _top_preds])}
-        </div>
+<div style="background:#131620;border:1px solid #2d3148;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.5rem">
+  <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.7rem;
+              text-transform:uppercase;letter-spacing:0.05em">
+    🤖 AGENT ANALYSIS OUTPUTS
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.35rem;margin-bottom:0.6rem">
+    <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+      <div style="font-size:0.6rem;color:#64748b">ML Risk Zones</div>
+      <div style="font-size:0.9rem;font-weight:700;color:#ef4444">{aft["critical"]}</div>
+      <div style="font-size:0.58rem;color:#475569">CRITICAL</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+      <div style="font-size:0.6rem;color:#64748b">Critical Drains</div>
+      <div style="font-size:0.9rem;font-weight:700;color:#f97316">{_drain_crit}</div>
+      <div style="font-size:0.58rem;color:#475569">Immediate</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+      <div style="font-size:0.6rem;color:#64748b">Citizen Reports</div>
+      <div style="font-size:0.9rem;font-weight:700;color:#eab308">{_rpt_total}</div>
+      <div style="font-size:0.58rem;color:#475569">{_rpt_crit} critical</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+      <div style="font-size:0.6rem;color:#64748b">Incidents</div>
+      <div style="font-size:0.9rem;font-weight:700;color:#7c3aed">{_incidents}</div>
+      <div style="font-size:0.58rem;color:#475569">Response plans</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+      <div style="font-size:0.6rem;color:#64748b">AI Actions</div>
+      <div style="font-size:0.9rem;font-weight:700;color:#3b82f6">{_actions}</div>
+      <div style="font-size:0.58rem;color:#475569">{_needs_appr} need approval</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid {"#22c55e" if _needs_appr == 0 else "#ef4444"};border-radius:5px;padding:0.3rem 0.5rem;text-align:center">
+      <div style="font-size:0.6rem;color:#64748b">HITL Pending</div>
+      <div style="font-size:0.9rem;font-weight:700;color:{"#22c55e" if _needs_appr == 0 else "#ef4444"}">{_needs_appr}</div>
+      <div style="font-size:0.58rem;color:#475569">approvals</div>
+    </div>
+  </div>
+  <div style="font-size:0.68rem;font-weight:700;color:#94a3b8;margin-bottom:0.3rem;
+              text-transform:uppercase;letter-spacing:0.04em">Top Risk Zones (AI Recommendation)</div>
+  {"".join([f'<div style="display:flex;align-items:center;gap:0.5rem;padding:3px 0;border-bottom:1px solid #1e2440"><div style="font-size:0.72rem;font-weight:600;color:#e2e8f0;flex:1">{p["area"]}, {p["city"]}</div><div style="font-size:0.72rem;font-weight:700;color:' + ({"CRITICAL":"#ef4444","HIGH":"#f97316","MEDIUM":"#eab308","LOW":"#22c55e"}.get(p["risk_level"],"#94a3b8")) + '">' + str(p["risk_score"]) + '/100 ' + p["risk_level"] + '</div></div>' for p in _top_preds])}
+</div>
         """, unsafe_allow_html=True)
 
         # Granite situation report (if available)
         if _sit_rep:
-            # Use plain text label in expander (HTML not rendered in expander titles)
             _granite_label_plain = "🧠 IBM GRANITE — LIVE" if _g_avail else "⚙ FALLBACK"
             with st.expander(f"🧠 Situation Report — {_granite_label_plain}", expanded=False):
-                st.markdown(f"""
-                <div style="background:#0a0f1e;border-radius:6px;padding:0.7rem;
-                            font-family:monospace;font-size:0.76rem;color:#e2e8f0;
-                            white-space:pre-wrap;line-height:1.5;max-height:200px;overflow-y:auto">
-{_sit_rep[:600]}{"..." if len(_sit_rep) > 600 else ""}
-                </div>
-                """, unsafe_allow_html=True)
+                _sit_rep_truncated = _sit_rep[:600] + ("..." if len(_sit_rep) > 600 else "")
+                st.markdown(
+                    f'<div style="background:#0a0f1e;border-radius:6px;padding:0.7rem;'
+                    f'font-family:monospace;font-size:0.76rem;color:#e2e8f0;'
+                    f'white-space:pre-wrap;line-height:1.5;max-height:200px;overflow-y:auto">'
+                    f'{_sit_rep_truncated}</div>',
+                    unsafe_allow_html=True,
+                )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -406,11 +460,11 @@ with tab1:
 
     # ── Controls ─────────────────────────────
     st.markdown("""
-    <div style="font-size:0.82rem;color:#64748b;margin-bottom:0.75rem">
-      Adjust flood parameters and click <strong style="color:#3b82f6">RUN SIMULATION</strong>
-      to calculate flood risk using the actual ML model.
-      All values are <strong style="color:#eab308">SIMULATED</strong> — not real sensor data.
-    </div>
+<div style="font-size:0.82rem;color:#64748b;margin-bottom:0.75rem">
+  Adjust flood parameters and click <strong style="color:#3b82f6">RUN SIMULATION</strong>
+  to calculate flood risk using the actual ML model.
+  All values are <strong style="color:#eab308">SIMULATED</strong> — not real sensor data.
+</div>
     """, unsafe_allow_html=True)
 
     ctrl1, ctrl2, ctrl3 = st.columns(3)
@@ -549,10 +603,10 @@ with tab1:
         '<span style="background:#1a1500;color:#fde68a;font-size:0.68rem;padding:1px 6px;border-radius:3px;font-weight:700">⚙ RULE-BASED</span>'
     )
     st.markdown(f"""
-    <div style="font-size:0.72rem;color:#475569;margin-bottom:0.5rem">
-      Simulation using: {_model_badge_html}
-      &nbsp;·&nbsp; <span style="color:#475569">All values SIMULATED — not real sensor data</span>
-    </div>
+<div style="font-size:0.72rem;color:#475569;margin-bottom:0.5rem">
+  Simulation using: {_model_badge_html}
+  &nbsp;·&nbsp; <span style="color:#475569">All values SIMULATED — not real sensor data</span>
+</div>
     """, unsafe_allow_html=True)
 
     # ── Results ──────────────────────────────
@@ -610,24 +664,24 @@ with tab1:
                 p_color = color_map[row["simulated_risk_level"]]
                 reasons_str = "; ".join(row["reasons"]) if row["reasons"] else "Multiple factors"
                 st.markdown(f"""
-                <div style="background:#1a1d27;border-left:3px solid {p_color};border-radius:0 6px 6px 0;
-                            padding:0.4rem 0.6rem;margin-bottom:0.3rem">
-                    <div style="display:flex;justify-content:space-between;align-items:center">
-                        <div style="font-size:0.8rem;font-weight:700;color:#e2e8f0">
-                            {row['area']}, {row['city']}
-                        </div>
-                        <div>
-                            <span style="background:{p_color};color:white;padding:1px 5px;
-                                  border-radius:4px;font-size:0.65rem;font-weight:600">
-                                {row['simulated_risk_level']}
-                            </span>
-                            <span style="font-size:0.72rem;color:#94a3b8;margin-left:0.3rem">
-                                {row['simulated_risk_score']:.0f}/100
-                            </span>
-                        </div>
-                    </div>
-                    <div style="font-size:0.7rem;color:#64748b;margin-top:0.2rem">{reasons_str}</div>
-                </div>
+<div style="background:#1a1d27;border-left:3px solid {p_color};border-radius:0 6px 6px 0;
+            padding:0.4rem 0.6rem;margin-bottom:0.3rem">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:0.8rem;font-weight:700;color:#e2e8f0">
+            {row['area']}, {row['city']}
+        </div>
+        <div>
+            <span style="background:{p_color};color:white;padding:1px 5px;
+                  border-radius:4px;font-size:0.65rem;font-weight:600">
+                {row['simulated_risk_level']}
+            </span>
+            <span style="font-size:0.72rem;color:#94a3b8;margin-left:0.3rem">
+                {row['simulated_risk_score']:.0f}/100
+            </span>
+        </div>
+    </div>
+    <div style="font-size:0.7rem;color:#64748b;margin-top:0.2rem">{reasons_str}</div>
+</div>
                 """, unsafe_allow_html=True)
         else:
             st.success("✅ No CRITICAL or HIGH risk zones with current parameters.")
@@ -636,7 +690,74 @@ with tab1:
                 use_container_width=True, hide_index=True,
             )
 
-    st.markdown(f'<div style="font-size:0.7rem;color:#64748b;margin-top:0.5rem">⚙ All values are SIMULATED using a mathematical model. Rainfall={rainfall_mm}mm/hr, Duration={duration_hr}h, Drainage={drainage_pct}%, Blocked={blocked_drains}%</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:0.7rem;color:#64748b;margin-top:0.5rem">&#9881; All values are SIMULATED using a mathematical model. Rainfall={rainfall_mm}mm/hr, Duration={duration_hr}h, Drainage={drainage_pct}%, Blocked={blocked_drains}%</div>', unsafe_allow_html=True)
+
+    # ── Why did the risk change? (Req 5) ─────────────────────────────────
+    # Compare current slider values to "default" baseline to explain delta
+    _SIM_BASELINE = {"rainfall": 10, "drainage": 80, "blocked": 5, "water_level": 0.2, "citizen_rpts": 5, "duration": 1}
+    _sim_factors = []
+    if rainfall_mm > _SIM_BASELINE["rainfall"] * 1.5:
+        _sim_factors.append(("Rainfall intensity", f"{_SIM_BASELINE['rainfall']} → {rainfall_mm} mm/hr", "increased", "#ef4444"))
+    elif rainfall_mm < _SIM_BASELINE["rainfall"] * 0.7:
+        _sim_factors.append(("Rainfall intensity", f"{_SIM_BASELINE['rainfall']} → {rainfall_mm} mm/hr", "decreased", "#22c55e"))
+    if drainage_pct < _SIM_BASELINE["drainage"] - 10:
+        _sim_factors.append(("Drainage capacity", f"{_SIM_BASELINE['drainage']}% → {drainage_pct}%", "decreased", "#f97316"))
+    elif drainage_pct > _SIM_BASELINE["drainage"] + 10:
+        _sim_factors.append(("Drainage capacity", f"{_SIM_BASELINE['drainage']}% → {drainage_pct}%", "improved", "#22c55e"))
+    if blocked_drains > _SIM_BASELINE["blocked"] + 10:
+        _sim_factors.append(("Blocked drains", f"{_SIM_BASELINE['blocked']}% → {blocked_drains}%", "increased", "#f97316"))
+    if water_level_m > _SIM_BASELINE["water_level"] + 0.3:
+        _sim_factors.append(("Water level", f"{_SIM_BASELINE['water_level']}m → {water_level_m}m", "elevated", "#ef4444"))
+    if citizen_rpts > _SIM_BASELINE["citizen_rpts"] + 15:
+        _sim_factors.append(("Citizen reports", f"{_SIM_BASELINE['citizen_rpts']} → {citizen_rpts}", "surged", "#f97316"))
+
+    _risk_direction = "higher" if avg_score > 35 else "lower" if avg_score < 15 else "at baseline"
+    _risk_color_dir = "#ef4444" if avg_score > 35 else "#22c55e" if avg_score < 15 else "#eab308"
+
+    if _sim_factors:
+        _why_parts = " + ".join([f['0'] if isinstance(f, dict) else f[0] for f in _sim_factors])
+        _why_html = (
+            '<div style="background:rgba(59,130,246,0.06);border:1px solid #3b82f640;'
+            'border-radius:8px;padding:0.75rem 1rem;margin-top:0.75rem">'
+            '<div style="font-size:0.78rem;font-weight:700;color:#93c5fd;margin-bottom:0.5rem">'
+            '&#x2753; Why did the risk change? '
+            '<span style="background:#3a2e00;color:#fde68a;font-size:0.62rem;'
+            'padding:1px 6px;border-radius:3px;font-weight:700">SCENARIO / SIMULATION</span>'
+            '</div>'
+            '<div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;margin-bottom:0.5rem">'
+        )
+        for _f in _sim_factors:
+            _name, _delta, _direction, _fc = _f
+            _why_html += (
+                f'<div style="background:#0d1117;border:1px solid {_fc}40;border-radius:5px;'
+                f'padding:3px 8px;font-size:0.7rem">'
+                f'<span style="color:#94a3b8">{_name}: </span>'
+                f'<span style="color:{_fc};font-weight:700">{_direction}</span>'
+                f'<span style="color:#475569;font-size:0.65rem"> ({_delta})</span>'
+                f'</div>'
+            )
+            _why_html += '<span style="color:#2d3148;font-size:0.8rem">+</span>'
+        _why_html = _why_html.rstrip('<span style="color:#2d3148;font-size:0.8rem">+</span>')
+        _why_html += (
+            f'</div>'
+            f'<div style="font-size:0.78rem;color:#e2e8f0;margin-top:0.3rem">'
+            f'&#8594; <strong style="color:{_risk_color_dir}">Predicted flood risk is {_risk_direction}</strong>'
+            f' (avg score: {avg_score:.0f}/100, SIMULATED — not a real prediction)'
+            f'</div>'
+            f'<div style="font-size:0.62rem;color:#475569;margin-top:0.3rem">'
+            f'Relationships are from the ML model / rule-based formula, not hydrological science. '
+            f'Do not use as a real flood forecast.'
+            f'</div>'
+            f'</div>'
+        )
+        st.markdown(_why_html, unsafe_allow_html=True)
+    else:
+        st.markdown(
+            '<div style="font-size:0.72rem;color:#64748b;margin-top:0.5rem">'
+            '&#x2753; Why: Parameters are near baseline — minimal change from default conditions.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ═══════════════════════════════════════════════
@@ -645,10 +766,10 @@ with tab1:
 with tab2:
     section_header("FLOOD RISK FORECAST TIMELINE", simulated_badge())
     st.markdown("""
-    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
-        Simulated risk forecast at NOW, +30, +60, +90, and +120 minutes based on current scenario data.
-        Uses a decay/escalation model — not real meteorological forecasts.
-    </div>
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    Simulated risk forecast at NOW, +30, +60, +90, and +120 minutes based on current scenario data.
+    Uses a decay/escalation model — not real meteorological forecasts.
+</div>
     """, unsafe_allow_html=True)
 
     predictions = state.get("risk_predictions", [])
@@ -733,10 +854,10 @@ with tab2:
             st.plotly_chart(fig_heat, use_container_width=True, config={"displayModeBar": False})
 
             st.markdown(f"""
-            <div style="font-size:0.72rem;color:#64748b;margin-top:0.3rem">
-                ⚙ SIMULATED forecast — Trend: <strong style="color:#f97316">{trend_info['label']}</strong> 
-                (escalation rate: {escalation:+.0%}/hr based on {current_scenario} scenario)
-            </div>
+<div style="font-size:0.72rem;color:#64748b;margin-top:0.3rem">
+    ⚙ SIMULATED forecast — Trend: <strong style="color:#f97316">{trend_info['label']}</strong> 
+    (escalation rate: {escalation:+.0%}/hr based on {current_scenario} scenario)
+</div>
             """, unsafe_allow_html=True)
 
         with col_summary:
@@ -755,22 +876,22 @@ with tab2:
                 dom_color = level_colors.get(dom_level, "#94a3b8")
 
                 st.markdown(f"""
-                <div style="background:#1a1d27;border:1px solid #2d3148;border-left:4px solid {dom_color};
-                            border-radius:0 8px 8px 0;padding:0.5rem 0.75rem;margin-bottom:0.4rem">
-                    <div style="display:flex;justify-content:space-between;align-items:center">
-                        <div style="font-weight:700;color:#e2e8f0;font-size:0.85rem">{label}</div>
-                        <div style="font-size:0.72rem;color:#64748b">{t_stamp}</div>
-                    </div>
-                    <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.2rem">
-                        🔴 {counts['CRITICAL']} CRITICAL &nbsp;|&nbsp; 
-                        🟠 {counts['HIGH']} HIGH &nbsp;|&nbsp;
-                        🟡 {counts['MEDIUM']} MED &nbsp;|&nbsp;
-                        🟢 {counts['LOW']} LOW
-                    </div>
-                    <div style="font-size:0.7rem;color:{dom_color};margin-top:0.15rem">
-                        Dominant: {dom_level}
-                    </div>
-                </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;border-left:4px solid {dom_color};
+            border-radius:0 8px 8px 0;padding:0.5rem 0.75rem;margin-bottom:0.4rem">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:700;color:#e2e8f0;font-size:0.85rem">{label}</div>
+        <div style="font-size:0.72rem;color:#64748b">{t_stamp}</div>
+    </div>
+    <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.2rem">
+        🔴 {counts['CRITICAL']} CRITICAL &nbsp;|&nbsp; 
+        🟠 {counts['HIGH']} HIGH &nbsp;|&nbsp;
+        🟡 {counts['MEDIUM']} MED &nbsp;|&nbsp;
+        🟢 {counts['LOW']} LOW
+    </div>
+    <div style="font-size:0.7rem;color:{dom_color};margin-top:0.15rem">
+        Dominant: {dom_level}
+    </div>
+</div>
                 """, unsafe_allow_html=True)
 
         # Line chart for top 3 zones
@@ -813,11 +934,11 @@ with tab2:
 with tab3:
     section_header("DRAINAGE INTERVENTION SIMULATOR", model_badge())
     st.markdown("""
-    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
-        Simulate an AI-recommended maintenance intervention on a drain.
-        Scores use the real <strong>DrainageAgent</strong> scoring formula.
-        Select a drain, adjust parameters, and compare BEFORE vs AFTER.
-    </div>
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    Simulate an AI-recommended maintenance intervention on a drain.
+    Scores use the real <strong>DrainageAgent</strong> scoring formula.
+    Select a drain, adjust parameters, and compare BEFORE vs AFTER.
+</div>
     """, unsafe_allow_html=True)
 
     # Get drain data from current state
@@ -860,19 +981,19 @@ with tab3:
             bscore = before_score_result.get("computed_risk_score", 0)
             bcolor = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(bpri, "#94a3b8")
             st.markdown(f"""
-            <div style="background:#1a0f0f;border:2px solid {bcolor};border-radius:10px;padding:1rem;margin-bottom:0.5rem">
-                <div style="font-size:0.75rem;color:#94a3b8;font-weight:700;letter-spacing:0.05em;margin-bottom:0.5rem">BEFORE MAINTENANCE</div>
-                <div style="font-size:2.5rem;font-weight:900;color:{bcolor}">{bscore:.0f}</div>
-                <div style="font-size:0.75rem;color:#94a3b8">Risk Score / 100</div>
-                <div style="margin-top:0.5rem">
-                    <span style="background:{bcolor};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:600">{bpri}</span>
-                </div>
-                <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.5rem">
-                    Capacity: {base_drain.get('capacity_rating', '?')}% &nbsp;·&nbsp;
-                    Condition: {base_drain.get('condition', '?')} &nbsp;·&nbsp;
-                    Status: {base_drain.get('status', '?')}
-                </div>
-            </div>
+<div style="background:#1a0f0f;border:2px solid {bcolor};border-radius:10px;padding:1rem;margin-bottom:0.5rem">
+    <div style="font-size:0.75rem;color:#94a3b8;font-weight:700;letter-spacing:0.05em;margin-bottom:0.5rem">BEFORE MAINTENANCE</div>
+    <div style="font-size:2.5rem;font-weight:900;color:{bcolor}">{bscore:.0f}</div>
+    <div style="font-size:0.75rem;color:#94a3b8">Risk Score / 100</div>
+    <div style="margin-top:0.5rem">
+        <span style="background:{bcolor};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:600">{bpri}</span>
+    </div>
+    <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.5rem">
+        Capacity: {base_drain.get('capacity_rating', '?')}% &nbsp;·&nbsp;
+        Condition: {base_drain.get('condition', '?')} &nbsp;·&nbsp;
+        Status: {base_drain.get('status', '?')}
+    </div>
+</div>
             """, unsafe_allow_html=True)
             for reason in before_score_result.get("priority_reasons", [])[:3]:
                 st.markdown(f'<div style="font-size:0.75rem;color:#f97316;padding:2px 0">⚠ {reason}</div>', unsafe_allow_html=True)
@@ -909,20 +1030,20 @@ with tab3:
             improvement = bscore - ascore
 
             st.markdown(f"""
-            <div style="background:#0a1a0a;border:2px solid {acolor};border-radius:10px;padding:1rem;margin-bottom:0.5rem">
-                <div style="font-size:0.75rem;color:#94a3b8;font-weight:700;letter-spacing:0.05em;margin-bottom:0.5rem">AFTER INTERVENTION</div>
-                <div style="font-size:2.5rem;font-weight:900;color:{acolor}">{ascore:.0f}</div>
-                <div style="font-size:0.75rem;color:#94a3b8">Risk Score / 100</div>
-                <div style="margin-top:0.5rem">
-                    <span style="background:{acolor};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:600">{apri}</span>
-                    {'&nbsp;<span style="color:#22c55e;font-size:0.78rem;font-weight:700">▼ ' + f'{improvement:.0f} improved</span>' if improvement > 0 else ''}
-                </div>
-                <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.5rem">
-                    Capacity: {new_capacity}% &nbsp;·&nbsp;
-                    Condition: {new_cond} &nbsp;·&nbsp;
-                    Status: {'OPERATIONAL' if clear_block else base_drain.get('status', '?')}
-                </div>
-            </div>
+<div style="background:#0a1a0a;border:2px solid {acolor};border-radius:10px;padding:1rem;margin-bottom:0.5rem">
+    <div style="font-size:0.75rem;color:#94a3b8;font-weight:700;letter-spacing:0.05em;margin-bottom:0.5rem">AFTER INTERVENTION</div>
+    <div style="font-size:2.5rem;font-weight:900;color:{acolor}">{ascore:.0f}</div>
+    <div style="font-size:0.75rem;color:#94a3b8">Risk Score / 100</div>
+    <div style="margin-top:0.5rem">
+        <span style="background:{acolor};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:600">{apri}</span>
+        {'&nbsp;<span style="color:#22c55e;font-size:0.78rem;font-weight:700">▼ ' + f'{improvement:.0f} improved</span>' if improvement > 0 else ''}
+    </div>
+    <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.5rem">
+        Capacity: {new_capacity}% &nbsp;·&nbsp;
+        Condition: {new_cond} &nbsp;·&nbsp;
+        Status: {'OPERATIONAL' if clear_block else base_drain.get('status', '?')}
+    </div>
+</div>
             """, unsafe_allow_html=True)
 
             rec_action = after_score_result.get("recommended_action", "Monitor and schedule next inspection.")
@@ -933,48 +1054,48 @@ with tab3:
         _impr_pct = ((bscore - ascore) / max(bscore, 1)) * 100 if bscore > 0 else 0
         _impr_color = "#22c55e" if improvement > 5 else "#eab308" if improvement > 0 else "#ef4444"
         st.markdown(f"""
-        <div style="background:#080c14;border:1px solid #1e2440;border-radius:10px;padding:1rem;margin-top:0.5rem">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
-            <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;text-transform:uppercase;letter-spacing:0.05em">
-              🔧 DRAINAGE MAINTENANCE IMPACT
-            </div>
-            <div style="background:{'rgba(34,197,94,0.1)' if improvement > 5 else 'rgba(234,179,8,0.1)'};
-                        border:1px solid {_impr_color}40;border-radius:6px;padding:0.25rem 0.7rem">
-              <span style="color:{_impr_color};font-size:0.85rem;font-weight:700">
-                {"▼" if improvement > 0 else "="} {abs(improvement):.0f} pts ({abs(_impr_pct):.0f}%) {'improvement' if improvement > 0 else 'change'}
-              </span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-            <div style="flex:1;min-width:120px">
-              <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">BEFORE</div>
-              <div style="background:#1e2440;border-radius:4px;height:24px;position:relative;overflow:hidden">
-                <div style="width:{bscore:.0f}%;background:{bcolor};height:100%;border-radius:4px;
-                            display:flex;align-items:center;justify-content:flex-end;padding-right:6px">
-                  <span style="color:white;font-size:0.7rem;font-weight:700">{bscore:.0f}</span>
-                </div>
-              </div>
-              <div style="font-size:0.7rem;color:{bcolor};margin-top:0.1rem;font-weight:700">{bpri}</div>
-            </div>
-            <div style="font-size:1.5rem;color:#475569">→</div>
-            <div style="flex:1;min-width:120px">
-              <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">AFTER</div>
-              <div style="background:#1e2440;border-radius:4px;height:24px;position:relative;overflow:hidden">
-                <div style="width:{ascore:.0f}%;background:{acolor};height:100%;border-radius:4px;
-                            display:flex;align-items:center;justify-content:flex-end;padding-right:6px">
-                  <span style="color:white;font-size:0.7rem;font-weight:700">{ascore:.0f}</span>
-                </div>
-              </div>
-              <div style="font-size:0.7rem;color:{acolor};margin-top:0.1rem;font-weight:700">{apri}</div>
-            </div>
-          </div>
-          <div style="font-size:0.65rem;color:#475569;margin-top:0.6rem">
-            ⚙ Scores from DrainageAgent real scoring formula ·
-            Drain: {base_drain.get('drain_id','?')} ·
-            Rainfall: {avg_rain_drain:.1f} mm/hr (DEMO) ·
-            Area flood risk: {area_risk_val:.0f}/100 (MODEL)
-          </div>
+<div style="background:#080c14;border:1px solid #1e2440;border-radius:10px;padding:1rem;margin-top:0.5rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
+    <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;text-transform:uppercase;letter-spacing:0.05em">
+      🔧 DRAINAGE MAINTENANCE IMPACT
+    </div>
+    <div style="background:{'rgba(34,197,94,0.1)' if improvement > 5 else 'rgba(234,179,8,0.1)'};
+                border:1px solid {_impr_color}40;border-radius:6px;padding:0.25rem 0.7rem">
+      <span style="color:{_impr_color};font-size:0.85rem;font-weight:700">
+        {"▼" if improvement > 0 else "="} {abs(improvement):.0f} pts ({abs(_impr_pct):.0f}%) {'improvement' if improvement > 0 else 'change'}
+      </span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+    <div style="flex:1;min-width:120px">
+      <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">BEFORE</div>
+      <div style="background:#1e2440;border-radius:4px;height:24px;position:relative;overflow:hidden">
+        <div style="width:{bscore:.0f}%;background:{bcolor};height:100%;border-radius:4px;
+                    display:flex;align-items:center;justify-content:flex-end;padding-right:6px">
+          <span style="color:white;font-size:0.7rem;font-weight:700">{bscore:.0f}</span>
         </div>
+      </div>
+      <div style="font-size:0.7rem;color:{bcolor};margin-top:0.1rem;font-weight:700">{bpri}</div>
+    </div>
+    <div style="font-size:1.5rem;color:#475569">→</div>
+    <div style="flex:1;min-width:120px">
+      <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">AFTER</div>
+      <div style="background:#1e2440;border-radius:4px;height:24px;position:relative;overflow:hidden">
+        <div style="width:{ascore:.0f}%;background:{acolor};height:100%;border-radius:4px;
+                    display:flex;align-items:center;justify-content:flex-end;padding-right:6px">
+          <span style="color:white;font-size:0.7rem;font-weight:700">{ascore:.0f}</span>
+        </div>
+      </div>
+      <div style="font-size:0.7rem;color:{acolor};margin-top:0.1rem;font-weight:700">{apri}</div>
+    </div>
+  </div>
+  <div style="font-size:0.65rem;color:#475569;margin-top:0.6rem">
+    ⚙ Scores from DrainageAgent real scoring formula ·
+    Drain: {base_drain.get('drain_id','?')} ·
+    Rainfall: {avg_rain_drain:.1f} mm/hr (DEMO) ·
+    Area flood risk: {area_risk_val:.0f}/100 (MODEL)
+  </div>
+</div>
         """, unsafe_allow_html=True)
 
 
@@ -985,10 +1106,10 @@ with tab4:
     section_header("RESOURCE OPTIMIZATION ENGINE", simulated_badge())
     ai_disclaimer()
     st.markdown("""
-    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
-        AI-driven resource recommendations based on risk level, priority, distance, and availability.
-        Recommends pumps, teams, ambulances, and shelters — SIMULATED optimization only.
-    </div>
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    AI-driven resource recommendations based on risk level, priority, distance, and availability.
+    Recommends pumps, teams, ambulances, and shelters — SIMULATED optimization only.
+</div>
     """, unsafe_allow_html=True)
 
     resource_recs = state.get("resource_recommendations", [])
@@ -1018,30 +1139,33 @@ with tab4:
             for rec in resource_recs:
                 level = rec["risk_level"]
                 p_color = COLORS.get(level, "#94a3b8")
-                resources_html = ""
+                _res_parts = []
                 for r in rec["assigned_resources"]:
                     t_color = "#22c55e" if r["status"] == "AVAILABLE" else "#f97316"
                     t_type = r["team_type"].replace("_", " ").title()
-                    resources_html += f"""
-                    <div style="display:flex;gap:0.5rem;align-items:center;padding:2px 0;font-size:0.72rem">
-                        <span style="color:{t_color}">●</span>
-                        <span style="color:#e2e8f0">{r['team_name']}</span>
-                        <span style="color:#64748b">({t_type})</span>
-                        <span style="color:#94a3b8">~{r['estimated_travel_min']}min</span>
-                    </div>
-                    """
+                    _travel = r.get("estimated_travel_min")
+                    _travel_str = f"~{_travel}min" if _travel is not None else "N/A"
+                    _res_parts.append(
+                        f'<div style="display:flex;gap:0.5rem;align-items:center;padding:2px 0;font-size:0.72rem">'
+                        f'<span style="color:{t_color}">&#9679;</span>'
+                        f'<span style="color:#e2e8f0">{r["team_name"]}</span>'
+                        f'<span style="color:#64748b">({t_type})</span>'
+                        f'<span style="color:#94a3b8">{_travel_str}</span>'
+                        f'</div>'
+                    )
+                resources_html = "".join(_res_parts)
+                _rationale = rec['rationale']
 
                 with st.expander(
                     f"{'🔴' if level=='CRITICAL' else '🟠'} {rec['zone']} — Score: {rec['risk_score']:.0f}",
                     expanded=(level == "CRITICAL"),
                 ):
-                    st.markdown(f"""
-                    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.4rem">
-                        {rec['rationale']}
-                    </div>
-                    {resources_html}
-                    <div style="font-size:0.65rem;color:#475569;margin-top:0.3rem">⚙ SIMULATED allocation</div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.4rem">{_rationale}</div>'
+                        f'{resources_html}'
+                        f'<div style="font-size:0.65rem;color:#475569;margin-top:0.3rem">&#9881; SIMULATED allocation</div>',
+                        unsafe_allow_html=True,
+                    )
 
         with col_matrix:
             section_header("RESOURCE TYPE DISTRIBUTION")
@@ -1079,13 +1203,13 @@ with tab4:
                 pct = count / max(len(teams), 1) * 100
                 sc = status_colors.get(status, "#94a3b8")
                 st.markdown(f"""
-                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.3rem">
-                    <div style="min-width:90px;font-size:0.78rem;color:{sc};font-weight:600">{status}</div>
-                    <div style="flex:1;background:#1a1d27;border-radius:4px;height:16px;overflow:hidden;border:1px solid #2d3148">
-                        <div style="width:{pct:.0f}%;background:{sc};height:100%;border-radius:4px"></div>
-                    </div>
-                    <div style="min-width:25px;font-size:0.78rem;color:#e2e8f0">{count}</div>
-                </div>
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.3rem">
+    <div style="min-width:90px;font-size:0.78rem;color:{sc};font-weight:600">{status}</div>
+    <div style="flex:1;background:#1a1d27;border-radius:4px;height:16px;overflow:hidden;border:1px solid #2d3148">
+        <div style="width:{pct:.0f}%;background:{sc};height:100%;border-radius:4px"></div>
+    </div>
+    <div style="min-width:25px;font-size:0.78rem;color:#e2e8f0">{count}</div>
+</div>
                 """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────

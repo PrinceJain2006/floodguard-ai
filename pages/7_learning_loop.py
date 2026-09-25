@@ -15,7 +15,7 @@ import pandas as pd
 from datetime import datetime, timezone
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
-    simulated_badge, section_header, COLORS, ai_disclaimer
+    simulated_badge, section_header, COLORS, ai_disclaimer, _utc_to_ist,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 
@@ -57,6 +57,21 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 header("Prediction-to-Outcome Feedback Tracking",
        "Records ML predictions and actual outcomes — NOT automated retraining", "🔄")
+
+# Sub-Task I: Data provenance badge
+_ll_is_live = state.get("live_weather_status", {}).get("is_live", False)
+_ll_data_label = state.get("data_label", "DEMO/SIMULATED")
+_ll_badge = (
+    '<span style="background:#14532d;color:#bbf7d0;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700">🟢 LIVE Weather</span>'
+    if _ll_is_live
+    else f'<span style="background:#3a2e00;color:#fde68a;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700">🟡 {_ll_data_label}</span>'
+)
+st.markdown(
+    f'<div style="margin-bottom:0.4rem">{_ll_badge} &nbsp;'
+    f'<span style="font-size:0.7rem;color:#475569">Learning cycles are demonstration data — '
+    f'not real historical outcomes. Data as of: {_utc_to_ist(state.get("last_updated",""), "%d %b %H:%M IST") or "N/A"}</span></div>',
+    unsafe_allow_html=True,
+)
 
 # ── Pipeline flow visualization ──────────────────────────────────────────────
 _curr_scen = SCENARIOS.get(orch.current_scenario, {})
@@ -234,23 +249,23 @@ with tab1:
             acc = correct / len(level_cycles) * 100
             p_color = level_colors.get(level, "#94a3b8")
             st.markdown(f"""
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.3rem">
-                <div style="min-width:70px;font-size:0.78rem;color:{p_color};font-weight:600">{level}</div>
-                <div style="flex:1;background:#1a1d27;border-radius:4px;height:16px;overflow:hidden;border:1px solid #2d3148">
-                    <div style="width:{acc:.0f}%;background:{p_color};height:100%;border-radius:4px"></div>
-                </div>
-                <div style="min-width:40px;font-size:0.78rem;color:#e2e8f0">{acc:.0f}%</div>
-                <div style="font-size:0.72rem;color:#64748b">{len(level_cycles)} pts</div>
-            </div>
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.3rem">
+    <div style="min-width:70px;font-size:0.78rem;color:{p_color};font-weight:600">{level}</div>
+    <div style="flex:1;background:#1a1d27;border-radius:4px;height:16px;overflow:hidden;border:1px solid #2d3148">
+        <div style="width:{acc:.0f}%;background:{p_color};height:100%;border-radius:4px"></div>
+    </div>
+    <div style="min-width:40px;font-size:0.78rem;color:#e2e8f0">{acc:.0f}%</div>
+    <div style="font-size:0.72rem;color:#64748b">{len(level_cycles)} pts</div>
+</div>
             """, unsafe_allow_html=True)
 
 # ── Tab 2: Cycle Log ─────────────────────────
 with tab2:
     section_header("LEARNING CYCLE LOG")
     st.markdown("""
-    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
-        Each row represents one complete cycle: prediction made → incident detected → response deployed → outcome recorded.
-    </div>
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    Each row represents one complete cycle: prediction made → incident detected → response deployed → outcome recorded.
+</div>
     """, unsafe_allow_html=True)
 
     df_log = pd.DataFrame(learning_cycles)
@@ -324,13 +339,13 @@ with tab3:
             pct = count / max(len(learning_cycles), 1) * 100
             fb_color = "#22c55e" if "Accurate" in key else "#f97316" if "Under" in key else "#3b82f6"
             st.markdown(f"""
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
-                <div style="min-width:160px;font-size:0.78rem;color:{fb_color}">{key}</div>
-                <div style="flex:1;background:#1a1d27;border-radius:4px;height:18px;overflow:hidden;border:1px solid #2d3148">
-                    <div style="width:{pct:.0f}%;background:{fb_color};height:100%;border-radius:4px"></div>
-                </div>
-                <div style="min-width:60px;font-size:0.78rem;color:#e2e8f0">{count} ({pct:.0f}%)</div>
-            </div>
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
+    <div style="min-width:160px;font-size:0.78rem;color:{fb_color}">{key}</div>
+    <div style="flex:1;background:#1a1d27;border-radius:4px;height:18px;overflow:hidden;border:1px solid #2d3148">
+        <div style="width:{pct:.0f}%;background:{fb_color};height:100%;border-radius:4px"></div>
+    </div>
+    <div style="min-width:60px;font-size:0.78rem;color:#e2e8f0">{count} ({pct:.0f}%)</div>
+</div>
             """, unsafe_allow_html=True)
 
         # Response time by outcome

@@ -17,6 +17,7 @@ from frontend.ui_utils import (
     simulated_badge, COLORS, RISK_EMOJI,
     risk_donut, rainfall_bar, risk_gauge, section_header,
     render_agent_trace, render_granite_panel, risk_level_indicator, data_source_strip,
+    render_evidence_fusion_bar, _utc_to_ist,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.evidence_fusion import get_audit_trail as _get_audit_trail
@@ -100,15 +101,15 @@ with st.sidebar:
     _sb_badge = hybrid_badge() if _sb_live else demo_badge()
     _sb_note  = "🟢 Live Weather + 🟡 Synthetic Model Data" if _sb_live else "Synthetic data — no live source"
     st.markdown(f"""
-    <div style="font-size:0.75rem;color:#94a3b8">
-        <b>Current Scenario:</b> {SCENARIOS[st.session_state.scenario]['emoji']} {SCENARIOS[st.session_state.scenario]['label']}<br>
-        <b>City:</b> {st.session_state.city_filter}<br>
-        <b>Last updated:</b> {orch.current_state.get('last_updated','')[:16] if orch.current_state else 'N/A'}<br><br>
-        {_sb_badge}<br>
-        <span style="font-size:0.68rem">{_sb_note}</span><br><br>
-        <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-size:0.7rem">📍 SCOPE</span>
-        Ahmedabad &amp; Surat only
-    </div>
+<div style="font-size:0.75rem;color:#94a3b8">
+    <b>Current Scenario:</b> {SCENARIOS[st.session_state.scenario]['emoji']} {SCENARIOS[st.session_state.scenario]['label']}<br>
+    <b>City:</b> {st.session_state.city_filter}<br>
+    <b>Last updated:</b> {orch.current_state.get('last_updated','')[:16] if orch.current_state else 'N/A'}<br><br>
+    {_sb_badge}<br>
+    <span style="font-size:0.68rem">{_sb_note}</span><br><br>
+    <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-size:0.7rem">📍 SCOPE</span>
+    Ahmedabad &amp; Surat only
+</div>
     """, unsafe_allow_html=True)
 
     st.markdown("---")
@@ -259,7 +260,7 @@ st.markdown(f"""
                 {'<span style="color:#22c55e">Granite LIVE</span>' if _g_avail else ('<span style="color:#eab308">Granite RATE LIMITED</span>' if _g_rate else '<span style="color:#94a3b8">Granite FALLBACK</span>')}
                 <br>
                 <span style="color:#475569;font-size:0.65rem">
-                    {state.get('last_updated','')[:19]} UTC
+                    {_utc_to_ist(state.get('last_updated',''), '%d %b %H:%M IST')}
                 </span>
             </div>
         </div>
@@ -305,12 +306,12 @@ st.markdown("<br>", unsafe_allow_html=True)
 rich_alerts = state.get("rich_alerts", [])
 if rich_alerts:
     st.markdown("""
-    <div style="background:rgba(239,68,68,0.08);border:2px solid #ef4444;border-radius:10px;
-                padding:0.8rem 1.2rem;margin-bottom:0.75rem">
-        <div style="font-size:0.8rem;font-weight:800;color:#fca5a5;margin-bottom:0.6rem">
-            🚨 ACTIVE FLOOD ALERTS
-        </div>
+<div style="background:rgba(239,68,68,0.08);border:2px solid #ef4444;border-radius:10px;
+            padding:0.8rem 1.2rem;margin-bottom:0.75rem">
+    <div style="font-size:0.8rem;font-weight:800;color:#fca5a5;margin-bottom:0.6rem">
+        🚨 ACTIVE FLOOD ALERTS
     </div>
+</div>
     """, unsafe_allow_html=True)
     for _ra in rich_alerts[:3]:
         _rl = _ra.get("risk_level","GREEN")
@@ -320,32 +321,40 @@ if rich_alerts:
         _badge = "🟣 SIMULATION" if _is_sim else "🟢 LIVE"
         _badge_bg = "rgba(124,58,237,0.15)" if _is_sim else "rgba(34,197,94,0.15)"
         st.markdown(f"""
-        <div style="background:#1a1d27;border:1px solid {_rl_c}40;border-left:4px solid {_rl_c};
-                    border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.4rem">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:0.4rem">
-                <div>
-                    <div style="font-size:0.85rem;font-weight:700;color:{_rl_c}">
-                        {_rl} ALERT — {_ra.get('location','Unknown')}
-                    </div>
-                    <div style="font-size:0.73rem;color:#94a3b8;margin-top:0.2rem">
-                        Score: {_ra.get('risk_score',0):.0f}/100 &nbsp;·&nbsp;
-                        Confidence: {round(_ra.get('confidence',0)*100)}% &nbsp;·&nbsp;
-                        Window: <span style="color:#fde68a">{_ra.get('expected_window','Unknown')[:50]}</span>
-                    </div>
-                </div>
-                <div style="display:flex;gap:0.3rem;align-items:center">
-                    <span style="background:{_badge_bg};color:{'#c4b5fd' if _is_sim else '#bbf7d0'};
-                                 font-size:0.62rem;padding:2px 7px;border-radius:3px;font-weight:600">
-                        {_badge}
-                    </span>
-                    <span style="font-size:0.65rem;color:#475569">{_ra.get('timestamp','')[:16]} UTC</span>
-                </div>
+<div style="background:#1a1d27;border:1px solid {_rl_c}40;border-left:4px solid {_rl_c};
+            border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.4rem">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:0.4rem">
+        <div>
+            <div style="font-size:0.85rem;font-weight:700;color:{_rl_c}">
+                {_rl} ALERT — {_ra.get('location','Unknown')}
             </div>
-            <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">
-                {_ra.get('recommended_action','')[:120]}…
+            <div style="font-size:0.73rem;color:#94a3b8;margin-top:0.2rem">
+                Score: {_ra.get('risk_score',0):.0f}/100 &nbsp;·&nbsp;
+                Confidence: {round(_ra.get('confidence',0)*100)}% &nbsp;·&nbsp;
+                Window: <span style="color:#fde68a">{_ra.get('expected_window','Unknown')[:50]}</span>
             </div>
         </div>
+        <div style="display:flex;gap:0.3rem;align-items:center">
+            <span style="background:{_badge_bg};color:{'#c4b5fd' if _is_sim else '#bbf7d0'};
+                         font-size:0.62rem;padding:2px 7px;border-radius:3px;font-weight:600">
+                {_badge}
+            </span>
+            <span style="font-size:0.65rem;color:#475569">{_utc_to_ist(_ra.get('timestamp',''), '%d %b %H:%M IST')}</span>
+        </div>
+    </div>
+    <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">
+        {_ra.get('recommended_action','')[:120]}…
+    </div>
+</div>
         """, unsafe_allow_html=True)
+
+        # Sub-Task G: Evidence fusion expander per alert
+        _ev = _ra.get("evidence_scores", {})
+        _fw = _ra.get("fusion_weights", {})
+        if _ev:
+            with st.expander(f"📊 Why this alert? — {_ra.get('location','')}", expanded=False):
+                render_evidence_fusion_bar(_ev, _fw)
+
     if len(rich_alerts) > 3:
         st.caption(f"+ {len(rich_alerts)-3} more alerts — see Alert History page")
     if st.button("📋 View Alert History & Notifications", key="goto_alert_history"):
@@ -449,24 +458,26 @@ if _sit_report:
         _granite_note  = "⚙ Rule-Based Fallback — configure WATSONX_API_KEY for IBM Granite"
 
     with st.expander(f"🤖 GRANITE ANALYSIS FLOW — {_granite_label}", expanded=False):
-        st.markdown(f"""
-        <div style="{_granite_style};border-radius:8px;padding:0.8rem 1rem;margin-bottom:0.5rem">
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem">
-                {_granite_badge}
-                <span style="font-size:0.75rem;color:#94a3b8">{_granite_note}</span>
-            </div>
-            <div style="font-size:0.78rem;color:#94a3b8">
-                <strong>INPUT:</strong> Rainfall intensity · Drainage status · Citizen reports · Incident context (scenario: {_scen_info['label']})
-                <br><strong>PROCESSING:</strong> {"IBM Granite 3-8b-instruct via WatsonX REST API" if _g_avail else "Rule-based fallback (no LLM)"}
-                <br><strong>OUTPUT:</strong> Situation report + zone recommendations
-            </div>
-        </div>
-        <div style="background:#111827;border-radius:6px;padding:0.7rem 0.9rem;
-                    font-family:monospace;font-size:0.78rem;color:#e2e8f0;
-                    white-space:pre-wrap;line-height:1.5;max-height:200px;overflow-y:auto">
-{_sit_report[:800]}{"..." if len(_sit_report) > 800 else ""}
-        </div>
-        """, unsafe_allow_html=True)
+        _scen_label_g  = _scen_info['label']
+        _g_proc        = "IBM Granite 3-8b-instruct via WatsonX REST API" if _g_avail else "Rule-based fallback (no LLM)"
+        _sit_rpt_trunc = _sit_report[:800] + ("..." if len(_sit_report) > 800 else "")
+        st.markdown(
+            f'<div style="{_granite_style};border-radius:8px;padding:0.8rem 1rem;margin-bottom:0.5rem">'
+            f'<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem">'
+            f'{_granite_badge}'
+            f'<span style="font-size:0.75rem;color:#94a3b8">{_granite_note}</span>'
+            f'</div>'
+            f'<div style="font-size:0.78rem;color:#94a3b8">'
+            f'<strong>INPUT:</strong> Rainfall intensity &middot; Drainage status &middot; Citizen reports &middot; Incident context (scenario: {_scen_label_g})'
+            f'<br><strong>PROCESSING:</strong> {_g_proc}'
+            f'<br><strong>OUTPUT:</strong> Situation report + zone recommendations'
+            f'</div></div>'
+            f'<div style="background:#111827;border-radius:6px;padding:0.7rem 0.9rem;'
+            f'font-family:monospace;font-size:0.78rem;color:#e2e8f0;'
+            f'white-space:pre-wrap;line-height:1.5;max-height:200px;overflow-y:auto">'
+            f'{_sit_rpt_trunc}</div>',
+            unsafe_allow_html=True,
+        )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -540,96 +551,102 @@ with tab1:
             _dc = _sel_feats.get("drainage_capacity", 50)
             _dc_color = "#ef4444" if _dc < 40 else "#f97316" if _dc < 65 else "#22c55e"
 
-            # Build feature importance bar HTML
-            _fi_html = ""
+            # Build feature importance bar HTML — single-line to avoid markdown code-block rendering
+            _fi_parts = []
             for _fn, _fv in _sel_top_fi:
                 _fl = _fn.replace("_", " ").title()
-                _fbar = min(100, _fv * 100 * 8)
-                _fi_html += f"""
-                <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
-                  <div style="min-width:110px;font-size:0.63rem;color:#94a3b8">{_fl}</div>
-                  <div style="flex:1;background:#1e2440;border-radius:2px;height:5px">
-                    <div style="width:{_fbar:.0f}%;background:#7c3aed;height:5px;border-radius:2px"></div>
-                  </div>
-                  <div style="min-width:28px;font-size:0.6rem;color:#a78bfa;text-align:right">{_fv:.1%}</div>
-                </div>"""
+                _fbar = f"{min(100, _fv * 100 * 8):.0f}"
+                _fv_pct = f"{_fv:.1%}"
+                _fi_parts.append(
+                    f'<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">'
+                    f'<div style="min-width:110px;font-size:0.63rem;color:#94a3b8">{_fl}</div>'
+                    f'<div style="flex:1;background:#1e2440;border-radius:2px;height:5px">'
+                    f'<div style="width:{_fbar}%;background:#7c3aed;height:5px;border-radius:2px"></div>'
+                    f'</div>'
+                    f'<div style="min-width:28px;font-size:0.6rem;color:#a78bfa;text-align:right">{_fv_pct}</div>'
+                    f'</div>'
+                )
+            _fi_html = "".join(_fi_parts)
 
-            # Probability row
-            _prob_html = ""
+            # Probability row — single-line
+            _prob_parts = []
             for _lvl, _pv in [("CRITICAL","#ef4444"),("HIGH","#f97316"),("MEDIUM","#eab308"),("LOW","#22c55e")]:
                 _pval = _sel_probs.get(_lvl, 0)
-                _pbar = int(_pval * 100)
-                _prob_html += f"""
-                <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
-                  <div style="min-width:55px;font-size:0.6rem;color:{_pv};font-weight:600">{_lvl}</div>
-                  <div style="flex:1;background:#1e2440;border-radius:2px;height:5px">
-                    <div style="width:{_pbar}%;background:{_pv};height:5px;border-radius:2px"></div>
-                  </div>
-                  <div style="min-width:28px;font-size:0.6rem;color:{_pv};text-align:right">{_pval:.0%}</div>
-                </div>"""
+                _pbar = f"{int(_pval * 100)}"
+                _pval_pct = f"{_pval:.0%}"
+                _prob_parts.append(
+                    f'<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">'
+                    f'<div style="min-width:55px;font-size:0.6rem;color:{_pv};font-weight:600">{_lvl}</div>'
+                    f'<div style="flex:1;background:#1e2440;border-radius:2px;height:5px">'
+                    f'<div style="width:{_pbar}%;background:{_pv};height:5px;border-radius:2px"></div>'
+                    f'</div>'
+                    f'<div style="min-width:28px;font-size:0.6rem;color:{_pv};text-align:right">{_pval_pct}</div>'
+                    f'</div>'
+                )
+            _prob_html = "".join(_prob_parts)
 
             st.markdown(f"""
-            <div style="background:{_sel_bg};border:1px solid {_sel_rc}40;
-                        border-top:3px solid {_sel_rc};border-radius:8px;padding:0.8rem;">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.4rem">
-                <div>
-                  <div style="font-weight:800;color:#e2e8f0;font-size:0.9rem">{_sel_pred['area']}</div>
-                  <div style="font-size:0.7rem;color:#64748b">{_sel_pred['city']}</div>
-                </div>
-                <div style="background:{_sel_rc};color:white;padding:2px 8px;
-                            border-radius:8px;font-size:0.68rem;font-weight:700">{_sel_rl}</div>
-              </div>
-              <div style="font-size:0.6rem;color:#64748b;text-transform:uppercase;
-                          letter-spacing:0.07em;margin-bottom:0.1rem">FLOOD RISK SCORE</div>
-              <div style="font-size:1.9rem;font-weight:900;color:{_sel_rc};line-height:1;margin-bottom:0.05rem">
-                {_sel_pred['risk_score']:.0f}
-                <span style="font-size:0.85rem;color:#64748b;font-weight:400"> / 100 — {_sel_rl}</span>
-              </div>
-              <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.6rem">
-                confidence: {_sel_pred.get('confidence', 0):.0%} &nbsp;|&nbsp; 🔵 Random Forest ML
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;font-size:0.72rem;margin-bottom:0.5rem">
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.58rem">🌧️ RAINFALL 1H</div>
-                  <div style="color:#3b82f6;font-weight:700">{_sel_feats.get('rainfall_1h', 0):.1f} mm/hr</div>
-                </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.58rem">💧 WATER LEVEL</div>
-                  <div style="color:#06b6d4;font-weight:700">{_sel_feats.get('water_level', 0):.2f} m</div>
-                </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.58rem">🔧 DRAINAGE</div>
-                  <div style="color:{_dc_color};font-weight:700">{_dc:.0f}%</div>
-                </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.58rem">📅 HIST. FLOODS</div>
-                  <div style="color:#f97316;font-weight:700">{_sel_feats.get('historical_flood_freq', 0):.0f}/yr</div>
-                </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.58rem">📱 CITIZEN RPTS</div>
-                  <div style="color:#eab308;font-weight:700">{_sel_feats.get('citizen_reports', 0):.0f}</div>
-                </div>
-                <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
-                  <div style="color:#64748b;font-size:0.58rem">⛰️ ELEVATION</div>
-                  <div style="color:#94a3b8;font-weight:700">{_sel_feats.get('elevation', 0):.0f} m</div>
-                </div>
-              </div>
-              <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.25rem;
-                          text-transform:uppercase;font-weight:700">🤖 ML Risk Factors</div>
-              {"".join(["<div style='display:flex;align-items:center;gap:0.4rem;padding:1px 0;font-size:0.72rem'><span style='color:" + ("#ef4444" if any(w in r.lower() for w in ["extreme","critical","dangerously"]) else "#f97316" if "high" in r.lower() else "#eab308") + "'>▸</span><span style='color:#94a3b8'>" + r + "</span></div>" for r in _sel_pred.get("main_reasons", [])[:3]])}
-              {('<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440"><div style="font-size:0.62rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">🔬 Feature Importance (RF)</div>' + _fi_html + '</div>') if _sel_top_fi else ''}
-              {('<div style="margin-top:0.4rem;padding-top:0.35rem;border-top:1px solid #1e2440"><div style="font-size:0.62rem;color:#64748b;margin-bottom:0.25rem;text-transform:uppercase;font-weight:700">📊 Class Probabilities</div>' + _prob_html + '</div>') if _sel_probs else ''}
-              <div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440">
-                <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;
-                            text-transform:uppercase;font-weight:700">📋 AI Action</div>
-                <div style="font-size:0.7rem;color:#fbbf24;line-height:1.4">
-                    {_sel_pred.get('recommended_action','')[:150]}
-                </div>
-              </div>
-              <div style="font-size:0.58rem;color:#475569;margin-top:0.4rem">
-                🔵 Random Forest ML · 🟡 DEMO/SYNTHETIC DATA
-              </div>
-            </div>
+<div style="background:{_sel_bg};border:1px solid {_sel_rc}40;
+            border-top:3px solid {_sel_rc};border-radius:8px;padding:0.8rem;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.4rem">
+    <div>
+      <div style="font-weight:800;color:#e2e8f0;font-size:0.9rem">{_sel_pred['area']}</div>
+      <div style="font-size:0.7rem;color:#64748b">{_sel_pred['city']}</div>
+    </div>
+    <div style="background:{_sel_rc};color:white;padding:2px 8px;
+                border-radius:8px;font-size:0.68rem;font-weight:700">{_sel_rl}</div>
+  </div>
+  <div style="font-size:0.6rem;color:#64748b;text-transform:uppercase;
+              letter-spacing:0.07em;margin-bottom:0.1rem">FLOOD RISK SCORE</div>
+  <div style="font-size:1.9rem;font-weight:900;color:{_sel_rc};line-height:1;margin-bottom:0.05rem">
+    {_sel_pred['risk_score']:.0f}
+    <span style="font-size:0.85rem;color:#64748b;font-weight:400"> / 100 — {_sel_rl}</span>
+  </div>
+  <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.6rem">
+    confidence: {_sel_pred.get('confidence', 0):.0%} &nbsp;|&nbsp; 🔵 Random Forest ML
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;font-size:0.72rem;margin-bottom:0.5rem">
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+      <div style="color:#64748b;font-size:0.58rem">🌧️ RAINFALL 1H</div>
+      <div style="color:#3b82f6;font-weight:700">{_sel_feats.get('rainfall_1h', 0):.1f} mm/hr</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+      <div style="color:#64748b;font-size:0.58rem">💧 WATER LEVEL</div>
+      <div style="color:#06b6d4;font-weight:700">{_sel_feats.get('water_level', 0):.2f} m</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+      <div style="color:#64748b;font-size:0.58rem">🔧 DRAINAGE</div>
+      <div style="color:{_dc_color};font-weight:700">{_dc:.0f}%</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+      <div style="color:#64748b;font-size:0.58rem">📅 HIST. FLOODS</div>
+      <div style="color:#f97316;font-weight:700">{_sel_feats.get('historical_flood_freq', 0):.0f}/yr</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+      <div style="color:#64748b;font-size:0.58rem">📱 CITIZEN RPTS</div>
+      <div style="color:#eab308;font-weight:700">{_sel_feats.get('citizen_reports', 0):.0f}</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:5px;padding:0.3rem 0.5rem">
+      <div style="color:#64748b;font-size:0.58rem">⛰️ ELEVATION</div>
+      <div style="color:#94a3b8;font-weight:700">{_sel_feats.get('elevation', 0):.0f} m</div>
+    </div>
+  </div>
+  <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.25rem;
+              text-transform:uppercase;font-weight:700">🤖 ML Risk Factors</div>
+  {"".join(["<div style='display:flex;align-items:center;gap:0.4rem;padding:1px 0;font-size:0.72rem'><span style='color:" + ("#ef4444" if any(w in r.lower() for w in ["extreme","critical","dangerously"]) else "#f97316" if "high" in r.lower() else "#eab308") + "'>▸</span><span style='color:#94a3b8'>" + r + "</span></div>" for r in _sel_pred.get("main_reasons", [])[:3]])}
+  {('<div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440"><div style="font-size:0.62rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">🔬 Feature Importance (RF)</div>' + _fi_html + '</div>') if _sel_top_fi else ''}
+  {('<div style="margin-top:0.4rem;padding-top:0.35rem;border-top:1px solid #1e2440"><div style="font-size:0.62rem;color:#64748b;margin-bottom:0.25rem;text-transform:uppercase;font-weight:700">📊 Class Probabilities</div>' + _prob_html + '</div>') if _sel_probs else ''}
+  <div style="margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid #1e2440">
+    <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;
+                text-transform:uppercase;font-weight:700">📋 AI Action</div>
+    <div style="font-size:0.7rem;color:#fbbf24;line-height:1.4">
+        {_sel_pred.get('recommended_action','')[:150]}
+    </div>
+  </div>
+  <div style="font-size:0.58rem;color:#475569;margin-top:0.4rem">
+    🔵 Random Forest ML · 🟡 DEMO/SYNTHETIC DATA
+  </div>
+</div>
             """, unsafe_allow_html=True)
 
         # Risk distribution donut
@@ -667,23 +684,36 @@ with tab1:
 with tab3:
     section_header("ACTIVE INCIDENTS",
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL + 🟡 DEMO DATA</span>')
+    # Sub-Task F: Infrastructure summary from damage assessment
+    _cc_damage = state.get("damage_assessment", {})
+    _infra_sum = _cc_damage.get("infrastructure_summary", "") if isinstance(_cc_damage, dict) else ""
+    if _infra_sum:
+        st.markdown(f"""
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:6px;
+            padding:0.45rem 0.8rem;margin-bottom:0.6rem;font-size:0.78rem;color:#94a3b8">
+    🔍 <strong style="color:#e2e8f0">Damage Overview:</strong> {_infra_sum}
+    <span style="font-size:0.62rem;background:#1a0a1a;color:#c4b5fd;padding:1px 5px;
+                 border-radius:3px;margin-left:4px">AI PRELIMINARY — VERIFY IN FIELD</span>
+</div>
+        """, unsafe_allow_html=True)
     if not incidents:
         st.info("No active incidents for current scenario.")
     else:
         for inc in incidents[:8]:
             risk_level = inc.get("risk_level", "MEDIUM")
             variant = {"CRITICAL": "danger", "HIGH": "warn", "MEDIUM": "blue"}.get(risk_level, "default")
-            actions_html = ""
+            _act_parts = []
             for action in inc.get("recommended_actions", [])[:4]:
-                req = "🔐 Requires Approval" if action.get("requires_approval") else "✅ Auto-authorized"
+                req = "&#128272; Requires Approval" if action.get("requires_approval") else "&#10003; Auto-authorized"
                 p_color = "#ef4444" if action["priority"] == "CRITICAL" else "#f97316" if action["priority"] == "HIGH" else "#eab308"
-                actions_html += f"""
-                <div style="display:flex;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.8rem">
-                    <span style="min-width:20px;color:#94a3b8">{action['index']}.</span>
-                    <span style="color:#e2e8f0;flex:1">{action['action']}</span>
-                    <span style="color:{p_color};white-space:nowrap;font-size:0.72rem">{req}</span>
-                </div>
-                """
+                _act_parts.append(
+                    f'<div style="display:flex;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.8rem">'
+                    f'<span style="min-width:20px;color:#94a3b8">{action["index"]}.</span>'
+                    f'<span style="color:#e2e8f0;flex:1">{action["action"]}</span>'
+                    f'<span style="color:{p_color};white-space:nowrap;font-size:0.72rem">{req}</span>'
+                    f'</div>'
+                )
+            actions_html = "".join(_act_parts)
 
             with st.expander(
                 f"{'🔴' if risk_level=='CRITICAL' else '🟠' if risk_level=='HIGH' else '🟡'} "
@@ -701,10 +731,10 @@ with tab3:
 
                 if inc.get("requires_human_approval"):
                     st.markdown("""
-                    <div style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;border-radius:6px;
-                                padding:0.5rem 0.8rem;font-size:0.8rem;color:#fca5a5;margin-top:0.5rem">
-                        🔐 <strong>HUMAN APPROVAL REQUIRED</strong> — Emergency actions require municipal officer authorization.
-                    </div>
+<div style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;border-radius:6px;
+            padding:0.5rem 0.8rem;font-size:0.8rem;color:#fca5a5;margin-top:0.5rem">
+    🔐 <strong>HUMAN APPROVAL REQUIRED</strong> — Emergency actions require municipal officer authorization.
+</div>
                     """, unsafe_allow_html=True)
                     _inc_note_key = f"cc_inc_note_{inc['incident_id']}"
                     if _inc_note_key not in st.session_state:
@@ -776,23 +806,48 @@ with tab4:
             else:
                 status_html = '<span style="background:#eab308;color:#1a1d27;padding:2px 8px;border-radius:8px;font-size:0.7rem">⏳ PENDING</span>'
 
+            # Build WHAT/WHY/ACTION/EVIDENCE/DATA STATUS rows if structured fields exist
+            _what   = rec.get("what", "")
+            _why    = rec.get("why", "")
+            _action = rec.get("action", "")
+            _evid   = rec.get("evidence", "")
+            _dstat  = rec.get("data_status", "")
+            _structured_rows = ""
+            if _what or _why or _action:
+                def _row(label, val, color="#94a3b8"):
+                    return (
+                        f'<div style="display:grid;grid-template-columns:90px 1fr;gap:0.3rem;'
+                        f'margin-top:0.25rem;font-size:0.75rem">'
+                        f'<span style="color:#64748b;font-weight:700;text-transform:uppercase">{label}</span>'
+                        f'<span style="color:{color}">{val}</span>'
+                        f'</div>'
+                    )
+                _structured_rows = (
+                    (_row("WHAT", _what, "#e2e8f0") if _what else "") +
+                    (_row("WHY", _why) if _why else "") +
+                    (_row("ACTION", _action, "#fde68a") if _action else "") +
+                    (_row("EVIDENCE", _evid) if _evid else "") +
+                    (f'<div style="margin-top:0.3rem"><span style="background:#1e2440;color:#94a3b8;'
+                     f'border-radius:3px;padding:1px 6px;font-size:0.62rem;font-weight:600">'
+                     f'DATA: {_dstat}</span></div>' if _dstat else "")
+                )
+
             st.markdown(f"""
-            <div style="background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;border-left:4px solid {p_color}">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-                    <div>
-                        <span style="background:{p_color};color:{'black' if priority=='MEDIUM' else 'white'};
-                              padding:2px 8px;border-radius:8px;font-size:0.72rem;font-weight:600">{priority}</span>
-                        &nbsp;<span style="font-size:0.72rem;color:#94a3b8">{rec.get('agent','')}</span>
-                    </div>
-                    {status_html}
-                </div>
-                <div style="font-weight:600;color:#e2e8f0;margin-bottom:0.3rem;font-size:0.9rem">
-                    {rec.get('recommendation','')}
-                </div>
-                <div style="font-size:0.8rem;color:#94a3b8">
-                    <b>Reasoning:</b> {rec.get('reasoning','')}
-                </div>
-            </div>
+<div style="background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;border-left:4px solid {p_color}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <div>
+            <span style="background:{p_color};color:{'black' if priority=='MEDIUM' else 'white'};
+                  padding:2px 8px;border-radius:8px;font-size:0.72rem;font-weight:600">{priority}</span>
+            &nbsp;<span style="font-size:0.72rem;color:#94a3b8">{rec.get('agent','')}</span>
+        </div>
+        {status_html}
+    </div>
+    <div style="font-weight:600;color:#e2e8f0;margin-bottom:0.3rem;font-size:0.9rem">
+        {rec.get('recommendation','')}
+    </div>
+    {_structured_rows if _structured_rows else
+     f'<div style="font-size:0.8rem;color:#94a3b8"><b>Reasoning:</b> {rec.get("reasoning","")}</div>'}
+</div>
             """, unsafe_allow_html=True)
 
             if not approved and not rejected and rec.get("requires_approval"):
@@ -846,18 +901,135 @@ with tab4:
                     st.session_state.approved_recs.add(rec["rec_id"])
                     st.rerun()
 
+    # ── Escalation Chain (Sub-Task D) ────────────────────────────────────────
+    _cc_action_plan = state.get("action_plan", {})
+    _esc_path = _cc_action_plan.get("escalation_path", []) if isinstance(_cc_action_plan, dict) else []
+    if _esc_path:
+        st.markdown("---")
+        st.markdown("""
+<div style="font-size:0.8rem;font-weight:700;color:#94a3b8;text-transform:uppercase;
+            letter-spacing:0.06em;margin-bottom:0.4rem">
+    📋 ICS Escalation Chain &nbsp;
+    <span style="font-size:0.65rem;background:#1a0a1a;color:#c4b5fd;padding:1px 6px;
+                 border-radius:3px;font-weight:600">DEMO/SIMULATED</span>
+        </div>""", unsafe_allow_html=True)
+        _esc_arrows = " &nbsp;→&nbsp; ".join(
+            f'<span style="background:#1a1d27;border:1px solid #2d3148;border-radius:4px;'
+            f'padding:2px 8px;font-size:0.72rem;color:#e2e8f0">{step}</span>'
+            for step in _esc_path
+        )
+        st.markdown(f'<div style="margin-bottom:0.6rem">{_esc_arrows}</div>', unsafe_allow_html=True)
+
+    # ── Chief Response Situation Brief ───────────────────────────────────────
+    _cc_action_plan2 = state.get("action_plan", {})
+    _sit_brief = _cc_action_plan2.get("situation_brief", {}) if isinstance(_cc_action_plan2, dict) else {}
+    if _sit_brief:
+        st.markdown("---")
+        section_header("🎯 CHIEF RESPONSE — SITUATION BRIEF",
+                       '<span style="background:#1a0a1a;color:#c4b5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700">DEMO/SIMULATED</span>')
+        _brief_colors = {
+            "SITUATION":          ("#3b82d4", "#1e3a5f"),
+            "RISK":               ("#ef4444", "#450a0a"),
+            "EVIDENCE":           ("#7c5cd8", "#1e1040"),
+            "IMPACT":             ("#f97316", "#3a1a00"),
+            "RECOMMENDED_ACTION": ("#22c55e", "#0d2818"),
+            "DATA_LIMITATIONS":   ("#eab308", "#2d2400"),
+        }
+        for _bk, _bv in _sit_brief.items():
+            _bc, _bbg = _brief_colors.get(_bk, ("#94a3b8", "#1a1d27"))
+            st.markdown(
+                f'<div style="background:{_bbg};border-left:4px solid {_bc};border-radius:0 6px 6px 0;'
+                f'padding:0.5rem 0.8rem;margin-bottom:0.4rem">'
+                f'<span style="font-size:0.62rem;color:{_bc};font-weight:700;text-transform:uppercase">'
+                f'{_bk.replace("_"," ")}</span>'
+                f'<div style="font-size:0.78rem;color:#e2e8f0;margin-top:0.2rem">{_bv}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── 9-Question Answerable Summary ────────────────────────────────────────
+    st.markdown("---")
+    section_header("❓ 9-QUESTION SITUATION SUMMARY",
+                   '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700">OPERATOR BRIEF</span>')
+    _q_critical = sum(1 for p in predictions if p.get("risk_level") == "CRITICAL")
+    _q_high     = sum(1 for p in predictions if p.get("risk_level") == "HIGH")
+    _q_top_zone = max(predictions, key=lambda p: p.get("risk_score", 0)) if predictions else {}
+    _q_top_name = f"{_q_top_zone.get('area','—')}, {_q_top_zone.get('city','—')}" if _q_top_zone else "—"
+    _q_top_score = _q_top_zone.get("risk_score", 0) if _q_top_zone else 0
+    _q_crit_drains = drain_analysis.get("priority_summary", {}).get("CRITICAL", 0)
+    _q_open_rep = open_reports
+    _q_crit_rep = report_analysis.get("critical_count", 0)
+    _q_avail_teams = sum(1 for t in teams if t.get("status") == "AVAILABLE")
+    _q_incidents = len(incidents)
+    _q_approval = sum(1 for inc in incidents if inc.get("requires_human_approval"))
+    _q_rich_rl = [a.get("risk_level","") for a in rich_alerts[:3]] if rich_alerts else []
+    _q_alert_str = ", ".join(_q_rich_rl) if _q_rich_rl else "None"
+    _q_esc = _cc_action_plan.get("escalation_path", []) if isinstance(_cc_action_plan, dict) else []
+    _q_esc_str = " → ".join(_q_esc[:3]) if _q_esc else "Zone EOC"
+    _q_granite_ok = state.get("granite_status", {}).get("available", False)
+    _q_granite_str = "Connected (LIVE)" if _q_granite_ok else "Not connected (TEMPLATE mode)"
+    _q_data_mode = state.get("live_weather_status", {}).get("data_mode", "DEMO")
+    _questions = [
+        ("1. What is the current flood risk status?",
+         f"{_q_critical} CRITICAL zone(s), {_q_high} HIGH zone(s). "
+         f"Highest risk: {_q_top_name} ({_q_top_score:.0f}/100). "
+         f"[DATA: {_q_data_mode}]"),
+        ("2. Which area is most at risk right now?",
+         f"{_q_top_name} with score {_q_top_score:.0f}/100 [{_q_top_zone.get('risk_level','—')}]. "
+         f"Main reasons: {'; '.join(_q_top_zone.get('main_reasons', [])[:2]) or 'N/A'}. "
+         f"[DATA: DEMO/SIMULATED]"),
+        ("3. Are drainage systems coping?",
+         f"{_q_crit_drains} CRITICAL drain(s) flagged for immediate action. "
+         f"Total drains monitored: {len(drain_analysis.get('scored_drains', []))}. "
+         f"[DATA: ESTIMATED]"),
+        ("4. What are citizens reporting?",
+         f"{_q_open_rep} open report(s), {_q_crit_rep} critical. "
+         f"Hotspot areas: {', '.join(a['area'] for a in report_analysis.get('hotspot_areas',[])[:3]) or 'None'}. "
+         f"[DATA: USER SUBMITTED — unverified]"),
+        ("5. What active alerts are raised?",
+         f"Active alert levels: {_q_alert_str}. "
+         f"Total active: {len(rich_alerts) if rich_alerts else len(alerts)}. "
+         f"[DATA: ML/MODEL]"),
+        ("6. What response actions are recommended?",
+         f"{_q_incidents} incident(s) created. "
+         f"Top recommendation: {recs[0].get('recommendation','—')[:100] if recs else '—'}. "
+         f"[DATA: DEMO/SIMULATED]"),
+        ("7. How many actions need human approval?",
+         f"{_q_approval} incident(s) require human officer approval before action. "
+         f"Go to Decision Intelligence (Page 8) to review. "
+         f"[DATA: DEMO/SIMULATED]"),
+        ("8. Are sufficient response teams available?",
+         f"{_q_avail_teams} team(s) available of {len(teams)} total. "
+         f"{'Sufficient' if _q_avail_teams >= 3 else 'CRITICALLY LOW — request mutual aid'}. "
+         f"[DATA: DEMO/SIMULATED]"),
+        ("9. What is the escalation / IBM Granite status?",
+         f"Escalation path: {_q_esc_str}. "
+         f"IBM Granite: {_q_granite_str}. "
+         f"[DATA: SYSTEM STATUS]"),
+    ]
+    for _qi, (_qq, _qa) in enumerate(_questions):
+        _q_bg = "rgba(30,36,64,0.5)" if _qi % 2 == 0 else "rgba(19,22,32,0.8)"
+        st.markdown(
+            f'<div style="background:{_q_bg};border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.3rem">'
+            f'<div style="font-size:0.72rem;color:#93c5fd;font-weight:700;margin-bottom:0.1rem">{_qq}</div>'
+            f'<div style="font-size:0.78rem;color:#e2e8f0">{_qa}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
     # Situation report
     st.markdown("---")
     section_header("📋 AI SITUATION REPORT",
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL / GRANITE</span>')
     situation_report = state.get("situation_report", "")
     if situation_report:
-        st.markdown(f"""
-        <div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;font-family:monospace;font-size:0.82rem;
-                    white-space:pre-wrap;color:#e2e8f0;line-height:1.6">
-{situation_report}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;'
+            f'padding:1rem 1.2rem;margin-bottom:0.75rem;font-family:monospace;font-size:0.82rem;'
+            f'white-space:pre-wrap;color:#e2e8f0;line-height:1.6">'
+            f'{situation_report}</div>',
+            unsafe_allow_html=True,
+        )
         if st.download_button(
             "📥 Download Situation Report",
             data=situation_report,
@@ -878,20 +1050,20 @@ with tab5:
             n = priority_summary.get(lvl, 0)
             pct = n / max(len(scored_drains), 1) * 100
             st.markdown(f"""
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
-                <div style="min-width:80px;font-size:0.8rem;font-weight:600;color:{cnt}">{lvl}</div>
-                <div style="flex:1;background:#1a1d27;border-radius:4px;height:18px;overflow:hidden;border:1px solid #2d3148">
-                    <div style="width:{pct:.0f}%;background:{cnt};height:100%;
-                                border-radius:4px;transition:width 0.3s"></div>
-                </div>
-                <div style="min-width:30px;font-size:0.8rem;color:#e2e8f0;text-align:right">{n}</div>
-            </div>
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
+    <div style="min-width:80px;font-size:0.8rem;font-weight:600;color:{cnt}">{lvl}</div>
+    <div style="flex:1;background:#1a1d27;border-radius:4px;height:18px;overflow:hidden;border:1px solid #2d3148">
+        <div style="width:{pct:.0f}%;background:{cnt};height:100%;
+                    border-radius:4px;transition:width 0.3s"></div>
+    </div>
+    <div style="min-width:30px;font-size:0.8rem;color:#e2e8f0;text-align:right">{n}</div>
+</div>
             """, unsafe_allow_html=True)
 
         st.markdown(f"""
-        <div style="margin-top:0.75rem;font-size:0.8rem;color:#f97316">
-            ⚡ {len(drain_analysis.get('requires_immediate_action',[]))} drain(s) require IMMEDIATE action
-        </div>
+<div style="margin-top:0.75rem;font-size:0.8rem;color:#f97316">
+    ⚡ {len(drain_analysis.get('requires_immediate_action',[]))} drain(s) require IMMEDIATE action
+</div>
         """, unsafe_allow_html=True)
 
     with col_sched:
@@ -913,14 +1085,14 @@ with tab5:
                 score = drain.get("computed_risk_score", 0)
                 cond = drain.get("condition", "UNKNOWN")
                 st.markdown(f"""
-                <div style="background:#150b0b;border:1px solid #7f1d1d;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;padding:0.7rem;text-align:center">
-                    <div style="font-size:1.3rem;font-weight:800;color:#ef4444">{score:.0f}</div>
-                    <div style="font-size:0.7rem;color:#94a3b8">Risk Score</div>
-                    <div style="font-weight:700;color:#e2e8f0;font-size:0.8rem;margin:0.3rem 0">{drain.get('drain_id')}</div>
-                    <div style="font-size:0.72rem;color:#94a3b8">{drain.get('area')}</div>
-                    <div style="font-size:0.72rem;color:#94a3b8">{drain.get('city')}</div>
-                    <div style="font-size:0.7rem;color:#f97316;margin-top:0.3rem">{cond}</div>
-                </div>
+<div style="background:#150b0b;border:1px solid #7f1d1d;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;padding:0.7rem;text-align:center">
+    <div style="font-size:1.3rem;font-weight:800;color:#ef4444">{score:.0f}</div>
+    <div style="font-size:0.7rem;color:#94a3b8">Risk Score</div>
+    <div style="font-weight:700;color:#e2e8f0;font-size:0.8rem;margin:0.3rem 0">{drain.get('drain_id')}</div>
+    <div style="font-size:0.72rem;color:#94a3b8">{drain.get('area')}</div>
+    <div style="font-size:0.72rem;color:#94a3b8">{drain.get('city')}</div>
+    <div style="font-size:0.7rem;color:#f97316;margin-top:0.3rem">{cond}</div>
+</div>
                 """, unsafe_allow_html=True)
 
 # ── Tab 6: Citizen Reports ────────────────────
@@ -986,13 +1158,13 @@ with tab6:
                 n = hs["report_count"]
                 bar_w = min(100, n * 3)
                 st.markdown(f"""
-                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
-                    <div style="min-width:120px;font-size:0.82rem;color:#e2e8f0">{hs['area']}</div>
-                    <div style="flex:1;background:#1a1d27;border-radius:4px;height:16px;border:1px solid #2d3148">
-                        <div style="width:{bar_w}%;background:#3b82f6;height:100%;border-radius:4px"></div>
-                    </div>
-                    <div style="min-width:30px;font-size:0.8rem;color:#94a3b8">{n}</div>
-                </div>
+<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
+    <div style="min-width:120px;font-size:0.82rem;color:#e2e8f0">{hs['area']}</div>
+    <div style="flex:1;background:#1a1d27;border-radius:4px;height:16px;border:1px solid #2d3148">
+        <div style="width:{bar_w}%;background:#3b82f6;height:100%;border-radius:4px"></div>
+    </div>
+    <div style="min-width:30px;font-size:0.8rem;color:#94a3b8">{n}</div>
+</div>
                 """, unsafe_allow_html=True)
 
         # If there are user-submitted reports, show them first in a dedicated block
@@ -1157,51 +1329,51 @@ with tab2:
 
             # ── Current conditions hero card ───────────────────────────────
             st.markdown(f"""
-            <div style="background:#1a1d27;border:1px solid #22c55e;border-radius:12px;
-                        padding:1rem 1.25rem;margin:.5rem 0 1rem">
-              <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
-                <span style="font-size:2rem">{_cc_emoji}</span>
-                <div>
-                  <div style="font-size:1rem;font-weight:800;color:#e2e8f0">
-                    {st.session_state.cc_wx_city} &mdash; {_cc_cond}</div>
-                  <div style="font-size:0.68rem;color:#475569">
-                    Observed: {_cc_rec} IST &nbsp;|&nbsp;
-                    <span style="color:#6ee7b7">&#128994; LIVE</span>
-                    &nbsp; Open-Meteo
-                  </div>
-                </div>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:0.55rem">
-                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
-                  <div style="font-size:1.35rem;font-weight:800;color:#f97316">{_cc_temp}&#176;C</div>
-                  <div style="font-size:0.62rem;color:#94a3b8">TEMPERATURE</div>
-                </div>
-                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
-                  <div style="font-size:1.35rem;font-weight:800;color:{_cc_rain_c}">{_cc_rain} mm</div>
-                  <div style="font-size:0.62rem;color:#94a3b8">RAIN / HR</div>
-                </div>
-                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
-                  <div style="font-size:1.35rem;font-weight:800;color:#3b82f6">{_cc_humid}%</div>
-                  <div style="font-size:0.62rem;color:#94a3b8">HUMIDITY</div>
-                </div>
-                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
-                  <div style="font-size:1.35rem;font-weight:800;color:#14b8a6">{_cc_wind} km/h</div>
-                  <div style="font-size:0.62rem;color:#94a3b8">WIND SPEED</div>
-                </div>
-                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
-                  <div style="font-size:1.35rem;font-weight:800;color:#a78bfa">{_cc_wdir}</div>
-                  <div style="font-size:0.62rem;color:#94a3b8">WIND DIR</div>
-                </div>
-                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
-                  <div style="font-size:1.35rem;font-weight:800;color:#64748b">{int(_cc_prob)}%</div>
-                  <div style="font-size:0.62rem;color:#94a3b8">PRECIP PROB</div>
-                </div>
-                <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
-                  <div style="font-size:1.35rem;font-weight:800;color:#22d3ee">{_cc_rain6h} mm</div>
-                  <div style="font-size:0.62rem;color:#94a3b8">RAIN NEXT 6H</div>
-                </div>
-              </div>
-            </div>
+<div style="background:#1a1d27;border:1px solid #22c55e;border-radius:12px;
+            padding:1rem 1.25rem;margin:.5rem 0 1rem">
+  <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
+    <span style="font-size:2rem">{_cc_emoji}</span>
+    <div>
+      <div style="font-size:1rem;font-weight:800;color:#e2e8f0">
+        {st.session_state.cc_wx_city} &mdash; {_cc_cond}</div>
+      <div style="font-size:0.68rem;color:#475569">
+        Observed: {_cc_rec} IST &nbsp;|&nbsp;
+        <span style="color:#6ee7b7">&#128994; LIVE</span>
+        &nbsp; Open-Meteo
+      </div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:0.55rem">
+    <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+      <div style="font-size:1.35rem;font-weight:800;color:#f97316">{_cc_temp}&#176;C</div>
+      <div style="font-size:0.62rem;color:#94a3b8">TEMPERATURE</div>
+    </div>
+    <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+      <div style="font-size:1.35rem;font-weight:800;color:{_cc_rain_c}">{_cc_rain} mm</div>
+      <div style="font-size:0.62rem;color:#94a3b8">RAIN / HR</div>
+    </div>
+    <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+      <div style="font-size:1.35rem;font-weight:800;color:#3b82f6">{_cc_humid}%</div>
+      <div style="font-size:0.62rem;color:#94a3b8">HUMIDITY</div>
+    </div>
+    <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+      <div style="font-size:1.35rem;font-weight:800;color:#14b8a6">{_cc_wind} km/h</div>
+      <div style="font-size:0.62rem;color:#94a3b8">WIND SPEED</div>
+    </div>
+    <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+      <div style="font-size:1.35rem;font-weight:800;color:#a78bfa">{_cc_wdir}</div>
+      <div style="font-size:0.62rem;color:#94a3b8">WIND DIR</div>
+    </div>
+    <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+      <div style="font-size:1.35rem;font-weight:800;color:#64748b">{int(_cc_prob)}%</div>
+      <div style="font-size:0.62rem;color:#94a3b8">PRECIP PROB</div>
+    </div>
+    <div style="background:#111827;border-radius:8px;padding:.5rem;text-align:center">
+      <div style="font-size:1.35rem;font-weight:800;color:#22d3ee">{_cc_rain6h} mm</div>
+      <div style="font-size:0.62rem;color:#94a3b8">RAIN NEXT 6H</div>
+    </div>
+  </div>
+</div>
             """, unsafe_allow_html=True)
 
             # ── Shared helper for time label ───────────────────────────────
@@ -1425,17 +1597,17 @@ with tab2:
                         _tmax_s = f"{_dtmax:.0f}&#176;" if _dtmax is not None else "--"
                         _tmin_s = f"{_dtmin:.0f}&#176;" if _dtmin is not None else "--"
                         st.markdown(f"""
-                        <div style="background:#111827;border:1px solid #2d3148;
-                                    border-radius:8px;padding:.5rem .3rem;text-align:center">
-                          <div style="font-size:1.1rem">{_dem}</div>
-                          <div style="font-size:0.68rem;font-weight:700;color:#e2e8f0">
-                            {_cc_day_lbl(_dday)}</div>
-                          <div style="font-size:0.75rem;color:#f97316;font-weight:700">
-                            {_tmax_s}</div>
-                          <div style="font-size:0.65rem;color:#64748b">{_tmin_s}</div>
-                          <div style="font-size:0.62rem;color:#3b82f6">{_dprec:.1f}mm</div>
-                          <div style="font-size:0.6rem;color:#a78bfa">{int(_dprob)}%</div>
-                        </div>
+<div style="background:#111827;border:1px solid #2d3148;
+            border-radius:8px;padding:.5rem .3rem;text-align:center">
+  <div style="font-size:1.1rem">{_dem}</div>
+  <div style="font-size:0.68rem;font-weight:700;color:#e2e8f0">
+    {_cc_day_lbl(_dday)}</div>
+  <div style="font-size:0.75rem;color:#f97316;font-weight:700">
+    {_tmax_s}</div>
+  <div style="font-size:0.65rem;color:#64748b">{_tmin_s}</div>
+  <div style="font-size:0.62rem;color:#3b82f6">{_dprec:.1f}mm</div>
+  <div style="font-size:0.6rem;color:#a78bfa">{int(_dprob)}%</div>
+</div>
                         """, unsafe_allow_html=True)
 
             # ── Water Level Panel ──────────────────────────────────────────
@@ -1446,14 +1618,14 @@ with tab2:
                 'padding:1px 6px;border-radius:3px;font-weight:700">🟡 ESTIMATED</span>',
             )
             st.markdown("""
-            <div style="background:rgba(234,179,8,0.07);border:1px solid #eab30840;
-                        border-radius:8px;padding:0.5rem 0.8rem;margin-bottom:0.7rem;
-                        font-size:0.75rem;color:#fde68a">
-                ⚠️ <strong>ESTIMATED</strong> — Real-time river/drainage sensor data is not
-                currently available for Ahmedabad/Surat. Water level values are
-                <em>derived from Open-Meteo rainfall data via a simple runoff proxy</em>
-                and are NOT direct measurements. Do not use for official flood management.
-            </div>
+<div style="background:rgba(234,179,8,0.07);border:1px solid #eab30840;
+            border-radius:8px;padding:0.5rem 0.8rem;margin-bottom:0.7rem;
+            font-size:0.75rem;color:#fde68a">
+    ⚠️ <strong>ESTIMATED</strong> — Real-time river/drainage sensor data is not
+    currently available for Ahmedabad/Surat. Water level values are
+    <em>derived from Open-Meteo rainfall data via a simple runoff proxy</em>
+    and are NOT direct measurements. Do not use for official flood management.
+</div>
             """, unsafe_allow_html=True)
             try:
                 from services.water_level_service import get_water_level_service as _get_wls
@@ -1485,32 +1657,32 @@ with tab2:
                             }.get(_tier, "#22c55e")
                             _pct = min(100, (_lvl / max(_dang + 1, 1)) * 100)
                             st.markdown(f"""
-                            <div style="background:#1a1d27;border:1px solid {_tier_c}40;
-                                        border-top:3px solid {_tier_c};border-radius:8px;
-                                        padding:0.8rem 0.9rem;text-align:center">
-                                <div style="font-size:0.72rem;font-weight:700;color:#94a3b8;
-                                            margin-bottom:0.3rem;text-transform:uppercase">
-                                    {_wl_rec.get('location','')[:25]}
-                                </div>
-                                <div style="font-size:1.6rem;font-weight:800;color:{_tier_c}">
-                                    {_lvl:.2f}<span style="font-size:0.85rem;color:#64748b">m</span>
-                                </div>
-                                <div style="background:{_tier_c};color:white;font-size:0.65rem;
-                                            font-weight:700;padding:1px 8px;border-radius:10px;
-                                            display:inline-block;margin:0.3rem 0">{_tier}</div>
-                                <div style="background:#111827;border-radius:6px;height:8px;
-                                            margin:0.4rem 0;overflow:hidden">
-                                    <div style="width:{_pct:.0f}%;background:{_tier_c};
-                                                height:100%;border-radius:6px"></div>
-                                </div>
-                                <div style="font-size:0.62rem;color:#64748b;line-height:1.5">
-                                    Normal: {_norm:.1f}m &nbsp;|&nbsp;
-                                    Warning: {_warn:.1f}m &nbsp;|&nbsp;
-                                    Danger: {_dang:.1f}m<br>
-                                    Above normal: +{_above:.2f}m<br>
-                                    <span style="color:#eab308">🟡 ESTIMATED — not a sensor reading</span>
-                                </div>
-                            </div>
+<div style="background:#1a1d27;border:1px solid {_tier_c}40;
+            border-top:3px solid {_tier_c};border-radius:8px;
+            padding:0.8rem 0.9rem;text-align:center">
+    <div style="font-size:0.72rem;font-weight:700;color:#94a3b8;
+                margin-bottom:0.3rem;text-transform:uppercase">
+        {_wl_rec.get('location','')[:25]}
+    </div>
+    <div style="font-size:1.6rem;font-weight:800;color:{_tier_c}">
+        {_lvl:.2f}<span style="font-size:0.85rem;color:#64748b">m</span>
+    </div>
+    <div style="background:{_tier_c};color:white;font-size:0.65rem;
+                font-weight:700;padding:1px 8px;border-radius:10px;
+                display:inline-block;margin:0.3rem 0">{_tier}</div>
+    <div style="background:#111827;border-radius:6px;height:8px;
+                margin:0.4rem 0;overflow:hidden">
+        <div style="width:{_pct:.0f}%;background:{_tier_c};
+                    height:100%;border-radius:6px"></div>
+    </div>
+    <div style="font-size:0.62rem;color:#64748b;line-height:1.5">
+        Normal: {_norm:.1f}m &nbsp;|&nbsp;
+        Warning: {_warn:.1f}m &nbsp;|&nbsp;
+        Danger: {_dang:.1f}m<br>
+        Above normal: +{_above:.2f}m<br>
+        <span style="color:#eab308">🟡 ESTIMATED — not a sensor reading</span>
+    </div>
+</div>
                             """, unsafe_allow_html=True)
             except Exception as _wl_exc:
                 st.warning(f"Water level service unavailable: {_wl_exc}")
@@ -1592,8 +1764,8 @@ with tab_granite:
 
     # Situation Report via Granite
     st.markdown("""
-    <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.5rem;
-                text-transform:uppercase;letter-spacing:0.05em">📋 Situation Summary</div>
+<div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.5rem;
+            text-transform:uppercase;letter-spacing:0.05em">📋 Situation Summary</div>
     """, unsafe_allow_html=True)
 
     _sit_rpt = state.get("situation_report", "")
@@ -1625,8 +1797,8 @@ with tab_granite:
 
     # Zone-specific explanations via Granite
     st.markdown("""
-    <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.75rem;
-                text-transform:uppercase;letter-spacing:0.05em">🔍 Zone Risk Explanation</div>
+<div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.75rem;
+            text-transform:uppercase;letter-spacing:0.05em">🔍 Zone Risk Explanation</div>
     """, unsafe_allow_html=True)
 
     _high_risk_zones_g = [p for p in predictions if p["risk_level"] in ("CRITICAL", "HIGH")]
@@ -1642,21 +1814,21 @@ with tab_granite:
             _rl = _zone_g["risk_level"]
             _rc = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_rl, "#94a3b8")
             st.markdown(f"""
-            <div style="background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;border-top:3px solid {_rc}">
-              <div style="font-size:1.1rem;font-weight:800;color:{_rc};margin-bottom:0.3rem">
-                {risk_level_indicator(_rl)}
-              </div>
-              <div style="font-size:1.5rem;font-weight:800;color:{_rc};margin-top:0.5rem">{_zone_g['risk_score']:.0f}<span style="font-size:0.9rem;color:#64748b">/100</span></div>
-              <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.75rem">Risk Score</div>
-              <div style="font-size:0.78rem;color:#94a3b8;display:grid;grid-template-columns:1fr 1fr;gap:0.3rem">
-                <div>📍 {_zone_g['area']}, {_zone_g['city']}</div>
-                <div>🎯 Conf: {_zone_g.get('confidence', 0):.0%}</div>
-                <div>🌧️ Rain: {_feats_g.get('rainfall_1h', 0):.0f} mm/hr</div>
-                <div>🔧 Drain: {_feats_g.get('drainage_capacity', 0):.0f}%</div>
-                <div>💧 WL: {_feats_g.get('water_level', 0):.1f}m</div>
-                <div>📱 Reports: {_feats_g.get('citizen_reports', 0):.0f}</div>
-              </div>
-            </div>
+<div style="background:#131620;border:1px solid #1e2440;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;border-top:3px solid {_rc}">
+  <div style="font-size:1.1rem;font-weight:800;color:{_rc};margin-bottom:0.3rem">
+    {risk_level_indicator(_rl)}
+  </div>
+  <div style="font-size:1.5rem;font-weight:800;color:{_rc};margin-top:0.5rem">{_zone_g['risk_score']:.0f}<span style="font-size:0.9rem;color:#64748b">/100</span></div>
+  <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.75rem">Risk Score</div>
+  <div style="font-size:0.78rem;color:#94a3b8;display:grid;grid-template-columns:1fr 1fr;gap:0.3rem">
+    <div>📍 {_zone_g['area']}, {_zone_g['city']}</div>
+    <div>🎯 Conf: {_zone_g.get('confidence', 0):.0%}</div>
+    <div>🌧️ Rain: {_feats_g.get('rainfall_1h', 0):.0f} mm/hr</div>
+    <div>🔧 Drain: {_feats_g.get('drainage_capacity', 0):.0f}%</div>
+    <div>💧 WL: {_feats_g.get('water_level', 0):.1f}m</div>
+    <div>📱 Reports: {_feats_g.get('citizen_reports', 0):.0f}</div>
+  </div>
+</div>
             """, unsafe_allow_html=True)
 
             # Risk factors bar chart (from feature importance)
@@ -1666,15 +1838,15 @@ with tab_granite:
                 for _fn, _fv in _fi_sorted_g:
                     _bar_pct = min(100, _fv * 100 * 8)
                     st.markdown(f"""
-                    <div style="margin-bottom:0.3rem">
-                      <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#94a3b8;margin-bottom:1px">
-                        <span>{_fn.replace('_',' ').title()}</span>
-                        <span>{_fv:.3f}</span>
-                      </div>
-                      <div style="background:#1e2440;border-radius:3px;height:6px">
-                        <div style="width:{_bar_pct:.0f}%;background:linear-gradient(90deg,#3b82f6,#7c3aed);height:100%;border-radius:3px"></div>
-                      </div>
-                    </div>
+<div style="margin-bottom:0.3rem">
+  <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#94a3b8;margin-bottom:1px">
+    <span>{_fn.replace('_',' ').title()}</span>
+    <span>{_fv:.3f}</span>
+  </div>
+  <div style="background:#1e2440;border-radius:3px;height:6px">
+    <div style="width:{_bar_pct:.0f}%;background:linear-gradient(90deg,#3b82f6,#7c3aed);height:100%;border-radius:3px"></div>
+  </div>
+</div>
                     """, unsafe_allow_html=True)
 
         with _zone_explain_col:
@@ -1734,36 +1906,36 @@ with tab_granite:
             _expl_border = "#22c55e" if _g_avail2 else "#1e2440"
             _expl_title  = "🧠 IBM GRANITE EXPLANATION" if _g_avail2 else "⚙ RULE-BASED EXPLANATION (Granite not connected)"
             st.markdown(f"""
-            <div style="background:{_expl_bg};border:1px solid {_expl_border};
-                        border-radius:8px;padding:0.9rem;margin-bottom:0.5rem">
-              <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase">
-                {_expl_title}
-              </div>
-              <div style="font-size:0.85rem;color:#e2e8f0;margin-bottom:0.5rem;font-weight:600">
-                WHY IS {_zone_g['area'].upper()} CRITICAL/HIGH RISK?
-              </div>
-              <div style="font-size:0.82rem;color:#94a3b8;line-height:1.6">
-                {_reasons_html}
-              </div>
-            </div>
-            {_probs_html}
-            {_rec_html}
+<div style="background:{_expl_bg};border:1px solid {_expl_border};
+            border-radius:8px;padding:0.9rem;margin-bottom:0.5rem">
+  <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase">
+    {_expl_title}
+  </div>
+  <div style="font-size:0.85rem;color:#e2e8f0;margin-bottom:0.5rem;font-weight:600">
+    WHY IS {_zone_g['area'].upper()} CRITICAL/HIGH RISK?
+  </div>
+  <div style="font-size:0.82rem;color:#94a3b8;line-height:1.6">
+    {_reasons_html}
+  </div>
+</div>
+{_probs_html}
+{_rec_html}
             """, unsafe_allow_html=True)
     else:
         st.info("No high or critical risk zones currently. Run a high-rainfall scenario to see Granite analysis.")
 
     if not _g_avail2:
         st.markdown(f"""
-        <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);
-                    border-radius:8px;padding:0.75rem 1rem;margin-top:1rem">
-          <div style="font-size:0.8rem;color:#fde68a">
-            <strong>To enable live IBM Granite analysis:</strong> Set
-            <code style="background:#1a1a00;padding:1px 4px;border-radius:3px">WATSONX_API_KEY</code> and
-            <code style="background:#1a1a00;padding:1px 4px;border-radius:3px">WATSONX_PROJECT_ID</code>
-            in your <code>.env</code> file. See <code>.env.example</code> for format.
-            The application will automatically use live Granite on next pipeline run.
-          </div>
-        </div>
+<div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);
+            border-radius:8px;padding:0.75rem 1rem;margin-top:1rem">
+  <div style="font-size:0.8rem;color:#fde68a">
+    <strong>To enable live IBM Granite analysis:</strong> Set
+    <code style="background:#1a1a00;padding:1px 4px;border-radius:3px">WATSONX_API_KEY</code> and
+    <code style="background:#1a1a00;padding:1px 4px;border-radius:3px">WATSONX_PROJECT_ID</code>
+    in your <code>.env</code> file. See <code>.env.example</code> for format.
+    The application will automatically use live Granite on next pipeline run.
+  </div>
+</div>
         """, unsafe_allow_html=True)
 
 
@@ -1773,35 +1945,35 @@ with tab_trace:
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700">🔬 LIVE PIPELINE</span>')
 
     st.markdown("""
-    <div style="font-size:0.8rem;color:#64748b;margin-bottom:1rem">
-      Watch the 6-agent AI pipeline process flood data in real-time.
-      Each agent shows its status, inputs processed, and outputs generated.
-    </div>
+<div style="font-size:0.8rem;color:#64748b;margin-bottom:1rem">
+  Watch the 6-agent AI pipeline process flood data in real-time.
+  Each agent shows its status, inputs processed, and outputs generated.
+</div>
     """, unsafe_allow_html=True)
 
     # Pipeline flow visualization
     st.markdown("""
-    <div style="background:#080c14;border:1px solid #1e2440;border-radius:8px;
-                padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.75rem">
-      <div style="font-weight:700;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em">Pipeline Flow</div>
-      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:3px">
-        <span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:4px;font-weight:700">📡 DATA</span>
-        <span style="color:#475569">→</span>
-        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🌊 FLOOD RISK</span>
-        <span style="color:#475569">→</span>
-        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🔧 DRAINAGE</span>
-        <span style="color:#475569">→</span>
-        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">📱 CITIZEN REPORTS</span>
-        <span style="color:#475569">→</span>
-        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">⚡ RESPONSE</span>
-        <span style="color:#475569">→</span>
-        <span style="background:#0d2818;color:#bbf7d0;padding:2px 8px;border-radius:4px;font-weight:700">🧠 IBM GRANITE</span>
-        <span style="color:#475569">→</span>
-        <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🎯 CHIEF AGENT</span>
-        <span style="color:#475569">→</span>
-        <span style="background:#450a0a;color:#fca5a5;padding:2px 8px;border-radius:4px;font-weight:700">👤 HUMAN APPROVAL</span>
-      </div>
-    </div>
+<div style="background:#080c14;border:1px solid #1e2440;border-radius:8px;
+            padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.75rem">
+  <div style="font-weight:700;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em">Pipeline Flow</div>
+  <div style="display:flex;align-items:center;flex-wrap:wrap;gap:3px">
+    <span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:4px;font-weight:700">📡 DATA</span>
+    <span style="color:#475569">→</span>
+    <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🌊 FLOOD RISK</span>
+    <span style="color:#475569">→</span>
+    <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🔧 DRAINAGE</span>
+    <span style="color:#475569">→</span>
+    <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">📱 CITIZEN REPORTS</span>
+    <span style="color:#475569">→</span>
+    <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">⚡ RESPONSE</span>
+    <span style="color:#475569">→</span>
+    <span style="background:#0d2818;color:#bbf7d0;padding:2px 8px;border-radius:4px;font-weight:700">🧠 IBM GRANITE</span>
+    <span style="color:#475569">→</span>
+    <span style="background:#1a0a1a;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-weight:700">🎯 CHIEF AGENT</span>
+    <span style="color:#475569">→</span>
+    <span style="background:#450a0a;color:#fca5a5;padding:2px 8px;border-radius:4px;font-weight:700">👤 HUMAN APPROVAL</span>
+  </div>
+</div>
     """, unsafe_allow_html=True)
 
     # Use the render_agent_trace helper
@@ -1820,7 +1992,7 @@ with tab_trace:
         _full_log = orch.pipeline_log[-30:]
         _log_df = pd.DataFrame([
             {
-                "Time": e.get("timestamp", "")[:19].replace("T", " "),
+                "Time": _utc_to_ist(e.get("timestamp", ""), "%d %b %H:%M IST"),
                 "Step": e.get("step", ""),
                 "Agent": e.get("agent", ""),
                 "Status": e.get("status", ""),
@@ -1865,31 +2037,31 @@ _ldi_c1, _ldi_c2, _ldi_c3 = st.columns([1, 1, 1.4])
 with _ldi_c1:
     _ahm = _lws.get("cities", {}).get("Ahmedabad", {})
     st.markdown(f"""
-    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
-      <div style="font-weight:700;color:#93c5fd;margin-bottom:0.4rem">📍 Ahmedabad</div>
-      {"".join([
-          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Rainfall:</b> {_ahm.get("rainfall_1h","—")} mm/hr</div>',
-          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Condition:</b> {_ahm.get("condition","—")}</div>',
-          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Temp:</b> {_ahm.get("temperature","—")}°C</div>',
-          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Precip Prob:</b> {_ahm.get("precip_prob","—")}%</div>',
-          f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.3rem">Updated: {str(_ahm.get("recorded_at","—"))[:16]}</div>',
-      ]) if _ahm.get("available") else '<div style="font-size:0.8rem;color:#94a3b8">Live data unavailable</div>'}
-    </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
+  <div style="font-weight:700;color:#93c5fd;margin-bottom:0.4rem">📍 Ahmedabad</div>
+  {"".join([
+      f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Rainfall:</b> {_ahm.get("rainfall_1h","—")} mm/hr</div>',
+      f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Condition:</b> {_ahm.get("condition","—")}</div>',
+      f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Temp:</b> {_ahm.get("temperature","—")}°C</div>',
+      f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Precip Prob:</b> {_ahm.get("precip_prob","—")}%</div>',
+      f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.3rem">Updated: {str(_ahm.get("recorded_at","—"))[:16]}</div>',
+  ]) if _ahm.get("available") else '<div style="font-size:0.8rem;color:#94a3b8">Live data unavailable</div>'}
+</div>
     """, unsafe_allow_html=True)
 
 with _ldi_c2:
     _srt = _lws.get("cities", {}).get("Surat", {})
     st.markdown(f"""
-    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
-      <div style="font-weight:700;color:#93c5fd;margin-bottom:0.4rem">📍 Surat</div>
-      {"".join([
-          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Rainfall:</b> {_srt.get("rainfall_1h","—")} mm/hr</div>',
-          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Condition:</b> {_srt.get("condition","—")}</div>',
-          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Temp:</b> {_srt.get("temperature","—")}°C</div>',
-          f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Precip Prob:</b> {_srt.get("precip_prob","—")}%</div>',
-          f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.3rem">Updated: {str(_srt.get("recorded_at","—"))[:16]}</div>',
-      ]) if _srt.get("available") else '<div style="font-size:0.8rem;color:#94a3b8">Live data unavailable</div>'}
-    </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
+  <div style="font-weight:700;color:#93c5fd;margin-bottom:0.4rem">📍 Surat</div>
+  {"".join([
+      f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Rainfall:</b> {_srt.get("rainfall_1h","—")} mm/hr</div>',
+      f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Condition:</b> {_srt.get("condition","—")}</div>',
+      f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Temp:</b> {_srt.get("temperature","—")}°C</div>',
+      f'<div style="font-size:0.8rem;color:#e2e8f0"><b>Precip Prob:</b> {_srt.get("precip_prob","—")}%</div>',
+      f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.3rem">Updated: {str(_srt.get("recorded_at","—"))[:16]}</div>',
+  ]) if _srt.get("available") else '<div style="font-size:0.8rem;color:#94a3b8">Live data unavailable</div>'}
+</div>
     """, unsafe_allow_html=True)
 
 with _ldi_c3:
@@ -1898,28 +2070,28 @@ with _ldi_c3:
         f"{max(0, int(600 - _cache_age))}s" if _cache_age is not None else "—"
     )
     st.markdown(f"""
-    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
-      <div style="font-weight:700;color:#94a3b8;margin-bottom:0.4rem">📊 Data Status</div>
-      <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Weather:</b>
-        {live_badge() if _is_live else demo_badge()}
-      </div>
-      <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Flood Risk:</b>
-        {model_badge()}
-      </div>
-      <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Drainage / Reports:</b>
-        {demo_badge()}
-      </div>
-      <div style="font-size:0.8rem;color:#e2e8f0"><b>Source:</b> {_source}</div>
-      <div style="font-size:0.8rem;color:#e2e8f0"><b>Last updated:</b> {str(_last_upd)[:19]}</div>
-      <div style="font-size:0.8rem;color:#e2e8f0"><b>Next refresh:</b> {_next_refresh}</div>
-      {f'<div style="font-size:0.75rem;color:#f97316;margin-top:0.3rem">⚠ {_fallback[:80]}</div>' if _fallback else ""}
-      <div style="font-size:0.7rem;color:#94a3b8;margin-top:0.4rem;border-top:1px solid #2d3148;padding-top:0.3rem">
-        🟢 LIVE = Open-Meteo weather evidence<br>
-        🔵 MODEL = ML flood-risk prediction<br>
-        🟡 DEMO = synthetic drainage / reports / teams<br>
-        Live weather is <b>evidence</b> — not a confirmed flood location.
-      </div>
-    </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.75rem 1rem">
+  <div style="font-weight:700;color:#94a3b8;margin-bottom:0.4rem">📊 Data Status</div>
+  <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Weather:</b>
+    {live_badge() if _is_live else demo_badge()}
+  </div>
+  <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Flood Risk:</b>
+    {model_badge()}
+  </div>
+  <div style="font-size:0.8rem;color:#e2e8f0;margin-bottom:0.25rem"><b>Drainage / Reports:</b>
+    {demo_badge()}
+  </div>
+  <div style="font-size:0.8rem;color:#e2e8f0"><b>Source:</b> {_source}</div>
+  <div style="font-size:0.8rem;color:#e2e8f0"><b>Last updated:</b> {str(_last_upd)[:19]}</div>
+  <div style="font-size:0.8rem;color:#e2e8f0"><b>Next refresh:</b> {_next_refresh}</div>
+  {f'<div style="font-size:0.75rem;color:#f97316;margin-top:0.3rem">⚠ {_fallback[:80]}</div>' if _fallback else ""}
+  <div style="font-size:0.7rem;color:#94a3b8;margin-top:0.4rem;border-top:1px solid #2d3148;padding-top:0.3rem">
+    🟢 LIVE = Open-Meteo weather evidence<br>
+    🔵 MODEL = ML flood-risk prediction<br>
+    🟡 DEMO = synthetic drainage / reports / teams<br>
+    Live weather is <b>evidence</b> — not a confirmed flood location.
+  </div>
+</div>
     """, unsafe_allow_html=True)
 
 # Manual refresh button

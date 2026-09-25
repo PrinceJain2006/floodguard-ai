@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, ai_disclaimer,
     demo_badge, simulated_badge, live_badge, section_header, COLORS,
+    render_evidence_fusion_bar, _utc_to_ist,
 )
 from agents.orchestrator import get_orchestrator
 
@@ -66,45 +67,50 @@ orch = get_orch()
 # Session state
 if "notif_status" not in st.session_state:
     st.session_state.notif_status = {}
+if "alert_fusion_expanded" not in st.session_state:
+    st.session_state.alert_fusion_expanded = set()
 
 # ── Header ──────────────────────────────────────────────────────────────────
 header("Alert History", "Flood alerts · Evidence · Notifications · HITL controls", "🚨")
 
 # ── Observability / System Health ───────────────────────────────────────────
 st.markdown("---")
-section_header("🔍 System Health", "Live status of all FloodGuard AI components")
+with st.expander("🔍 System Health — Live status of all FloodGuard AI components", expanded=False):
+    try:
+        from services.health_check import get_system_health
+        health = get_system_health()
+        checks = health.get("checks", [])
 
-try:
-    from services.health_check import get_system_health
-    health = get_system_health()
-    checks = health.get("checks", [])
+        cols = st.columns(min(len(checks), 4))
+        for i, c in enumerate(checks):
+            col_idx = i % len(cols)
+            with cols[col_idx]:
+                ok = c.get("ok", False)
+                border_color = "#1e3a5f" if ok else "#450a0a"
+                st.markdown(
+                    f'<div style="background:#1a1d27;border:1px solid {border_color};'
+                    f'border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.5rem">'
+                    f'<div style="font-size:0.72rem;font-weight:700;color:#e2e8f0;margin-bottom:2px">{c["name"]}</div>'
+                    f'<div style="font-size:0.8rem;margin-bottom:2px">{c["status"]}</div>'
+                    f'<div style="font-size:0.65rem;color:#64748b">{c.get("detail","")[:80]}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
-    cols = st.columns(min(len(checks), 4))
-    for i, c in enumerate(checks):
-        col_idx = i % len(cols)
-        with cols[col_idx]:
-            ok = c.get("ok", False)
-            st.markdown(f"""
-            <div style="background:#1a1d27;border:1px solid {'#1e3a5f' if ok else '#450a0a'};
-                        border-radius:8px;padding:0.6rem 0.8rem;margin-bottom:0.5rem">
-                <div style="font-size:0.72rem;font-weight:700;color:#e2e8f0;margin-bottom:2px">{c['name']}</div>
-                <div style="font-size:0.8rem;margin-bottom:2px">{c['status']}</div>
-                <div style="font-size:0.65rem;color:#64748b">{c.get('detail','')[:80]}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    pct = health.get("health_pct", 0)
-    ok_c = health.get("ok_count", 0)
-    total = health.get("total_checks", 0)
-    checked_at = health.get("checked_at", "")[:19]
-    st.markdown(f"""
-    <div style="font-size:0.73rem;color:#475569;margin-top:0.3rem">
-        System health: <strong style="color:{'#22c55e' if pct >= 70 else '#eab308' if pct >= 40 else '#ef4444'}">{pct}%</strong>
-        ({ok_c}/{total} components OK) · Checked: {checked_at} UTC
-    </div>
-    """, unsafe_allow_html=True)
-except Exception as exc:
-    st.warning(f"Health check unavailable: {exc}")
+        pct       = health.get("health_pct", 0)
+        ok_c      = health.get("ok_count", 0)
+        total     = health.get("total_checks", 0)
+        checked_at = _utc_to_ist(health.get("checked_at", ""), "%d %b %H:%M IST")
+        pct_color = "#22c55e" if pct >= 70 else "#eab308" if pct >= 40 else "#ef4444"
+        st.markdown(
+            f'<div style="font-size:0.73rem;color:#475569;margin-top:0.3rem">'
+            f'System health: <strong style="color:{pct_color}">{pct}%</strong>'
+            f' ({ok_c}/{total} components OK) · Checked: {checked_at}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    except Exception as exc:
+        st.warning(f"Health check unavailable: {exc}")
 
 # ── Notification Channel Status ─────────────────────────────────────────────
 st.markdown("---")
@@ -124,25 +130,26 @@ try:
         with col:
             ch = ch_status.get(ch_key, {})
             configured = ch.get("configured", False)
-            status_txt = ch.get("status", "🔴 NOT CONFIGURED")
+            status_txt = ch.get("status", "&#128308; NOT CONFIGURED")
             note = ch.get("note", "")
-            st.markdown(f"""
-            <div style="background:#1a1d27;border:1px solid {'#1e3a5f' if configured else '#450a0a'};
-                        border-radius:8px;padding:0.8rem 1rem">
-                <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.3rem">{ch_name}</div>
-                <div style="font-size:0.78rem;margin-bottom:0.3rem">{status_txt}</div>
-                <div style="font-size:0.65rem;color:#475569">{note}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            _ch_border = "#1e3a5f" if configured else "#450a0a"
+            st.markdown(
+                f'<div style="background:#1a1d27;border:1px solid {_ch_border};border-radius:8px;padding:0.8rem 1rem">'
+                f'<div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.3rem">{ch_name}</div>'
+                f'<div style="font-size:0.78rem;margin-bottom:0.3rem">{status_txt}</div>'
+                f'<div style="font-size:0.65rem;color:#475569">{note}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     if ch_status.get("test_mode"):
-        st.markdown("""
-        <div style="background:rgba(249,115,22,0.1);border:1px solid #f97316;border-radius:6px;
-                    padding:0.5rem 0.8rem;font-size:0.75rem;color:#fdba74;margin-top:0.5rem">
-            ⚠️ <strong>TEST_NOTIFICATION_MODE is enabled.</strong>
-            Test alert sends will use real notification channels. Disable after testing.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            '<div style="background:rgba(249,115,22,0.1);border:1px solid #f97316;border-radius:6px;'
+            'padding:0.5rem 0.8rem;font-size:0.75rem;color:#fdba74;margin-top:0.5rem">'
+            '&#9888;&#65039; <strong>TEST_NOTIFICATION_MODE is enabled.</strong> '
+            'Test alert sends will use real notification channels. Disable after testing.</div>',
+            unsafe_allow_html=True,
+        )
 except Exception as exc:
     st.warning(f"Notification status unavailable: {exc}")
 
@@ -168,10 +175,10 @@ all_active = active_alerts or rich_alerts
 
 if not all_active:
     st.markdown("""
-    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;
-                padding:1.5rem;text-align:center;color:#475569">
-        🟢 No active alerts at this time.
-    </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;
+            padding:1.5rem;text-align:center;color:#475569">
+    🟢 No active alerts at this time.
+</div>
     """, unsafe_allow_html=True)
 else:
     for alert in all_active[:10]:
@@ -205,13 +212,16 @@ else:
             for e in alert.get("evidence", [])[:5]
         )
 
-        conf_pct = round(alert.get("confidence", 0) * 100)
-        window   = alert.get("expected_window", "Unknown")
-        score    = alert.get("risk_score", 0)
-        location = alert.get("location", "Unknown")
-        ts       = alert.get("timestamp", "")[:19]
-        event_id = alert.get("event_id", "")
-        rec_action = alert.get("recommended_action", "Review dashboard.")
+        conf_pct    = round(alert.get("confidence", 0) * 100)
+        window      = alert.get("expected_window", "Unknown")
+        score       = alert.get("risk_score", 0)
+        location    = alert.get("location", "Unknown")
+        ts          = _utc_to_ist(alert.get("timestamp", ""), "%d %b %H:%M IST")
+        event_id    = alert.get("event_id", "")
+        rec_action  = alert.get("recommended_action", "Review dashboard.")
+        trigger_txt = alert.get("trigger", "")
+        data_status = alert.get("data_status", "")
+        data_status_map: dict = alert.get("data_status_map", {})
 
         _alert_card_styles = {
             "alert-red":    "border-left:4px solid #ef4444;background:rgba(239,68,68,0.07)",
@@ -220,47 +230,67 @@ else:
             "alert-green":  "border-left:4px solid #22c55e;background:rgba(34,197,94,0.07)",
         }
         _card_style = _alert_card_styles.get(css_class, _alert_card_styles["alert-green"])
-        st.markdown(f"""
-        <div style="border-radius:8px;padding:1rem 1.2rem;margin-bottom:0.8rem;{_card_style}">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
-                <div>
-                    <div style="font-size:1rem;font-weight:800;color:#e2e8f0;margin-bottom:0.3rem">
-                        🚨 {risk_level} FLOOD ALERT — {location}
-                    </div>
-                    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.5rem">
-                        {badge_html} {state_html}
-                        <span style="font-size:0.65rem;color:#64748b">ID: {event_id}</span>
-                    </div>
-                </div>
-                <div style="text-align:right;font-size:0.7rem;color:#64748b">
-                    {ts} UTC
-                </div>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.8rem;margin:0.5rem 0">
-                <div>
-                    <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;font-weight:600">Risk Score</div>
-                    <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0">{score:.0f}/100</div>
-                </div>
-                <div>
-                    <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;font-weight:600">Confidence</div>
-                    <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0">{conf_pct}%</div>
-                </div>
-                <div>
-                    <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;font-weight:600">Expected Risk Window</div>
-                    <div style="font-size:0.8rem;font-weight:600;color:#fde68a">{window}</div>
-                </div>
-            </div>
-            <div style="margin:0.5rem 0">
-                <div style="font-size:0.65rem;color:#64748b;font-weight:600;margin-bottom:0.3rem">EVIDENCE</div>
-                <ul style="margin:0;padding-left:1.2rem">{evidence_html}</ul>
-            </div>
-            <div style="margin-top:0.5rem;padding:0.4rem 0.6rem;
-                        background:rgba(0,0,0,0.2);border-radius:4px">
-                <span style="font-size:0.65rem;color:#64748b;font-weight:600">RECOMMENDED ACTION:</span>
-                <span style="font-size:0.73rem;color:#cbd5e1;margin-left:0.3rem">{rec_action[:200]}</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        _trigger_row = (
+            f'<div style="margin:0.4rem 0;padding:0.35rem 0.6rem;background:rgba(249,115,22,0.08);'
+            f'border-radius:4px;border-left:3px solid #f97316">'
+            f'<span style="font-size:0.62rem;color:#f97316;font-weight:700">TRIGGER: </span>'
+            f'<span style="font-size:0.72rem;color:#fde68a">{trigger_txt}</span></div>'
+        ) if trigger_txt else ""
+        _dstatus_row = (
+            f'<div style="margin:0.3rem 0;font-size:0.65rem;color:#64748b">'
+            f'<span style="font-weight:600">DATA STATUS: </span>{data_status}</div>'
+        ) if data_status else ""
+        _score_str = f"{score:.0f}/100"
+        st.markdown(
+            f'<div style="border-radius:8px;padding:1rem 1.2rem;margin-bottom:0.8rem;{_card_style}">'
+            f'<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">'
+            f'<div>'
+            f'<div style="font-size:1rem;font-weight:800;color:#e2e8f0;margin-bottom:0.3rem">&#128680; {risk_level} FLOOD ALERT &mdash; {location}</div>'
+            f'<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.5rem">'
+            f'{badge_html} {state_html}'
+            f'<span style="font-size:0.65rem;color:#64748b">ID: {event_id}</span>'
+            f'</div></div>'
+            f'<div style="text-align:right;font-size:0.7rem;color:#64748b">{ts}</div>'
+            f'</div>'
+            f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.8rem;margin:0.5rem 0">'
+            f'<div><div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;font-weight:600">Risk Score</div>'
+            f'<div style="font-size:1.1rem;font-weight:700;color:#e2e8f0">{_score_str}</div></div>'
+            f'<div><div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;font-weight:600">Confidence</div>'
+            f'<div style="font-size:1.1rem;font-weight:700;color:#e2e8f0">{conf_pct}%</div></div>'
+            f'<div><div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;font-weight:600">Expected Risk Window</div>'
+            f'<div style="font-size:0.8rem;font-weight:600;color:#fde68a">{window}</div></div>'
+            f'</div>'
+            f'<div style="margin:0.5rem 0">'
+            f'<div style="font-size:0.65rem;color:#64748b;font-weight:600;margin-bottom:0.3rem">EVIDENCE</div>'
+            f'<ul style="margin:0;padding-left:1.2rem">{evidence_html}</ul>'
+            f'</div>'
+            f'{_trigger_row}{_dstatus_row}'
+            f'<div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:rgba(0,0,0,0.2);border-radius:4px">'
+            f'<span style="font-size:0.65rem;color:#64748b;font-weight:600">RECOMMENDED ACTION:</span>'
+            f'<span style="font-size:0.73rem;color:#cbd5e1;margin-left:0.3rem">{rec_action[:200]}</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        # Data Status per-factor breakdown
+        if data_status_map:
+            _dsm_badges = "".join(
+                f'<span style="background:#1e2440;color:#94a3b8;border-radius:3px;padding:1px 5px;font-size:0.62rem;margin-right:4px">'
+                f'<strong style="color:#cbd5e1">{k.replace("_"," ").title()}:</strong> {v}</span>'
+                for k, v in data_status_map.items()
+            )
+            st.markdown(
+                f'<div style="margin:-0.4rem 0 0.6rem 0;font-size:0.62rem;color:#64748b">'
+                f'<span style="font-weight:600;margin-right:6px">DATA LABELS:</span>{_dsm_badges}</div>',
+                unsafe_allow_html=True,
+            )
+
+        # ── Evidence Fusion Breakdown (Sub-Task A) ────────────────────────────
+        _ev_scores = alert.get("evidence_scores", {})
+        _fw_scores  = alert.get("fusion_weights", {})
+        if _ev_scores:
+            with st.expander(f"📊 Evidence Fusion Detail — {location}", expanded=False):
+                render_evidence_fusion_bar(_ev_scores, _fw_scores)
 
         # HITL controls for ORANGE/RED
         if risk_level in ("RED", "ORANGE") and state_v == "NEW":
@@ -307,12 +337,15 @@ else:
         # Show previous notification status if available
         if event_id in st.session_state.notif_status:
             ns = st.session_state.notif_status[event_id]
-            st.markdown(f"""
-            <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.5rem">
-                Last notification: {ns.get('status','?')} at {ns.get('dispatched_at','')[:19]} —
-                Sent: {ns.get('sent_count',0)} | Skipped: {ns.get('skipped_count',0)} | Failed: {ns.get('failed_count',0)}
-            </div>
-            """, unsafe_allow_html=True)
+            _ns_status = ns.get('status', '?')
+            _ns_at = ns.get('dispatched_at', '')[:19]
+            st.markdown(
+                f'<div style="font-size:0.7rem;color:#64748b;margin-bottom:0.5rem">'
+                f'Last notification: {_ns_status} at {_ns_at} &mdash; '
+                f'Sent: {ns.get("sent_count",0)} | Skipped: {ns.get("skipped_count",0)} | Failed: {ns.get("failed_count",0)}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 # ── Test Alert Section ───────────────────────────────────────────────────────
 st.markdown("---")
@@ -365,18 +398,20 @@ with col_send:
 
 if "last_test_alert" in st.session_state:
     ta = st.session_state["last_test_alert"]
-    st.markdown(f"""
-    <div style="background:#1a1d27;border:1px solid #f97316;border-radius:8px;padding:1rem;margin-top:0.5rem">
-        <div style="font-size:0.7rem;color:#fdba74;font-weight:700;margin-bottom:0.4rem">⚠️ TEST ALERT — NOT A REAL EMERGENCY</div>
-        <div style="font-size:0.85rem;color:#e2e8f0">
-            <strong>ID:</strong> {ta.get('event_id','')}<br>
-            <strong>Location:</strong> {ta.get('location','')}<br>
-            <strong>Risk:</strong> {ta.get('risk_level','')} ({ta.get('risk_score',0):.0f}/100)<br>
-            <strong>Window:</strong> {ta.get('expected_window','')}<br>
-            <strong>Confidence:</strong> {round(ta.get('confidence',0)*100)}%<br>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    _ta_risk = f"{ta.get('risk_level','')} ({ta.get('risk_score',0):.0f}/100)"
+    _ta_conf = f"{round(ta.get('confidence',0)*100)}%"
+    st.markdown(
+        f'<div style="background:#1a1d27;border:1px solid #f97316;border-radius:8px;padding:1rem;margin-top:0.5rem">'
+        f'<div style="font-size:0.7rem;color:#fdba74;font-weight:700;margin-bottom:0.4rem">&#9888;&#65039; TEST ALERT &mdash; NOT A REAL EMERGENCY</div>'
+        f'<div style="font-size:0.85rem;color:#e2e8f0">'
+        f'<strong>ID:</strong> {ta.get("event_id","")}<br>'
+        f'<strong>Location:</strong> {ta.get("location","")}<br>'
+        f'<strong>Risk:</strong> {_ta_risk}<br>'
+        f'<strong>Window:</strong> {ta.get("expected_window","")}<br>'
+        f'<strong>Confidence:</strong> {_ta_conf}<br>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
 
 # ── Historical Alerts from DB ────────────────────────────────────────────────
 st.markdown("---")

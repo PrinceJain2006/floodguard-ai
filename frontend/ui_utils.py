@@ -6,7 +6,31 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+_IST = ZoneInfo("Asia/Kolkata")
+
+
+def _utc_to_ist(ts_str: str, fmt: str = "%d %b %Y · %H:%M IST") -> str:
+    """Convert an ISO-8601 UTC timestamp string to a formatted IST string.
+    Accepts formats: '2024-01-01T12:00:00', '2024-01-01T12:00:00.123456',
+    '2024-01-01 12:00:00', '2024-01-01 12:00'. Returns input unchanged on error."""
+    if not ts_str:
+        return ts_str
+    _s = ts_str.strip().rstrip("Z").replace("T", " ")
+    for _fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            _dt = datetime.strptime(_s[: 26 if "%f" in _fmt else 19 if "%S" in _fmt else 16], _fmt)
+            return _dt.replace(tzinfo=timezone.utc).astimezone(_IST).strftime(fmt)
+        except ValueError:
+            continue
+    return ts_str
+
+
+def _now_ist(fmt: str = "%d %b %Y · %H:%M IST") -> str:
+    """Return the current time formatted in IST."""
+    return datetime.now(timezone.utc).astimezone(_IST).strftime(fmt)
 
 # ──────────────────────────────────────────────
 # Color palette
@@ -433,7 +457,7 @@ def data_source_strip(
         parts.append('<span style="background:#1e2440;color:#94a3b8;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">⚪ Infrastructure (DEMO)</span>')
 
     if last_updated:
-        parts.append(f'<span style="font-size:0.62rem;color:#475569">Updated: {last_updated[:19]} UTC</span>')
+        parts.append(f'<span style="font-size:0.62rem;color:#475569">Updated: {_utc_to_ist(last_updated, "%d %b %H:%M IST")}</span>')
 
     st.markdown(
         '<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:0.75rem">'
@@ -600,7 +624,7 @@ def render_agent_trace(pipeline_log: list[dict], granite_available: bool = False
         meta = AGENT_META.get(ag_name, {"icon": "🤖", "color": "#94a3b8", "desc": ""})
         st_val = entry.get("status", "IDLE")
         detail = entry.get("details", "")
-        ts = entry.get("timestamp", "")[:19].replace("T", " ")
+        ts = _utc_to_ist(entry.get("timestamp", ""), "%d %b %H:%M IST")
 
         # Status color
         st_color = {
@@ -718,3 +742,135 @@ def risk_level_indicator(level: str) -> str:
         f'font-weight:700;border:1px solid {color}40;letter-spacing:0.04em">'
         f'{emoji} {level}</span>'
     )
+
+
+# ── Sub-Task J: Officer Identity Helper ──────────────────────────────────────
+def render_officer_identity_inputs() -> tuple:
+    """
+    Render two compact text inputs (Officer Name + Rank) in the current layout.
+    Reads/writes st.session_state.officer_name and st.session_state.officer_rank.
+    Returns (name: str, rank: str) — both may be empty strings.
+
+    This is purely a UI/session-state helper; it does not call any external service.
+    """
+    if "officer_name" not in st.session_state:
+        st.session_state.officer_name = ""
+    if "officer_rank" not in st.session_state:
+        st.session_state.officer_rank = ""
+
+    oi_col1, oi_col2 = st.columns([3, 2])
+    with oi_col1:
+        st.text_input(
+            "Commanding Officer Name",
+            key="officer_name",
+            placeholder="e.g. Riya Patel",
+            help="Name recorded in audit trail for all approvals/rejections in this session.",
+            label_visibility="visible",
+        )
+    with oi_col2:
+        st.selectbox(
+            "Rank / Role",
+            options=["", "Emergency Officer", "District Collector", "NDRF Commander",
+                     "Zone Controller", "Incident Commander", "Operations Lead"],
+            key="officer_rank",
+            help="Rank recorded in audit trail.",
+        )
+
+    name = st.session_state.officer_name or ""
+    rank = st.session_state.officer_rank or ""
+    return name, rank
+
+
+def get_officer_label() -> str:
+    """
+    Return a display string for the current officer: 'Rank Name' or fallback.
+    Safe to call even if session_state keys don't exist yet.
+    """
+    name = st.session_state.get("officer_name", "").strip()
+    rank = st.session_state.get("officer_rank", "").strip()
+    if name and rank:
+        return f"{rank} {name}"
+    if name:
+        return name
+    if rank:
+        return rank
+    return "Operator"
+
+
+# ── Sub-Task A: Evidence Fusion Bar Helper ───────────────────────────────────
+def render_evidence_fusion_bar(evidence_scores: dict, fusion_weights: dict) -> None:
+    """
+    Render a compact horizontal bar chart showing each evidence source's
+    contribution to the composite flood risk score.
+
+    evidence_scores: dict mapping evidence type → raw score (0–100)
+    fusion_weights:  dict mapping evidence type → weight (0–1)
+
+    Uses st.markdown with unsafe_allow_html=True.
+    Reusable across alert_history, command_center, and any future page.
+    """
+    if not evidence_scores:
+        st.caption("No evidence score data available for this alert.")
+        return
+
+    # Human-readable labels for evidence keys
+    _labels = {
+        "ml_risk_score":            "ML Risk Score",
+        "rainfall_intensity":       "Rainfall Intensity",
+        "water_level_stress":       "Water Level Stress",
+        "drainage_stress":          "Drainage Stress",
+        "citizen_report_signals":   "Citizen Reports",
+        "historical_vulnerability": "Historical Vulnerability",
+        # evidence_fusion.py uses slightly different keys — handle both
+        "drainage_status":          "Drainage Status",
+        "citizen_reports":          "Citizen Reports",
+        "water_level_proxy":        "Water Level Proxy",
+    }
+
+    _bar_colors = {
+        "ml_risk_score":            "#7c3aed",
+        "rainfall_intensity":       "#3b82f6",
+        "water_level_stress":       "#06b6d4",
+        "drainage_stress":          "#f97316",
+        "citizen_report_signals":   "#eab308",
+        "historical_vulnerability": "#94a3b8",
+        "drainage_status":          "#f97316",
+        "citizen_reports":          "#eab308",
+        "water_level_proxy":        "#06b6d4",
+    }
+
+    rows_html = []
+    for key, raw_score in evidence_scores.items():
+        label  = _labels.get(key, key.replace("_", " ").title())
+        weight = fusion_weights.get(key, 0.0)
+        color  = _bar_colors.get(key, "#64748b")
+        # Weighted contribution shown as bar width (0-100%)
+        bar_w  = min(100, max(0, float(raw_score)))
+        contrib = round(float(raw_score) * float(weight), 1)
+        rows_html.append(f"""
+<div style="margin-bottom:0.4rem">
+  <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#94a3b8;margin-bottom:2px">
+    <span>{label}</span>
+    <span style="color:#64748b">score {raw_score:.0f} · wt {weight:.0%} · contrib {contrib:.1f}</span>
+  </div>
+  <div style="background:#1a1d27;border-radius:3px;height:8px;overflow:hidden">
+    <div style="width:{bar_w:.0f}%;background:{color};height:100%;border-radius:3px;
+                transition:width 0.3s ease"></div>
+  </div>
+</div>""")
+
+    combined_html = "\n".join(rows_html)
+    st.markdown(f"""
+<div style="background:#0f1117;border:1px solid #2d3148;border-radius:6px;
+            padding:0.65rem 0.8rem;margin-top:0.3rem">
+  <div style="font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;
+              letter-spacing:0.06em;margin-bottom:0.5rem">
+    📊 Evidence Fusion Breakdown
+  </div>
+  {combined_html}
+  <div style="font-size:0.62rem;color:#475569;margin-top:0.4rem;border-top:1px solid #1e2440;
+              padding-top:0.3rem">
+    Scores are model outputs — not scientifically validated emergency metrics.
+  </div>
+</div>
+""", unsafe_allow_html=True)

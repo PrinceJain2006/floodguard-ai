@@ -18,7 +18,8 @@ from datetime import datetime, timezone
 
 from frontend.ui_utils import (
     apply_global_css, header, metric_card,
-    demo_badge, simulated_badge, hybrid_badge, model_badge, section_header, COLORS, risk_badge
+    demo_badge, simulated_badge, hybrid_badge, model_badge, section_header, COLORS, risk_badge,
+    render_officer_identity_inputs, get_officer_label, _utc_to_ist, _now_ist,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.evidence_fusion import (
@@ -50,6 +51,10 @@ if "di_approved_actions" not in st.session_state:
     st.session_state.di_approved_actions = {}      # action_id → decision dict
 if "di_pending_actions" not in st.session_state:
     st.session_state.di_pending_actions = {}       # action_id → action dict
+if "officer_name" not in st.session_state:
+    st.session_state.officer_name = ""
+if "officer_rank" not in st.session_state:
+    st.session_state.officer_rank = ""
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -211,11 +216,11 @@ with tab_priority:
     section_header("ZONE PRIORITY SCORES",
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 DECISION SUPPORT</span>')
     st.markdown("""
-    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
-        Evidence-fused decision-support priority scores for all monitored zones.
-        Each score combines ML risk prediction, rainfall, drainage, citizen reports,
-        historical data, and water level. <strong>Not a real emergency score.</strong>
-    </div>
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    Evidence-fused decision-support priority scores for all monitored zones.
+    Each score combines ML risk prediction, rainfall, drainage, citizen reports,
+    historical data, and water level. <strong>Not a real emergency score.</strong>
+</div>
     """, unsafe_allow_html=True)
 
     # Evidence weight legend
@@ -275,60 +280,61 @@ with tab_priority:
         factors = fusion["contributing_factors"]
         top_factor = factors[0] if factors else {}
 
-        # Evidence mini-bar
-        bar_html = ""
+        # Evidence mini-bars — use direct Unicode chars to avoid markdown entity-escaping issues
         bar_icons = {
-            "ml_risk_score": "🌊", "rainfall_intensity": "🌧️", "drainage_status": "🔧",
-            "citizen_reports": "📱", "historical_vulnerability": "📖", "water_level_proxy": "💧",
+            "ml_risk_score": "\U0001F30A", "rainfall_intensity": "\U0001F327",
+            "drainage_status": "\U0001F527", "citizen_reports": "\U0001F4F1",
+            "historical_vulnerability": "\U0001F4D6", "water_level_proxy": "\U0001F4A7",
         }
+        bar_parts = []
         for key, raw_val in ev.items():
             bar_color = (
                 "#ef4444" if raw_val >= 75 else
                 "#f97316" if raw_val >= 50 else
                 "#eab308" if raw_val >= 25 else "#22c55e"
             )
-            bar_html += f"""
-            <div style="margin-bottom:2px">
-                <div style="display:flex;align-items:center;gap:4px">
-                    <span style="font-size:0.65rem;min-width:14px">{bar_icons.get(key,'•')}</span>
-                    <div style="flex:1;background:#2d3148;border-radius:2px;height:6px">
-                        <div style="width:{raw_val:.0f}%;background:{bar_color};height:6px;border-radius:2px"></div>
-                    </div>
-                    <span style="font-size:0.6rem;color:#94a3b8;min-width:24px;text-align:right">{raw_val:.0f}</span>
-                </div>
-            </div>
-            """
+            icon = bar_icons.get(key, "·")
+            val_int = int(raw_val)
+            bar_parts.append(
+                f'<div style="margin-bottom:2px;display:flex;align-items:center;gap:4px">'
+                f'<span style="font-size:0.65rem;min-width:14px">{icon}</span>'
+                f'<div style="flex:1;background:#2d3148;border-radius:2px;height:6px">'
+                f'<div style="width:{val_int}%;background:{bar_color};height:6px;border-radius:2px"></div>'
+                f'</div>'
+                f'<span style="font-size:0.6rem;color:#94a3b8;min-width:24px;text-align:right">{val_int}</span>'
+                f'</div>'
+            )
+        bar_html = "".join(bar_parts)
 
-        _rain_live = fusion.get("rainfall_is_live", False)
+        _rain_live  = fusion.get("rainfall_is_live", False)
         _live_badge = '<span style="background:#0d2818;color:#6ee7b7;font-size:0.55rem;padding:1px 4px;border-radius:3px;font-weight:700;margin-left:3px">LIVE</span>' if _rain_live else ""
+        _score_str  = f"{score:.0f}"
+        _top_label  = top_factor.get('label', '')
+        _top_note   = top_factor.get('note', '')[:55]
 
-        st.markdown(f"""
-        <div style="background:#1a1d27;border:1px solid {color};border-left:4px solid {color};
-                    border-radius:10px;padding:0.7rem 1rem;margin-bottom:0.4rem">
-            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
-                <div style="flex:1;min-width:150px">
-                    <div style="font-size:0.95rem;font-weight:700;color:#e2e8f0">{emoji} {area}</div>
-                    <div style="font-size:0.7rem;color:#64748b">{city}</div>
-                </div>
-                <div style="text-align:center;min-width:80px">
-                    <div style="font-size:1.6rem;font-weight:800;color:{color};line-height:1">{score:.0f}</div>
-                    <div style="font-size:0.6rem;color:#64748b">/ 100</div>
-                </div>
-                <div style="min-width:75px;text-align:center">
-                    <span style="background:{color};color:white;padding:2px 9px;
-                                 border-radius:6px;font-size:0.72rem;font-weight:700">{level}</span>
-                </div>
-                <div style="flex:2;min-width:180px">
-                    {bar_html}
-                </div>
-                <div style="font-size:0.7rem;color:#94a3b8;min-width:140px;max-width:190px">
-                    <div style="font-size:0.65rem;color:#64748b;margin-bottom:1px">Top factor{_live_badge}</div>
-                    <strong style="color:#e2e8f0;font-size:0.72rem">{top_factor.get('label','')}</strong><br>
-                    <span style="font-size:0.65rem">{top_factor.get('note','')[:55]}</span>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        _card_html = (
+            f'<div style="background:#1a1d27;border:1px solid {color};border-left:4px solid {color};border-radius:10px;padding:0.7rem 1rem;margin-bottom:0.4rem">'
+            f'<div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">'
+            f'<div style="flex:1;min-width:150px">'
+            f'<div style="font-size:0.95rem;font-weight:700;color:#e2e8f0">{emoji} {area}</div>'
+            f'<div style="font-size:0.7rem;color:#64748b">{city}</div>'
+            f'</div>'
+            f'<div style="text-align:center;min-width:80px">'
+            f'<div style="font-size:1.6rem;font-weight:800;color:{color};line-height:1">{_score_str}</div>'
+            f'<div style="font-size:0.6rem;color:#64748b">/ 100</div>'
+            f'</div>'
+            f'<div style="min-width:75px;text-align:center">'
+            f'<span style="background:{color};color:white;padding:2px 9px;border-radius:6px;font-size:0.72rem;font-weight:700">{level}</span>'
+            f'</div>'
+            f'<div style="flex:2;min-width:180px">{bar_html}</div>'
+            f'<div style="font-size:0.7rem;color:#94a3b8;min-width:140px;max-width:190px">'
+            f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:1px">Top factor{_live_badge}</div>'
+            f'<strong style="color:#e2e8f0;font-size:0.72rem">{_top_label}</strong><br>'
+            f'<span style="font-size:0.65rem">{_top_note}</span>'
+            f'</div>'
+            f'</div></div>'
+        )
+        st.markdown(_card_html, unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -377,78 +383,78 @@ with tab_why:
 
             # Summary card with FLOOD RISK SCORE
             st.markdown(f"""
-            <div style="background:#1a1d27;border:1px solid {color};border-top:3px solid {color};
-                        border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem">
-                    <div>
-                        <div style="font-size:1.1rem;font-weight:800;color:#e2e8f0">{area}</div>
-                        <div style="font-size:0.78rem;color:#94a3b8">{city}</div>
-                        <div style="margin-top:0.4rem;font-size:0.7rem;color:#64748b">
-                            FLOOD RISK SCORE (ML)
-                        </div>
-                        <div style="font-size:1.5rem;font-weight:900;color:{color};line-height:1.1">
-                            {ml_score_why:.0f} <span style="font-size:0.9rem">/ 100</span>
-                            <span style="font-size:0.75rem;font-weight:700;background:{color};color:white;
-                                         padding:2px 8px;border-radius:6px;margin-left:4px">{level}</span>
-                        </div>
-                        <div style="font-size:0.7rem;color:#64748b;margin-top:0.15rem">
-                            confidence: {conf_why:.0%} &nbsp;|&nbsp; fused priority: {score:.0f}/100
-                        </div>
-                    </div>
-                    <div style="text-align:right">
-                        {"<span style='background:#0d2818;color:#6ee7b7;font-size:0.65rem;padding:2px 8px;border-radius:4px;font-weight:700'>🟢 LIVE WEATHER</span>" if fusion.get("rainfall_is_live") else "<span style='background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;border-radius:4px;font-weight:700'>🟡 DEMO RAINFALL</span>"}
-                        <div style="font-size:0.65rem;color:#475569;margin-top:0.25rem">
-                            🔵 ML Model + 🟡 DEMO infra
-                        </div>
-                    </div>
-                </div>
+<div style="background:#1a1d27;border:1px solid {color};border-top:3px solid {color};
+            border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem">
+        <div>
+            <div style="font-size:1.1rem;font-weight:800;color:#e2e8f0">{area}</div>
+            <div style="font-size:0.78rem;color:#94a3b8">{city}</div>
+            <div style="margin-top:0.4rem;font-size:0.7rem;color:#64748b">
+                FLOOD RISK SCORE (ML)
             </div>
+            <div style="font-size:1.5rem;font-weight:900;color:{color};line-height:1.1">
+                {ml_score_why:.0f} <span style="font-size:0.9rem">/ 100</span>
+                <span style="font-size:0.75rem;font-weight:700;background:{color};color:white;
+                             padding:2px 8px;border-radius:6px;margin-left:4px">{level}</span>
+            </div>
+            <div style="font-size:0.7rem;color:#64748b;margin-top:0.15rem">
+                confidence: {conf_why:.0%} &nbsp;|&nbsp; fused priority: {score:.0f}/100
+            </div>
+        </div>
+        <div style="text-align:right">
+            {"<span style='background:#0d2818;color:#6ee7b7;font-size:0.65rem;padding:2px 8px;border-radius:4px;font-weight:700'>🟢 LIVE WEATHER</span>" if fusion.get("rainfall_is_live") else "<span style='background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;border-radius:4px;font-weight:700'>🟡 DEMO RAINFALL</span>"}
+            <div style="font-size:0.65rem;color:#475569;margin-top:0.25rem">
+                🔵 ML Model + 🟡 DEMO infra
+            </div>
+        </div>
+    </div>
+</div>
             """, unsafe_allow_html=True)
 
             # ML main reasons
             if main_reasons_why:
                 st.markdown("""
-                <div style="font-size:0.75rem;font-weight:700;color:#a78bfa;margin-bottom:0.3rem;
-                            text-transform:uppercase;letter-spacing:0.05em">
-                    🤖 ML Model Reasons (Random Forest)
+<div style="font-size:0.75rem;font-weight:700;color:#a78bfa;margin-bottom:0.3rem;
+            text-transform:uppercase;letter-spacing:0.05em">
+    🤖 ML Model Reasons (Random Forest)
                 </div>""", unsafe_allow_html=True)
                 for reason in main_reasons_why[:4]:
                     r_color = "#ef4444" if any(w in reason.lower() for w in ["extreme","critical","dangerously"]) else \
                               "#f97316" if "high" in reason.lower() else "#eab308"
                     st.markdown(f"""
-                    <div style="font-size:0.78rem;color:{r_color};padding:2px 0 2px 8px;
-                                border-left:2px solid {r_color};margin-bottom:3px">
-                        {reason}
+<div style="font-size:0.78rem;color:{r_color};padding:2px 0 2px 8px;
+            border-left:2px solid {r_color};margin-bottom:3px">
+    {reason}
                     </div>""", unsafe_allow_html=True)
 
             # Top ML feature importances
             if top_feats_why:
                 st.markdown("""
-                <div style="font-size:0.75rem;font-weight:700;color:#93c5fd;margin:0.5rem 0 0.3rem;
-                            text-transform:uppercase;letter-spacing:0.05em">
-                    📊 Top ML Feature Importance
+<div style="font-size:0.75rem;font-weight:700;color:#93c5fd;margin:0.5rem 0 0.3rem;
+            text-transform:uppercase;letter-spacing:0.05em">
+    📊 Top ML Feature Importance
                 </div>""", unsafe_allow_html=True)
                 for feat_name, importance in top_feats_why[:4]:
                     feat_label = feat_name.replace("_", " ").title()
                     feat_val = features_why.get(feat_name, 0)
                     bar_pct = min(100, importance * 100 * 8)
                     st.markdown(f"""
-                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:3px">
-                        <div style="min-width:140px;font-size:0.72rem;color:#e2e8f0">{feat_label}</div>
-                        <div style="flex:1;background:#2d3148;border-radius:3px;height:7px">
-                            <div style="width:{bar_pct:.0f}%;background:#7c3aed;height:7px;border-radius:3px"></div>
-                        </div>
-                        <div style="min-width:40px;font-size:0.68rem;color:#a78bfa;text-align:right">{importance:.1%}</div>
-                        <div style="min-width:50px;font-size:0.68rem;color:#64748b">(val: {feat_val:.1f})</div>
+<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:3px">
+    <div style="min-width:140px;font-size:0.72rem;color:#e2e8f0">{feat_label}</div>
+    <div style="flex:1;background:#2d3148;border-radius:3px;height:7px">
+        <div style="width:{bar_pct:.0f}%;background:#7c3aed;height:7px;border-radius:3px"></div>
+    </div>
+    <div style="min-width:40px;font-size:0.68rem;color:#a78bfa;text-align:right">{importance:.1%}</div>
+    <div style="min-width:50px;font-size:0.68rem;color:#64748b">(val: {feat_val:.1f})</div>
                     </div>""", unsafe_allow_html=True)
 
             st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
 
             # Evidence fusion factors
             st.markdown("""
-            <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.3rem;
-                        text-transform:uppercase;letter-spacing:0.05em">
-                🔀 Evidence Fusion Factors
+<div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.3rem;
+            text-transform:uppercase;letter-spacing:0.05em">
+    🔀 Evidence Fusion Factors
             </div>""", unsafe_allow_html=True)
             for f in factors:
                 raw  = f["raw_score"]
@@ -462,34 +468,34 @@ with tab_why:
                 if f.get("is_live"):
                     src_badge = '<span style="background:#0d2818;color:#6ee7b7;font-size:0.55rem;padding:1px 4px;border-radius:3px;font-weight:700;margin-left:3px">LIVE</span>'
                 st.markdown(f"""
-                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;
-                            border-bottom:1px solid rgba(45,49,72,0.4)">
-                    <span style="color:{fcolor};font-weight:700;min-width:14px">{checkmark}</span>
-                    <div style="flex:1">
-                        <div style="font-size:0.8rem;font-weight:600;color:#e2e8f0">
-                            {f['label']}{src_badge}
-                        </div>
-                        <div style="font-size:0.68rem;color:#94a3b8">{f['note'][:80]}</div>
-                    </div>
-                    <div style="text-align:right;min-width:45px">
-                        <div style="font-size:0.82rem;font-weight:700;color:{fcolor}">{raw:.0f}</div>
-                        <div style="font-size:0.58rem;color:#475569">wt {f['weight']*100:.0f}%</div>
-                    </div>
-                    <div style="min-width:55px">
-                        <div style="background:#2d3148;border-radius:3px;height:7px">
-                            <div style="width:{raw:.0f}%;background:{fcolor};height:7px;border-radius:3px"></div>
-                        </div>
-                    </div>
-                </div>
+<div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;
+            border-bottom:1px solid rgba(45,49,72,0.4)">
+    <span style="color:{fcolor};font-weight:700;min-width:14px">{checkmark}</span>
+    <div style="flex:1">
+        <div style="font-size:0.8rem;font-weight:600;color:#e2e8f0">
+            {f['label']}{src_badge}
+        </div>
+        <div style="font-size:0.68rem;color:#94a3b8">{f['note'][:80]}</div>
+    </div>
+    <div style="text-align:right;min-width:45px">
+        <div style="font-size:0.82rem;font-weight:700;color:{fcolor}">{raw:.0f}</div>
+        <div style="font-size:0.58rem;color:#475569">wt {f['weight']*100:.0f}%</div>
+    </div>
+    <div style="min-width:55px">
+        <div style="background:#2d3148;border-radius:3px;height:7px">
+            <div style="width:{raw:.0f}%;background:{fcolor};height:7px;border-radius:3px"></div>
+        </div>
+    </div>
+</div>
                 """, unsafe_allow_html=True)
 
             # Disclaimer
             st.markdown(f"""
-            <div style="font-size:0.68rem;color:#475569;margin-top:0.5rem;
-                        border-top:1px solid #2d3148;padding-top:0.4rem">
-                ⚠ Decision-support priority score. LIVE weather · MODEL predictions · USER SUBMITTED reports · DEMO infrastructure.
-                Fused at {fusion['fused_at'][:19]} UTC.
-            </div>
+<div style="font-size:0.68rem;color:#475569;margin-top:0.5rem;
+            border-top:1px solid #2d3148;padding-top:0.4rem">
+    ⚠ Decision-support priority score. LIVE weather · MODEL predictions · USER SUBMITTED reports · DEMO infrastructure.
+    Fused at {_utc_to_ist(fusion['fused_at'], '%d %b %H:%M IST')}.
+</div>
             """, unsafe_allow_html=True)
 
         with wr_col:
@@ -519,43 +525,43 @@ with tab_why:
                 )
                 _level_changed_text = " | Level escalated" if why_now["level_changed"] else ""
                 st.markdown(f"""
-                <div style="background:#1a1d27;border:1px solid #3b82f6;
-                            border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem">
-                    <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem">
-                        <div>
-                            <div style="font-size:0.78rem;color:#94a3b8">Previous Scenario</div>
-                            <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0">
-                                {why_now['prev_score']:.0f} — {why_now['prev_level']}
-                            </div>
-                        </div>
-                        <div style="font-size:2rem;font-weight:800;color:{d_color}">{d_arrow}</div>
-                        <div style="text-align:right">
-                            <div style="font-size:0.78rem;color:#94a3b8">Current Scenario</div>
-                            <div style="font-size:1.1rem;font-weight:700;color:{color}">
-                                {why_now['curr_score']:.0f} — {why_now['curr_level']}
-                            </div>
-                        </div>
-                    </div>
-                    <div style="font-size:0.75rem;font-weight:600;color:{d_color};margin-bottom:0.5rem">
-                        Score {_score_delta_text}{_level_changed_text}
-                    </div>
-                    <div style="font-size:0.75rem;color:#94a3b8;font-weight:600;margin-bottom:0.3rem">Key changes:</div>
-                    {_changes_html}
-                </div>
+<div style="background:#1a1d27;border:1px solid #3b82f6;
+            border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem">
+    <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem">
+        <div>
+            <div style="font-size:0.78rem;color:#94a3b8">Previous Scenario</div>
+            <div style="font-size:1.1rem;font-weight:700;color:#e2e8f0">
+                {why_now['prev_score']:.0f} — {why_now['prev_level']}
+            </div>
+        </div>
+        <div style="font-size:2rem;font-weight:800;color:{d_color}">{d_arrow}</div>
+        <div style="text-align:right">
+            <div style="font-size:0.78rem;color:#94a3b8">Current Scenario</div>
+            <div style="font-size:1.1rem;font-weight:700;color:{color}">
+                {why_now['curr_score']:.0f} — {why_now['curr_level']}
+            </div>
+        </div>
+    </div>
+    <div style="font-size:0.75rem;font-weight:600;color:{d_color};margin-bottom:0.5rem">
+        Score {_score_delta_text}{_level_changed_text}
+    </div>
+    <div style="font-size:0.75rem;color:#94a3b8;font-weight:600;margin-bottom:0.3rem">Key changes:</div>
+    {_changes_html}
+</div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown(f"""
-                <div style="background:#1a1d27;border:1px solid #2d3148;
-                            border-radius:10px;padding:1rem 1.2rem">
-                    <div style="font-size:0.85rem;color:#94a3b8">
-                        <strong style="color:#e2e8f0">WHY NOW?</strong><br><br>
-                        {why_now['message']}<br><br>
-                        <span style="font-size:0.72rem;color:#475569">
-                            To see temporal comparison, switch between scenarios using the
-                            selector above. The first run will save a baseline.
-                        </span>
-                    </div>
-                </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;
+            border-radius:10px;padding:1rem 1.2rem">
+    <div style="font-size:0.85rem;color:#94a3b8">
+        <strong style="color:#e2e8f0">WHY NOW?</strong><br><br>
+        {why_now['message']}<br><br>
+        <span style="font-size:0.72rem;color:#475569">
+            To see temporal comparison, switch between scenarios using the
+            selector above. The first run will save a baseline.
+        </span>
+    </div>
+</div>
                 """, unsafe_allow_html=True)
 
             # Recommended action summary
@@ -568,21 +574,21 @@ with tab_why:
                 rec_action = get_recommended_action(fusion, pred)
                 action_color = COLORS.get(rec_action["priority_level"], "#94a3b8")
                 st.markdown(f"""
-                <div style="background:rgba(124,58,237,0.1);border:1px solid #7c3aed;
-                            border-radius:10px;padding:1rem 1.2rem;margin-top:0.75rem">
-                    <div style="font-size:0.75rem;color:#a78bfa;font-weight:700;margin-bottom:0.4rem">
-                        🤖 AI RECOMMENDATION
-                    </div>
-                    <div style="font-size:0.85rem;font-weight:600;color:#e2e8f0;margin-bottom:0.3rem">
-                        {rec_action['title']}
-                    </div>
-                    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.4rem">
-                        Urgency: <strong style="color:{action_color}">{rec_action['urgency']}</strong>
-                    </div>
-                    <div style="font-size:0.72rem;color:#64748b">
-                        {"🔐 Requires human approval" if rec_action['requires_approval'] else "✅ Can be executed without approval"}
-                    </div>
-                </div>
+<div style="background:rgba(124,58,237,0.1);border:1px solid #7c3aed;
+            border-radius:10px;padding:1rem 1.2rem;margin-top:0.75rem">
+    <div style="font-size:0.75rem;color:#a78bfa;font-weight:700;margin-bottom:0.4rem">
+        🤖 AI RECOMMENDATION
+    </div>
+    <div style="font-size:0.85rem;font-weight:600;color:#e2e8f0;margin-bottom:0.3rem">
+        {rec_action['title']}
+    </div>
+    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.4rem">
+        Urgency: <strong style="color:{action_color}">{rec_action['urgency']}</strong>
+    </div>
+    <div style="font-size:0.72rem;color:#64748b">
+        {"🔐 Requires human approval" if rec_action['requires_approval'] else "✅ Can be executed without approval"}
+    </div>
+</div>
                 """, unsafe_allow_html=True)
 
 
@@ -593,11 +599,11 @@ with tab_trace:
     section_header("AGENT DECISION TRACE",
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">MODEL / APPLICATION PIPELINE</span>')
     st.markdown("""
-    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
-        See which agents contributed to a zone's priority score, and how each piece of evidence
-        feeds into the final decision. No agent outputs are fabricated — trace is built from
-        actual pipeline data.
-    </div>
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    See which agents contributed to a zone's priority score, and how each piece of evidence
+    feeds into the final decision. No agent outputs are fabricated — trace is built from
+    actual pipeline data.
+</div>
     """, unsafe_allow_html=True)
 
     if not fusions:
@@ -627,17 +633,17 @@ with tab_trace:
         )
 
         st.markdown(f"""
-        <div style="font-size:0.82rem;color:#94a3b8;margin-bottom:1rem">
-            Showing decision trace for:
-            <strong style="color:#e2e8f0">{fusion_t['area']}, {fusion_t['city']}</strong>
-            — Priority Score <strong style="color:{fusion_t['priority_color']}">{fusion_t['priority_score']:.0f}/100 ({fusion_t['priority_level']})</strong>
-        </div>
+<div style="font-size:0.82rem;color:#94a3b8;margin-bottom:1rem">
+    Showing decision trace for:
+    <strong style="color:#e2e8f0">{fusion_t['area']}, {fusion_t['city']}</strong>
+    — Priority Score <strong style="color:{fusion_t['priority_color']}">{fusion_t['priority_score']:.0f}/100 ({fusion_t['priority_level']})</strong>
+</div>
         """, unsafe_allow_html=True)
 
         for i, step in enumerate(trace_steps):
             is_final = (step["agent"] == "Final Decision")
             agent    = step["agent"]
-            emoji    = step["emoji"]
+            s_emoji  = step["emoji"]
             contrib  = step["contribution"]
             details  = step["details"]
             output   = step["output_label"]
@@ -651,46 +657,41 @@ with tab_trace:
                 f"rgba({int(card_color[1:3],16)},{int(card_color[3:5],16)},{int(card_color[5:7],16)},0.1)"
                 if is_final else "#1a1d27"
             )
-            border_top = f"border-top:3px solid {card_color};" if is_final else ""
+            border_top  = f"border-top:3px solid {card_color};" if is_final else ""
+            connector   = '<div style="width:2px;height:30px;background:#2d3148;margin-top:4px"></div>' if i < len(trace_steps) - 1 else ""
+            agent_prefix = "\U0001F3AF " if is_final else "\u2713 "
+            contrib_style = f"font-size:1rem;font-weight:700;color:{card_color}" if is_final else "font-size:0.82rem;color:#e2e8f0"
 
-            st.markdown(f"""
-            <div style="display:flex;gap:0.75rem;margin-bottom:0.5rem;align-items:flex-start">
-                <div style="display:flex;flex-direction:column;align-items:center">
-                    <div style="font-size:1.4rem">{emoji}</div>
-                    {"" if i == len(trace_steps)-1 else
-                     '<div style="width:2px;height:30px;background:#2d3148;margin-top:4px"></div>'}
-                </div>
-                <div style="flex:1;background:{card_bg};border:1px solid {card_color};
-                            border-radius:10px;padding:0.7rem 1rem;{border_top}">
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.3rem">
-                        <div style="font-weight:700;color:#e2e8f0;font-size:0.9rem">
-                            {'✓ ' if not is_final else '🎯 '}{agent}
-                        </div>
-                        <span style="background:#1a1d27;border:1px solid #2d3148;color:#94a3b8;
-                                     padding:1px 8px;border-radius:4px;font-size:0.65rem">{mode}</span>
-                    </div>
-                    <div style="font-size:0.82rem;color:#e2e8f0;margin:0.3rem 0;
-                                {'font-size:1rem;font-weight:700;color:'+card_color if is_final else ''}">
-                        {contrib}
-                    </div>
-                    <div style="font-size:0.72rem;color:#64748b">{details}</div>
-                    <div style="margin-top:0.3rem">
-                        <span style="background:#2d3148;color:#94a3b8;padding:1px 8px;
-                                     border-radius:4px;font-size:0.7rem">Output: {output}</span>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            _trace_card = (
+                f'<div style="display:flex;gap:0.75rem;margin-bottom:0.5rem;align-items:flex-start">'
+                f'<div style="display:flex;flex-direction:column;align-items:center">'
+                f'<div style="font-size:1.4rem">{s_emoji}</div>'
+                f'{connector}'
+                f'</div>'
+                f'<div style="flex:1;background:{card_bg};border:1px solid {card_color};border-radius:10px;padding:0.7rem 1rem;{border_top}">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.3rem">'
+                f'<div style="font-weight:700;color:#e2e8f0;font-size:0.9rem">{agent_prefix}{agent}</div>'
+                f'<span style="background:#1a1d27;border:1px solid #2d3148;color:#94a3b8;padding:1px 8px;border-radius:4px;font-size:0.65rem">{mode}</span>'
+                f'</div>'
+                f'<div style="margin:0.3rem 0;{contrib_style}">{contrib}</div>'
+                f'<div style="font-size:0.72rem;color:#64748b">{details}</div>'
+                f'<div style="margin-top:0.3rem">'
+                f'<span style="background:#2d3148;color:#94a3b8;padding:1px 8px;border-radius:4px;font-size:0.7rem">Output: {output}</span>'
+                f'</div>'
+                f'</div>'
+                f'</div>'
+            )
+            st.markdown(_trace_card, unsafe_allow_html=True)
 
-        st.markdown(f"""
-        <div style="background:rgba(124,58,237,0.08);border:1px solid #7c3aed;
-                    border-radius:8px;padding:0.6rem 1rem;font-size:0.75rem;color:#a78bfa;margin-top:0.5rem">
-            ↓ FINAL PRIORITY: <strong style="color:{fusion_t['priority_color']}">{fusion_t['priority_level']}</strong>
-            &nbsp;|&nbsp; Score: {fusion_t['priority_score']:.0f}/100
-            &nbsp;|&nbsp; Inputs: LIVE weather evidence + MODEL predictions + USER SUBMITTED reports + DEMO infrastructure.
-            No real sensor or government emergency systems were queried.
-        </div>
-        """, unsafe_allow_html=True)
+        _trace_footer = (
+            f'<div style="background:rgba(124,58,237,0.08);border:1px solid #7c3aed;border-radius:8px;padding:0.6rem 1rem;font-size:0.75rem;color:#a78bfa;margin-top:0.5rem">'
+            f'\u2193 FINAL PRIORITY: <strong style="color:{fusion_t["priority_color"]}">{fusion_t["priority_level"]}</strong>'
+            f' \u00a0|\u00a0 Score: {fusion_t["priority_score"]:.0f}/100'
+            f' \u00a0|\u00a0 Inputs: LIVE weather evidence + MODEL predictions + USER SUBMITTED reports + DEMO infrastructure.'
+            f' No real sensor or government emergency systems were queried.'
+            f'</div>'
+        )
+        st.markdown(_trace_footer, unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -700,13 +701,26 @@ with tab_hitl:
     section_header("🔐 HUMAN-IN-THE-LOOP APPROVAL",
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">Decision-support demonstration</span>')
     st.markdown("""
-    <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);
-                border-radius:8px;padding:0.6rem 1rem;font-size:0.78rem;color:#fca5a5;margin-bottom:1rem">
-        🔐 <strong>Demo Safety Notice:</strong> These approval buttons do NOT trigger real-world emergency actions.
-        They update application state only and are recorded in the audit trail for demonstration purposes.
-        Real emergency response requires authorised government personnel.
-    </div>
+<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);
+            border-radius:8px;padding:0.6rem 1rem;font-size:0.78rem;color:#fca5a5;margin-bottom:1rem">
+    🔐 <strong>Demo Safety Notice:</strong> These approval buttons do NOT trigger real-world emergency actions.
+    They update application state only and are recorded in the audit trail for demonstration purposes.
+    Real emergency response requires authorised government personnel.
+</div>
     """, unsafe_allow_html=True)
+
+    # ── Officer identity for audit trail ─────────────────────────────────────
+    with st.expander("👮 Authorising Officer Identity", expanded=False):
+        st.markdown("""
+<div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.5rem">
+    Enter the officer's name and rank so decisions are properly attributed in the audit trail.
+        </div>""", unsafe_allow_html=True)
+        render_officer_identity_inputs()
+        _di_cur_officer = get_officer_label()
+        if _di_cur_officer != "Operator":
+            st.success(f"✅ Decisions will be recorded as: **{_di_cur_officer}**")
+        else:
+            st.caption("⚠️ No officer set — decisions recorded as 'Operator'.")
 
     # Show CRITICAL and HIGH zones for approval
     approval_fusions = [f for f in fusions if f["priority_level"] in ("CRITICAL", "HIGH")]
@@ -728,14 +742,14 @@ with tab_hitl:
 
         # Workflow diagram
         st.markdown("""
-        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;
-                    font-size:0.82rem;color:#94a3b8;margin-bottom:1rem">
-            <span style="background:#7c3aed;color:white;padding:3px 10px;border-radius:6px">AI Recommendation</span>
-            <span>→</span>
-            <span style="background:#1a1d27;border:1px solid #2d3148;color:#e2e8f0;padding:3px 10px;border-radius:6px">Human Decision</span>
-            <span>→</span>
-            <span style="background:#1a1d27;border:1px solid #22c55e;color:#22c55e;padding:3px 10px;border-radius:6px">Final Decision Recorded</span>
-        </div>
+<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;
+            font-size:0.82rem;color:#94a3b8;margin-bottom:1rem">
+    <span style="background:#7c3aed;color:white;padding:3px 10px;border-radius:6px">AI Recommendation</span>
+    <span>→</span>
+    <span style="background:#1a1d27;border:1px solid #2d3148;color:#e2e8f0;padding:3px 10px;border-radius:6px">Human Decision</span>
+    <span>→</span>
+    <span style="background:#1a1d27;border:1px solid #22c55e;color:#22c55e;padding:3px 10px;border-radius:6px">Final Decision Recorded</span>
+</div>
         """, unsafe_allow_html=True)
 
         for fusion_h in approval_fusions[:8]:
@@ -761,58 +775,99 @@ with tab_hitl:
                     "APPROVED": "✅", "REJECTED": "❌", "MODIFIED": "🔄"
                 }.get(existing["decision"], "•")
                 st.markdown(f"""
-                <div style="background:#1a1d27;border:1px solid {dec_color};
-                            border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.5rem;
-                            opacity:0.8">
-                    <div style="display:flex;justify-content:space-between;align-items:center">
-                        <div>
-                            <span style="font-size:1rem">{dec_icon}</span>
-                            <strong style="color:#e2e8f0;font-size:0.9rem"> {area}, {city}</strong>
-                            <span style="background:{color};color:white;padding:1px 6px;
-                                         border-radius:4px;font-size:0.68rem;font-weight:600;margin-left:0.5rem">{level}</span>
-                        </div>
-                        <span style="background:{dec_color};color:white;padding:2px 8px;
-                                     border-radius:6px;font-size:0.72rem;font-weight:600">
-                            {existing['decision']}
-                        </span>
-                    </div>
-                    <div style="font-size:0.75rem;color:#94a3b8;margin-top:0.3rem">
-                        {existing.get('note','Decision recorded.')} — {existing.get('timestamp','')}
-                    </div>
-                </div>
+<div style="background:#1a1d27;border:1px solid {dec_color};
+            border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.5rem;
+            opacity:0.8">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+            <span style="font-size:1rem">{dec_icon}</span>
+            <strong style="color:#e2e8f0;font-size:0.9rem"> {area}, {city}</strong>
+            <span style="background:{color};color:white;padding:1px 6px;
+                         border-radius:4px;font-size:0.68rem;font-weight:600;margin-left:0.5rem">{level}</span>
+        </div>
+        <span style="background:{dec_color};color:white;padding:2px 8px;
+                     border-radius:6px;font-size:0.72rem;font-weight:600">
+            {existing['decision']}
+        </span>
+    </div>
+    <div style="font-size:0.75rem;color:#94a3b8;margin-top:0.3rem">
+        {existing.get('note','Decision recorded.')} — {existing.get('timestamp','')}
+    </div>
+</div>
                 """, unsafe_allow_html=True)
                 continue
+
+            # Build WHAT/WHY/ACTION/EVIDENCE/DATA STATUS for this approval card
+            _hitl_pred = next(
+                (p for p in state.get("risk_predictions", [])
+                 if p.get("area") == area and p.get("city") == city),
+                {}
+            )
+            _hitl_reasons = "; ".join(_hitl_pred.get("main_reasons", [])[:2]) or "elevated risk factors"
+            _hitl_conf    = round(_hitl_pred.get("confidence", 0) * 100)
+            _hitl_rf      = _hitl_pred.get("input_features", {}).get("rainfall_1h", 0)
+            _hitl_ev_scores = fusion_h.get("evidence_breakdown", {})
+            _hitl_ev_str  = "; ".join(
+                f"{k.replace('_',' ').title()}: {round(v*100)}%"
+                for k, v in list(_hitl_ev_scores.items())[:3]
+            ) if _hitl_ev_scores else "Multi-source evidence fusion"
+
+            _hitl_what   = action_h.get("title", "")
+            _hitl_why    = f"Priority score {score:.0f}/100 ({level}). {_hitl_reasons}"
+            _hitl_action = action_h.get("description", "")[:200]
+            _hitl_evid   = f"Evidence fusion: {_hitl_ev_str}. ML confidence: {_hitl_conf}%. Rainfall 1h: {_hitl_rf:.0f}mm."
+            _hitl_dstat  = "DEMO/SIMULATED — No live sensor feeds. ML model predictions only."
+
+            def _hitl_row(label, val, color="#94a3b8"):
+                return (
+                    f'<div style="display:grid;grid-template-columns:80px 1fr;gap:0.2rem;'
+                    f'margin-top:0.2rem;font-size:0.73rem">'
+                    f'<span style="color:#64748b;font-weight:700;text-transform:uppercase">{label}</span>'
+                    f'<span style="color:{color}">{val}</span></div>'
+                )
+
+            _hitl_rows = (
+                _hitl_row("WHAT",   _hitl_what, "#e2e8f0") +
+                _hitl_row("WHY",    _hitl_why) +
+                _hitl_row("ACTION", _hitl_action, "#fde68a") +
+                _hitl_row("EVIDENCE", _hitl_evid) +
+                f'<div style="margin-top:0.3rem"><span style="background:#1e2440;color:#94a3b8;'
+                f'border-radius:3px;padding:1px 6px;font-size:0.62rem;font-weight:600">'
+                f'DATA: {_hitl_dstat}</span></div>'
+            )
 
             # Pending approval card
             with st.container():
                 st.markdown(f"""
-                <div style="background:#1a1d27;border:1px solid {color};border-top:3px solid {color};
-                            border-radius:10px;padding:0.85rem 1rem;margin-bottom:0.4rem">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem">
-                        <div>
-                            <div style="font-size:1rem;font-weight:700;color:#e2e8f0">
-                                {fusion_h['priority_emoji']} {area}, {city}
-                            </div>
-                            <div style="font-size:0.75rem;color:#94a3b8">
-                                Priority Score: <strong style="color:{color}">{score:.0f}/100 — {level}</strong>
-                            </div>
-                        </div>
-                        <span style="background:rgba(234,179,8,0.2);border:1px solid #eab308;
-                                     color:#eab308;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600">
-                            ⏳ PENDING HUMAN APPROVAL
-                        </span>
-                    </div>
-                    <div style="background:#0f1117;border-radius:6px;padding:0.5rem 0.75rem;
-                                margin:0.5rem 0;font-size:0.8rem;color:#e2e8f0">
-                        <strong style="color:#a78bfa">🤖 AI RECOMMENDATION:</strong><br>
-                        {action_h['title']}<br>
-                        <span style="font-size:0.72rem;color:#94a3b8">{action_h['description'][:200]}…</span>
-                    </div>
-                    <div style="font-size:0.72rem;color:#64748b">
-                        Urgency: <strong style="color:{color}">{action_h['urgency']}</strong>
-                        &nbsp;|&nbsp; Action ID: {action_id}
-                    </div>
-                </div>
+<div style="background:#1a1d27;border:1px solid {color};border-top:3px solid {color};
+            border-radius:10px;padding:0.85rem 1rem;margin-bottom:0.4rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem">
+        <div>
+            <div style="font-size:1rem;font-weight:700;color:#e2e8f0">
+                {fusion_h['priority_emoji']} {area}, {city}
+            </div>
+            <div style="font-size:0.75rem;color:#94a3b8">
+                Priority Score: <strong style="color:{color}">{score:.0f}/100 — {level}</strong>
+            </div>
+        </div>
+        <span style="background:rgba(234,179,8,0.2);border:1px solid #eab308;
+                     color:#eab308;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600">
+            ⏳ PENDING HUMAN APPROVAL
+        </span>
+    </div>
+    <div style="background:#0f1117;border-radius:6px;padding:0.6rem 0.75rem;
+                margin:0.5rem 0">
+        <div style="font-size:0.7rem;color:#a78bfa;font-weight:700;margin-bottom:0.3rem">
+            🤖 AI RECOMMENDATION — EXPLAINABLE FORMAT
+        </div>
+        {_hitl_rows}
+    </div>
+    <div style="font-size:0.72rem;color:#64748b">
+        Urgency: <strong style="color:{color}">{action_h['urgency']}</strong>
+        &nbsp;|&nbsp; Action ID: {action_id}
+        &nbsp;|&nbsp; {"🔐 Human approval required" if action_h.get("requires_approval") else "✅ Pre-authorized"}
+    </div>
+</div>
                 """, unsafe_allow_html=True)
 
                 note_key = f"di_note_{action_id}"
@@ -828,38 +883,39 @@ with tab_hitl:
                         label_visibility="collapsed",
                     )
                     st.markdown("""
-                    <div style="font-size:0.68rem;color:#475569;margin-top:2px">
-                        ✏️ Note — updates application state only. No real actions triggered.
+<div style="font-size:0.68rem;color:#475569;margin-top:2px">
+    ✏️ Note — updates application state only. No real actions triggered.
                     </div>""", unsafe_allow_html=True)
+                _di_officer = get_officer_label()
                 with btn_col1:
                     if st.button("✅ APPROVE", key=f"di_app_{action_id}", type="primary",
                                  use_container_width=True):
-                        ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
+                        ts = _now_ist("%H:%M IST")
                         note_text = st.session_state.get(note_key, "") or "Human operator approved."
                         st.session_state.di_approved_actions[action_id] = {
                             "decision": "APPROVED", "note": note_text, "timestamp": ts,
                         }
-                        audit.record(action_h, "APPROVED", "Operator", note_text)
+                        audit.record(action_h, "APPROVED", _di_officer, note_text)
                         st.rerun()
                 with btn_col2:
                     if st.button("🔄 MODIFY", key=f"di_mod_{action_id}",
                                  use_container_width=True):
-                        ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
+                        ts = _now_ist("%H:%M IST")
                         note_text = st.session_state.get(note_key, "") or "Action scope modified by operator."
                         st.session_state.di_approved_actions[action_id] = {
                             "decision": "MODIFIED", "note": note_text, "timestamp": ts,
                         }
-                        audit.record(action_h, "MODIFIED", "Operator", note_text)
+                        audit.record(action_h, "MODIFIED", _di_officer, note_text)
                         st.rerun()
                 with btn_col3:
                     if st.button("❌ REJECT", key=f"di_rej_{action_id}",
                                  use_container_width=True):
-                        ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
+                        ts = _now_ist("%H:%M IST")
                         note_text = st.session_state.get(note_key, "") or "Operator determined action not appropriate at this time."
                         st.session_state.di_approved_actions[action_id] = {
                             "decision": "REJECTED", "note": note_text, "timestamp": ts,
                         }
-                        audit.record(action_h, "REJECTED", "Operator", note_text)
+                        audit.record(action_h, "REJECTED", _di_officer, note_text)
                         st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -869,12 +925,12 @@ with tab_hitl:
         n_rej  = sum(1 for v in st.session_state.di_approved_actions.values() if v["decision"] == "REJECTED")
         n_mod  = sum(1 for v in st.session_state.di_approved_actions.values() if v["decision"] == "MODIFIED")
         st.markdown(f"""
-        <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;
-                    padding:0.75rem 1rem;font-size:0.82rem;color:#94a3b8">
-            <strong style="color:#e2e8f0">Session Summary:</strong>
-            &nbsp; ✅ Approved: {n_app} &nbsp;|&nbsp; 🔄 Modified: {n_mod} &nbsp;|&nbsp; ❌ Rejected: {n_rej}
-            &nbsp;|&nbsp; Total decisions: {len(st.session_state.di_approved_actions)}
-        </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;
+            padding:0.75rem 1rem;font-size:0.82rem;color:#94a3b8">
+    <strong style="color:#e2e8f0">Session Summary:</strong>
+    &nbsp; ✅ Approved: {n_app} &nbsp;|&nbsp; 🔄 Modified: {n_mod} &nbsp;|&nbsp; ❌ Rejected: {n_rej}
+    &nbsp;|&nbsp; Total decisions: {len(st.session_state.di_approved_actions)}
+</div>
         """, unsafe_allow_html=True)
 
 
@@ -885,10 +941,10 @@ with tab_audit:
     section_header("ACTION AUDIT TRAIL",
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">APPLICATION DECISION LOG</span>')
     st.markdown("""
-    <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
-        A record of every human decision made in this session.
-        All entries are DEMO only — no real operational systems are updated.
-    </div>
+<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem">
+    A record of every human decision made in this session.
+    All entries are DEMO only — no real operational systems are updated.
+</div>
     """, unsafe_allow_html=True)
 
     entries = audit.get_all()
@@ -897,16 +953,16 @@ with tab_audit:
     else:
         # Header row
         st.markdown("""
-        <div style="display:grid;grid-template-columns:120px 1fr 1fr 90px 100px 130px;gap:0.5rem;
-                    padding:0.4rem 0.5rem;background:#1a1d27;border-radius:6px 6px 0 0;
-                    font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase">
-            <div>Zone</div>
-            <div>AI Recommendation</div>
-            <div>Human Decision</div>
-            <div>Priority</div>
-            <div>Timestamp</div>
-            <div>Status</div>
-        </div>
+<div style="display:grid;grid-template-columns:120px 1fr 1fr 90px 100px 130px;gap:0.5rem;
+            padding:0.4rem 0.5rem;background:#1a1d27;border-radius:6px 6px 0 0;
+            font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase">
+    <div>Zone</div>
+    <div>AI Recommendation</div>
+    <div>Human Decision</div>
+    <div>Priority</div>
+    <div>Timestamp</div>
+    <div>Status</div>
+</div>
         """, unsafe_allow_html=True)
 
         for entry in entries:
@@ -924,26 +980,26 @@ with tab_audit:
             )
 
             st.markdown(f"""
-            <div style="display:grid;grid-template-columns:120px 1fr 1fr 90px 100px 130px;
-                        gap:0.5rem;padding:0.5rem;border-bottom:1px solid #2d3148;
-                        font-size:0.78rem;align-items:start">
-                <div style="color:#e2e8f0;font-weight:600">{entry['zone'][:18]}</div>
-                <div style="color:#94a3b8">{entry['ai_recommendation'][:60]}…</div>
-                <div style="color:{dec_color};font-weight:600">{decision_text[:60]}</div>
-                <div>
-                    <span style="background:{lvl_color};color:white;padding:1px 6px;
-                                 border-radius:4px;font-size:0.65rem;font-weight:600">
-                        {entry.get('priority_level','?')}
-                    </span>
-                </div>
-                <div style="color:#64748b;font-size:0.72rem">{entry['timestamp'][11:19]}</div>
-                <div>
-                    <span style="background:#1a1d27;border:1px solid #2d3148;color:#94a3b8;
-                                 padding:1px 6px;border-radius:4px;font-size:0.65rem">
-                        {entry['status']}
-                    </span>
-                </div>
-            </div>
+<div style="display:grid;grid-template-columns:120px 1fr 1fr 90px 100px 130px;
+            gap:0.5rem;padding:0.5rem;border-bottom:1px solid #2d3148;
+            font-size:0.78rem;align-items:start">
+    <div style="color:#e2e8f0;font-weight:600">{entry['zone'][:18]}</div>
+    <div style="color:#94a3b8">{entry['ai_recommendation'][:60]}…</div>
+    <div style="color:{dec_color};font-weight:600">{decision_text[:60]}</div>
+    <div>
+        <span style="background:{lvl_color};color:white;padding:1px 6px;
+                     border-radius:4px;font-size:0.65rem;font-weight:600">
+            {entry.get('priority_level','?')}
+        </span>
+    </div>
+    <div style="color:#64748b;font-size:0.72rem">{entry['timestamp'][11:19]}</div>
+    <div>
+        <span style="background:#1a1d27;border:1px solid #2d3148;color:#94a3b8;
+                     padding:1px 6px;border-radius:4px;font-size:0.65rem">
+            {entry['status']}
+        </span>
+    </div>
+</div>
             """, unsafe_allow_html=True)
 
         # Export + Clear buttons

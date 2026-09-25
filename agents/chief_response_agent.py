@@ -8,6 +8,13 @@ import random
 from datetime import datetime, timezone
 from typing import Any
 
+# Granite import is optional — guarded at call time
+try:
+    from agents.granite_service import generate_situation_report as _granite_sitrep, granite_status as _granite_status_fn
+    _GRANITE_AVAILABLE = True
+except ImportError:
+    _GRANITE_AVAILABLE = False
+
 
 # ──────────────────────────────────────────────
 # Resource templates (SIMULATED)
@@ -195,16 +202,48 @@ class ChiefResponseAgent:
         critical_count = sum(1 for a in actions if a["priority"] == "CRITICAL")
         approval_needed = sum(1 for a in actions if a["requires_human_approval"])
 
-        summary = (
+        # Fallback template summary (always built; used when Granite unavailable)
+        template_summary = (
             f"Chief Response Agent has generated {len(actions)} prioritized actions for the {scenario} scenario. "
             f"{critical_count} actions are CRITICAL priority. "
             f"{approval_needed} actions require human approval before execution. "
             f"Immediate focus: {critical_zones[0]['area'] if critical_zones else 'No critical zones'}."
         )
 
+        # Try Granite-enhanced narrative (Sub-Task D)
+        summary = template_summary
+        summary_source = "TEMPLATE"
+        if _GRANITE_AVAILABLE:
+            try:
+                gstatus = _granite_status_fn()
+                if gstatus.get("available") and not gstatus.get("rate_limited"):
+                    city = str(
+                        critical_zones[0].get("city") if critical_zones
+                        else (high_zones[0].get("city") if high_zones else "Unknown")
+                    ) or "Unknown"
+                    summary_data = {
+                        "total_actions": len(actions),
+                        "critical_actions": critical_count,
+                        "approval_needed": approval_needed,
+                        "critical_zones": [z["area"] for z in critical_zones[:3]],
+                        "high_zones": [z["area"] for z in high_zones[:3]],
+                        "top_drain_count": len(critical_drain_ids),
+                        "citizen_critical": report_analysis.get("critical_count", 0),
+                    }
+                    granite_text = _granite_sitrep(city, scenario, summary_data)
+                    if granite_text and len(granite_text) > 50:
+                        summary = granite_text
+                        summary_source = "GRANITE"
+            except Exception:
+                # Never block the pipeline — fall back to template
+                pass
+
         self._last_run = datetime.now(timezone.utc).isoformat()
         self._status = "COMPLETE"
-        self._log(f"Plan complete: {len(actions)} actions, {approval_needed} need approval")
+        self._log(f"Plan complete: {len(actions)} actions, {approval_needed} need approval, summary_source={summary_source}")
+
+        # Build ICS escalation path
+        escalation_path = self._escalation_path(scenario, critical_zones)
 
         return {
             "actions": actions,
@@ -212,10 +251,26 @@ class ChiefResponseAgent:
             "critical_actions": critical_count,
             "approval_needed": approval_needed,
             "executive_summary": summary,
+            "executive_summary_source": summary_source,
+            "escalation_path": escalation_path,
             "scenario": scenario,
             "generated_at": self._last_run,
             "data_label": "DEMO/SIMULATED",
         }
+
+    def _escalation_path(self, scenario: str, critical_zones: list) -> list:
+        """
+        Return the ICS (Incident Command System) escalation chain appropriate
+        for the given scenario and number of critical zones.
+        Pure logic — no external calls. Output is DEMO/SIMULATED.
+        """
+        base = ["Zone Emergency Officer", "District Emergency Operations Centre"]
+        if scenario in ("EXTREME", "EMERGENCY") or len(critical_zones) >= 3:
+            return base + ["State NDMA Control Room", "National Crisis Management Committee"]
+        elif scenario in ("HEAVY", "CITIZEN_SURGE") or len(critical_zones) >= 1:
+            return base + ["State NDMA Control Room"]
+        else:
+            return base
 
     def get_resource_recommendations(
         self,

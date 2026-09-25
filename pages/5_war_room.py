@@ -15,6 +15,7 @@ from frontend.ui_utils import (
     apply_global_css, header, metric_card, ai_disclaimer, demo_badge,
     simulated_badge, hybrid_badge, model_badge, section_header, COLORS, risk_badge,
     render_granite_panel, render_agent_trace, risk_level_indicator, data_source_strip,
+    render_officer_identity_inputs, get_officer_label, _utc_to_ist,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.granite_service import explain_why_zone_risky
@@ -44,6 +45,10 @@ if "why_cache" not in st.session_state:
     st.session_state.why_cache = {}
 if "war_mod_notes" not in st.session_state:
     st.session_state.war_mod_notes = {}
+if "officer_name" not in st.session_state:
+    st.session_state.officer_name = ""
+if "officer_rank" not in st.session_state:
+    st.session_state.officer_rank = ""
 
 @st.cache_resource
 def get_orch():
@@ -208,6 +213,20 @@ with col_left:
                 unsafe_allow_html=True,
             )
 
+# ── OFFICER IDENTITY (persisted across session) ──────────────────────────────
+with st.expander("👮 Commanding Officer Identity", expanded=False):
+    st.markdown("""
+<div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.5rem">
+    Identify the officer authorising decisions. Name and rank are recorded in the
+    audit trail — this is an application-level log only.
+    </div>""", unsafe_allow_html=True)
+    render_officer_identity_inputs()
+    _current_officer = get_officer_label()
+    if _current_officer != "Operator":
+        st.success(f"✅ Decisions will be recorded as: **{_current_officer}**")
+    else:
+        st.caption("⚠️ No officer set — decisions recorded as 'Operator'.")
+
 # ── MIDDLE: Chief Response Action Plan ───────
 with col_mid:
     section_header("🤖 CHIEF RESPONSE AGENT — ACTION PLAN",
@@ -216,12 +235,32 @@ with col_mid:
 
     if action_plan:
         exec_summary = action_plan.get("executive_summary", "")
+        summary_source = action_plan.get("executive_summary_source", "TEMPLATE")
+        _sum_badge = (
+            '<span style="font-size:0.62rem;background:#0d2818;color:#86efac;padding:1px 5px;border-radius:3px;margin-left:4px">🧠 GRANITE</span>'
+            if summary_source == "GRANITE"
+            else '<span style="font-size:0.62rem;background:#1a1d27;color:#94a3b8;padding:1px 5px;border-radius:3px;margin-left:4px">TEMPLATE</span>'
+        )
         st.markdown(f"""
-        <div style="background:rgba(124,58,237,0.1);border:1px solid #7c3aed;border-radius:8px;
-                    padding:0.6rem 0.9rem;font-size:0.8rem;color:#a78bfa;margin-bottom:0.75rem">
-            🧠 {exec_summary}
-        </div>
+<div style="background:rgba(124,58,237,0.1);border:1px solid #7c3aed;border-radius:8px;
+            padding:0.6rem 0.9rem;font-size:0.8rem;color:#a78bfa;margin-bottom:0.5rem">
+    🧠 {exec_summary} {_sum_badge}
+</div>
         """, unsafe_allow_html=True)
+
+        # ── ICS Escalation Chain (Sub-Task D) ────────────────────────────────
+        _war_esc = action_plan.get("escalation_path", [])
+        if _war_esc:
+            _war_esc_html = " &nbsp;→&nbsp; ".join(
+                f'<span style="background:#1a1d27;border:1px solid #2d3148;border-radius:4px;'
+                f'padding:2px 8px;font-size:0.7rem;color:#e2e8f0">{s}</span>'
+                for s in _war_esc
+            )
+            st.markdown(f"""
+<div style="font-size:0.72rem;color:#64748b;margin-bottom:0.6rem">
+    📋 <strong style="color:#94a3b8">ICS Chain:</strong> {_war_esc_html}
+    <span style="font-size:0.62rem;background:#1a0a1a;color:#c4b5fd;padding:1px 5px;border-radius:3px;margin-left:4px">DEMO</span>
+            </div>""", unsafe_allow_html=True)
 
         actions = action_plan.get("actions", [])
         for action in actions[:8]:
@@ -263,10 +302,10 @@ with col_mid:
 
                 if action.get("requires_human_approval") and not approved and not rejected:
                     st.markdown(f"""
-                    <div style="background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:6px;
-                                padding:0.4rem 0.7rem;font-size:0.75rem;color:#fca5a5;margin:0.4rem 0">
-                        🔐 <strong>HUMAN APPROVAL REQUIRED</strong> — {action.get('approval_reason','')}
-                    </div>
+<div style="background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:6px;
+            padding:0.4rem 0.7rem;font-size:0.75rem;color:#fca5a5;margin:0.4rem 0">
+    🔐 <strong>HUMAN APPROVAL REQUIRED</strong> — {action.get('approval_reason','')}
+</div>
                     """, unsafe_allow_html=True)
                     # Modification note input
                     note_key = f"war_note_{aid}"
@@ -279,15 +318,16 @@ with col_mid:
                     )
                     c1, c2, c3 = st.columns(3)
                     audit = get_audit_trail()
+                    _officer_id = get_officer_label()
                     with c1:
                         if st.button("✅ Approve", key=f"war_app_{aid}", type="primary"):
                             st.session_state.war_approved.add(aid)
-                            # Record in shared audit trail
+                            # Record in shared audit trail with officer identity
                             _note = st.session_state.get(note_key, "") or "Approved via War Room."
                             audit.record(
                                 {**action, "area": action.get("area", ""), "city": action.get("city", ""),
                                  "priority_level": action.get("priority", ""), "priority_score": 0},
-                                "APPROVED", "War Room Operator", _note
+                                "APPROVED", _officer_id, _note
                             )
                             st.rerun()
                     with c2:
@@ -297,7 +337,7 @@ with col_mid:
                             audit.record(
                                 {**action, "area": action.get("area", ""), "city": action.get("city", ""),
                                  "priority_level": action.get("priority", ""), "priority_score": 0},
-                                "MODIFIED", "War Room Operator", _note
+                                "MODIFIED", _officer_id, _note
                             )
                             st.rerun()
                     with c3:
@@ -307,7 +347,7 @@ with col_mid:
                             audit.record(
                                 {**action, "area": action.get("area", ""), "city": action.get("city", ""),
                                  "priority_level": action.get("priority", ""), "priority_score": 0},
-                                "REJECTED", "War Room Operator", _note
+                                "REJECTED", _officer_id, _note
                             )
                             st.rerun()
                 elif not action.get("requires_human_approval") and not approved:
@@ -329,26 +369,26 @@ with col_right:
 
     if _pending_actions:
         st.markdown(f"""
-        <div style="background:rgba(239,68,68,0.12);border:2px solid #ef4444;border-radius:10px;
-                    padding:0.8rem 1rem;margin-bottom:0.75rem">
-          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
-            <span style="font-size:1.2rem">🚨</span>
-            <span style="font-size:0.85rem;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:0.04em">
-              HUMAN APPROVAL REQUIRED
-            </span>
-            <span style="background:#ef4444;color:white;padding:1px 7px;border-radius:10px;font-size:0.7rem;font-weight:700">
-              {len(_pending_actions)} pending
-            </span>
-          </div>
-          <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.5rem">
-            The AI has recommended {len(_pending_actions)} action(s) that require municipal officer authorization
-            before implementation. Review each action below.
-          </div>
-          <div style="font-size:0.68rem;color:#475569">
-            ⚠ AI recommendations are decision-support tools only. Approving in this demo simulates
-            command-center authorization — no real emergency services are contacted.
-          </div>
-        </div>
+<div style="background:rgba(239,68,68,0.12);border:2px solid #ef4444;border-radius:10px;
+            padding:0.8rem 1rem;margin-bottom:0.75rem">
+  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+    <span style="font-size:1.2rem">🚨</span>
+    <span style="font-size:0.85rem;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:0.04em">
+      HUMAN APPROVAL REQUIRED
+    </span>
+    <span style="background:#ef4444;color:white;padding:1px 7px;border-radius:10px;font-size:0.7rem;font-weight:700">
+      {len(_pending_actions)} pending
+    </span>
+  </div>
+  <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.5rem">
+    The AI has recommended {len(_pending_actions)} action(s) that require municipal officer authorization
+    before implementation. Review each action below.
+  </div>
+  <div style="font-size:0.68rem;color:#475569">
+    ⚠ AI recommendations are decision-support tools only. Approving in this demo simulates
+    command-center authorization — no real emergency services are contacted.
+  </div>
+</div>
         """, unsafe_allow_html=True)
 
         # Show top 3 pending approvals inline
@@ -357,14 +397,14 @@ with col_right:
                 _pa.get("priority", "MEDIUM"), "#eab308"
             )
             st.markdown(f"""
-            <div style="background:#100808;border:1px solid {_pa_color}60;border-left:3px solid {_pa_color};
-                        border-radius:0 6px 6px 0;padding:0.5rem 0.7rem;margin-bottom:0.3rem">
-              <div style="display:flex;justify-content:space-between;margin-bottom:0.2rem">
-                <span style="font-size:0.78rem;font-weight:700;color:#e2e8f0">{_pa['title'][:55]}</span>
-                <span style="color:{_pa_color};font-size:0.65rem;font-weight:700">{_pa.get('priority','')}</span>
-              </div>
-              <div style="font-size:0.7rem;color:#94a3b8">{_pa.get('description','')[:100]}</div>
-            </div>
+<div style="background:#100808;border:1px solid {_pa_color}60;border-left:3px solid {_pa_color};
+            border-radius:0 6px 6px 0;padding:0.5rem 0.7rem;margin-bottom:0.3rem">
+  <div style="display:flex;justify-content:space-between;margin-bottom:0.2rem">
+    <span style="font-size:0.78rem;font-weight:700;color:#e2e8f0">{_pa['title'][:55]}</span>
+    <span style="color:{_pa_color};font-size:0.65rem;font-weight:700">{_pa.get('priority','')}</span>
+  </div>
+  <div style="font-size:0.7rem;color:#94a3b8">{_pa.get('description','')[:100]}</div>
+</div>
             """, unsafe_allow_html=True)
             _q_note_key = f"wr_qnote_{_pa['action_id']}"
             if _q_note_key not in st.session_state:
@@ -408,14 +448,14 @@ with col_right:
                     st.rerun()
     elif approved_count > 0:
         st.markdown(f"""
-        <div style="background:rgba(34,197,94,0.08);border:1px solid #22c55e;border-radius:8px;
-                    padding:0.7rem 0.9rem;margin-bottom:0.75rem">
-          <div style="font-size:0.85rem;font-weight:700;color:#22c55e">✅ RESPONSE PLAN APPROVED</div>
-          <div style="font-size:0.75rem;color:#64748b;margin-top:0.2rem">
-            {approved_count} action(s) approved in this session. Status updated.
-            (DEMO — no real emergency services contacted)
-          </div>
-        </div>
+<div style="background:rgba(34,197,94,0.08);border:1px solid #22c55e;border-radius:8px;
+            padding:0.7rem 0.9rem;margin-bottom:0.75rem">
+  <div style="font-size:0.85rem;font-weight:700;color:#22c55e">✅ RESPONSE PLAN APPROVED</div>
+  <div style="font-size:0.75rem;color:#64748b;margin-top:0.2rem">
+    {approved_count} action(s) approved in this session. Status updated.
+    (DEMO — no real emergency services contacted)
+  </div>
+</div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
@@ -433,15 +473,15 @@ with col_right:
                 for r in assigned[:2]
             ])
             st.markdown(f"""
-            <div style="background:#131620;border:1px solid {p_color}40;border-left:2px solid {p_color};
-                        border-radius:0 6px 6px 0;padding:0.4rem 0.6rem;margin-bottom:0.3rem">
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                    <div style="font-size:0.78rem;font-weight:700;color:#e2e8f0">{rec['zone'][:25]}</div>
-                    <span style="background:{p_color};color:white;padding:1px 5px;border-radius:4px;font-size:0.62rem;font-weight:600">{level}</span>
-                </div>
-                <div style="font-size:0.68rem;color:#64748b;margin:0.15rem 0">{rec['rationale'][:60]}</div>
-                {res_html}
-            </div>
+<div style="background:#131620;border:1px solid {p_color}40;border-left:2px solid {p_color};
+            border-radius:0 6px 6px 0;padding:0.4rem 0.6rem;margin-bottom:0.3rem">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:0.78rem;font-weight:700;color:#e2e8f0">{rec['zone'][:25]}</div>
+        <span style="background:{p_color};color:white;padding:1px 5px;border-radius:4px;font-size:0.62rem;font-weight:600">{level}</span>
+    </div>
+    <div style="font-size:0.68rem;color:#64748b;margin:0.15rem 0">{rec['rationale'][:60]}</div>
+    {res_html}
+</div>
             """, unsafe_allow_html=True)
     else:
         st.caption("No resource recommendations yet.")
@@ -469,10 +509,10 @@ with bot_col1:
     section_header("🧠 IBM GRANITE WHY EXPLANATION",
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL DECISION SUPPORT</span>')
     st.markdown("""
-    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.5rem">
-        Select a risk zone to get an AI explanation of why it's high-risk.<br>
-        Uses only available project data — never invents real sensor/govt values.
-    </div>
+<div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.5rem">
+    Select a risk zone to get an AI explanation of why it's high-risk.<br>
+    Uses only available project data — never invents real sensor/govt values.
+</div>
     """, unsafe_allow_html=True)
 
     zone_options = [f"{p['area']}, {p['city']} — {p['risk_level']} ({p['risk_score']:.0f})"
@@ -488,13 +528,13 @@ with bot_col1:
                     explanation = explain_why_zone_risky(zone_pred)
                     st.session_state.why_cache[cache_key] = explanation
             st.markdown(f"""
-            <div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;margin-top:0.5rem;font-size:0.82rem;line-height:1.6">
-                <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:0.3rem">🧠 IBM Granite WHY Analysis</div>
-                <div style="color:#e2e8f0">{st.session_state.why_cache.get(cache_key,'')}</div>
-                <div style="font-size:0.65rem;color:#475569;margin-top:0.4rem">
-                    Inputs combine LIVE weather, MODEL predictions, USER SUBMITTED reports and DEMO infrastructure data.
-                </div>
-            </div>
+<div style="background:#080f1e;border:1px solid #1e3a5f;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.75rem;margin-top:0.5rem;font-size:0.82rem;line-height:1.6">
+    <div style="font-size:0.7rem;color:#94a3b8;margin-bottom:0.3rem">🧠 IBM Granite WHY Analysis</div>
+    <div style="color:#e2e8f0">{st.session_state.why_cache.get(cache_key,'')}</div>
+    <div style="font-size:0.65rem;color:#475569;margin-top:0.4rem">
+        Inputs combine LIVE weather, MODEL predictions, USER SUBMITTED reports and DEMO infrastructure data.
+    </div>
+</div>
             """, unsafe_allow_html=True)
     else:
         st.info("Run a scenario to load risk zones.")
@@ -512,17 +552,17 @@ with bot_col2:
         for status, tlist in sorted(status_groups.items()):
             s_color = status_colors.get(status, "#94a3b8")
             st.markdown(f"""
-            <div style="font-size:0.75rem;font-weight:700;color:{s_color};margin:0.4rem 0 0.2rem">
-                {status} ({len(tlist)})
-            </div>
+<div style="font-size:0.75rem;font-weight:700;color:{s_color};margin:0.4rem 0 0.2rem">
+    {status} ({len(tlist)})
+</div>
             """, unsafe_allow_html=True)
             for t in tlist[:4]:
                 t_type = t.get("team_type", "").replace("_", " ").title()
                 st.markdown(f"""
-                <div style="font-size:0.72rem;color:#94a3b8;padding:1px 0 1px 0.5rem;
-                            border-left:2px solid {s_color}">
-                    {t.get('name',t['team_id'])} — {t_type}, {t.get('city','')}
-                </div>
+<div style="font-size:0.72rem;color:#94a3b8;padding:1px 0 1px 0.5rem;
+            border-left:2px solid {s_color}">
+    {t.get('name',t['team_id'])} — {t_type}, {t.get('city','')}
+</div>
                 """, unsafe_allow_html=True)
     else:
         st.info("No team data available.")
@@ -531,24 +571,40 @@ with bot_col3:
     section_header("⚡ TOP ACTIVE INCIDENTS",
                    '<span style="background:#1e3a5f;color:#93c5fd;font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:0.04em">🔵 MODEL + 🟡 DEMO DATA</span>')
     incidents = response_plan.get("incidents", [])
+    # Build team assignment lookup (Sub-Task E)
+    _team_assign_map = {
+        ta["incident_id"]: ta
+        for ta in response_plan.get("team_assignments", [])
+    }
     if incidents:
         for inc in sorted(incidents, key=lambda x: x.get("risk_score", 0), reverse=True)[:6]:
             level = inc.get("risk_level", "MEDIUM")
             p_color = COLORS.get(level, "#94a3b8")
+            _inc_id = inc.get("incident_id", "")
+            _ta = _team_assign_map.get(_inc_id, {})
+            _team_badge = (
+                f'<span style="background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:3px;'
+                f'font-size:0.62rem;font-weight:600">👥 {_ta["team_name"]}</span>'
+                if _ta.get("team_id")
+                else '<span style="font-size:0.62rem;color:#475569">👥 Unassigned</span>'
+            )
             st.markdown(f"""
-            <div style="background:#1a1d27;border-left:3px solid {p_color};border-radius:0 6px 6px 0;
-                        padding:0.4rem 0.6rem;margin-bottom:0.3rem">
-                <div style="font-size:0.78rem;font-weight:700;color:#e2e8f0">
-                    {inc.get('area')}, {inc.get('city')}
-                </div>
-                <div style="font-size:0.7rem;color:#94a3b8">
-                    Score: {inc.get('risk_score',0):.0f} | Rain: {inc.get('rainfall_1h',0):.0f} mm/hr |
-                    <span style="color:{p_color}">{level}</span>
-                </div>
-                <div style="font-size:0.68rem;color:#64748b">
-                    Reports: {inc.get('citizen_reports',0)} | Status: {inc.get('status','ACTIVE')}
-                </div>
-            </div>
+<div style="background:#1a1d27;border-left:3px solid {p_color};border-radius:0 6px 6px 0;
+            padding:0.4rem 0.6rem;margin-bottom:0.3rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="font-size:0.78rem;font-weight:700;color:#e2e8f0">
+            {inc.get('area')}, {inc.get('city')}
+        </div>
+        {_team_badge}
+    </div>
+    <div style="font-size:0.7rem;color:#94a3b8">
+        Score: {inc.get('risk_score',0):.0f} | Rain: {inc.get('rainfall_1h',0):.0f} mm/hr |
+        <span style="color:{p_color}">{level}</span>
+    </div>
+    <div style="font-size:0.68rem;color:#64748b">
+        Reports: {inc.get('citizen_reports',0)} | Status: {inc.get('status','ACTIVE')}
+    </div>
+</div>
             """, unsafe_allow_html=True)
     else:
         st.info("No active incidents.")
@@ -579,44 +635,44 @@ st.markdown("""
 _alk1, _alk2, _alk3, _alk4 = st.columns(4)
 with _alk1:
     st.markdown(f"""
-    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.65rem;text-align:center">
-        <div style="font-size:1.5rem;font-weight:700;color:#e2e8f0">{len(_war_audit_entries)}</div>
-        <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">Total Decisions</div>
-    </div>
+<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.65rem;text-align:center">
+    <div style="font-size:1.5rem;font-weight:700;color:#e2e8f0">{len(_war_audit_entries)}</div>
+    <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">Total Decisions</div>
+</div>
     """, unsafe_allow_html=True)
 with _alk2:
     st.markdown(f"""
-    <div style="background:#1a1d27;border:1px solid #22c55e40;border-radius:8px;padding:0.65rem;text-align:center">
-        <div style="font-size:1.5rem;font-weight:700;color:#22c55e">{_total_approved}</div>
-        <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">✅ Approved</div>
-    </div>
+<div style="background:#1a1d27;border:1px solid #22c55e40;border-radius:8px;padding:0.65rem;text-align:center">
+    <div style="font-size:1.5rem;font-weight:700;color:#22c55e">{_total_approved}</div>
+    <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">✅ Approved</div>
+</div>
     """, unsafe_allow_html=True)
 with _alk3:
     st.markdown(f"""
-    <div style="background:#1a1d27;border:1px solid #f9731640;border-radius:8px;padding:0.65rem;text-align:center">
-        <div style="font-size:1.5rem;font-weight:700;color:#f97316">{_total_modified}</div>
-        <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">🔄 Modified</div>
-    </div>
+<div style="background:#1a1d27;border:1px solid #f9731640;border-radius:8px;padding:0.65rem;text-align:center">
+    <div style="font-size:1.5rem;font-weight:700;color:#f97316">{_total_modified}</div>
+    <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">🔄 Modified</div>
+</div>
     """, unsafe_allow_html=True)
 with _alk4:
     st.markdown(f"""
-    <div style="background:#1a1d27;border:1px solid #ef444440;border-radius:8px;padding:0.65rem;text-align:center">
-        <div style="font-size:1.5rem;font-weight:700;color:#ef4444">{_total_rejected}</div>
-        <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">❌ Rejected</div>
-    </div>
+<div style="background:#1a1d27;border:1px solid #ef444440;border-radius:8px;padding:0.65rem;text-align:center">
+    <div style="font-size:1.5rem;font-weight:700;color:#ef4444">{_total_rejected}</div>
+    <div style="font-size:0.7rem;color:#94a3b8;text-transform:uppercase">❌ Rejected</div>
+</div>
     """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 if not _war_audit_entries:
     st.markdown("""
-    <div style="background:#1a1d27;border:1px dashed #2d3148;border-radius:8px;
-                padding:1.5rem;text-align:center;color:#64748b;font-size:0.85rem">
-        No decisions recorded yet.<br>
-        <span style="font-size:0.78rem">Use the
-        <strong style="color:#7c3aed">Decision Intelligence → Human-in-the-Loop</strong>
-        tab to approve, modify, or reject AI recommendations.</span>
-    </div>
+<div style="background:#1a1d27;border:1px dashed #2d3148;border-radius:8px;
+            padding:1.5rem;text-align:center;color:#64748b;font-size:0.85rem">
+    No decisions recorded yet.<br>
+    <span style="font-size:0.78rem">Use the
+    <strong style="color:#7c3aed">Decision Intelligence → Human-in-the-Loop</strong>
+    tab to approve, modify, or reject AI recommendations.</span>
+</div>
     """, unsafe_allow_html=True)
 else:
     # Render audit entries in a clean timeline style
@@ -634,8 +690,7 @@ else:
         _ai_rec = _entry.get("ai_recommendation", "")
         _note  = _entry.get("modification_note", "")
         _ts    = _entry.get("timestamp", "")
-        _ts_short = _ts[11:19] if len(_ts) >= 19 else _ts
-        _ts_date  = _ts[:10] if len(_ts) >= 10 else ""
+        _ts_ist   = _utc_to_ist(_ts, "%d %b %H:%M IST") if _ts else ""
         _lvl   = _entry.get("priority_level", "")
         _lc    = _lvl_colors.get(_lvl, "#94a3b8")
 
@@ -651,7 +706,7 @@ else:
             </div>
             <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.15rem">{_ai_rec[:70]}{"…" if len(_ai_rec) > 70 else ""}</div>
             {f'<div style="font-size:0.7rem;color:{_dc};margin-bottom:0.1rem">Note: {_note[:60]}</div>' if _note else ""}
-            <div style="font-size:0.65rem;color:#475569">{_ts_date} {_ts_short} UTC</div>
+            <div style="font-size:0.65rem;color:#475569">{_ts_ist}</div>
         </div>
         """
 
@@ -663,10 +718,10 @@ else:
                 st.markdown(_html_block, unsafe_allow_html=True)
 
     st.markdown(f"""
-    <div style="font-size:0.68rem;color:#475569;margin-top:0.2rem">
-        Showing last {min(12, len(_war_audit_entries))} of {len(_war_audit_entries)} log entries.
-        Full audit trail available in Decision Intelligence → Audit Trail tab.
-    </div>
+<div style="font-size:0.68rem;color:#475569;margin-top:0.2rem">
+    Showing last {min(12, len(_war_audit_entries))} of {len(_war_audit_entries)} log entries.
+    Full audit trail available in Decision Intelligence → Audit Trail tab.
+</div>
     """, unsafe_allow_html=True)
 
 

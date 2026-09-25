@@ -34,6 +34,8 @@ orch = get_orch()
 # Guard against double-submission within the same Streamlit session
 if "last_submitted_fingerprint" not in st.session_state:
     st.session_state.last_submitted_fingerprint = None
+if "citizen_hotspot_data" not in st.session_state:
+    st.session_state.citizen_hotspot_data = []
 
 # ──────────────────────────────────────────────
 # Sidebar — language & city
@@ -45,10 +47,10 @@ with st.sidebar:
     city_choice = st.selectbox("City / शहर / શહેર", ["Ahmedabad", "Surat"])
     st.markdown("---")
     st.markdown("""
-    <div style="font-size:0.75rem;color:#94a3b8">
-    <strong>About this portal:</strong><br>
-    Submit real flood reports. Reports are stored as USER SUBMITTED data.
-    </div>
+<div style="font-size:0.75rem;color:#94a3b8">
+<strong>About this portal:</strong><br>
+Submit real flood reports. Reports are stored as USER SUBMITTED data.
+</div>
     """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
@@ -118,6 +120,14 @@ st.markdown(f"""
 alerts = orch.current_state.get("alerts", [])
 citizen_alerts = [a for a in alerts if a.get("alert_type") == "citizen" and a.get("city") == city_choice]
 
+# Sub-Task G: Build a city→top-factor lookup from rich_alerts for citizen portal
+_cp_rich_alerts = (orch.current_state or {}).get("rich_alerts", [])
+_cp_rich_by_city: dict = {}
+for _cra in _cp_rich_alerts:
+    _cra_city = _cra.get("city", "")
+    if _cra_city not in _cp_rich_by_city:
+        _cp_rich_by_city[_cra_city] = _cra  # keep highest-risk (first = highest score)
+
 if citizen_alerts:
     st.markdown(f"### {lbl['alerts_section']}")
     _alert_styles = {
@@ -130,12 +140,22 @@ if citizen_alerts:
         level = alert.get("alert_level", "INFO")
         cls = {"CRITICAL": "alert-critical", "HIGH": "alert-high", "WARNING": "alert-warning"}.get(level, "alert-info")
         _astyle = _alert_styles.get(cls, _alert_styles["alert-info"])
+        # Try to find a top contributing evidence factor from matched rich alert
+        _matched_rich = _cp_rich_by_city.get(alert.get("city", city_choice), {})
+        _ev_notes = _matched_rich.get("evidence_notes", {})
+        _factor_note = ""
+        if _ev_notes:
+            # Pick the first/most prominent evidence note
+            _first_note = next(iter(_ev_notes.values()), "")
+            if _first_note:
+                _factor_note = f'<div style="font-size:0.68rem;color:#94a3b8;margin-top:0.2rem">📊 {_first_note[:120]}</div>'
         st.markdown(f"""
-        <div style="{_astyle};border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem">
-            <div style="font-weight:700;color:#e2e8f0">{alert.get('title')}</div>
-            <div style="font-size:0.85rem;color:#cbd5e1;margin-top:0.2rem">{alert.get('message')}</div>
-            <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">MODEL GENERATED — Not a real emergency notification</div>
-        </div>
+<div style="{_astyle};border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem">
+    <div style="font-weight:700;color:#e2e8f0">{alert.get('title')}</div>
+    <div style="font-size:0.85rem;color:#cbd5e1;margin-top:0.2rem">{alert.get('message')}</div>
+    {_factor_note}
+    <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">MODEL GENERATED — Not a real emergency notification</div>
+</div>
         """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
@@ -238,6 +258,25 @@ with col_form:
                 else:
                     st.success(f"✅ Report submitted! ID: {report['report_id']}")
 
+                # ── Extract water depth + road access from text ────────
+                import re as _re
+                _text_lower = report_text.lower()
+                # Water depth extraction (feet, meters, cm patterns)
+                _depth_match = _re.search(
+                    r'(\d+(?:\.\d+)?)\s*(?:feet|foot|ft|meter|metre|meters|metres|m|cm|centimeter)',
+                    _text_lower
+                )
+                _water_depth = f"{_depth_match.group(1)} {_depth_match.group(0).split(_depth_match.group(1))[-1].strip()}" if _depth_match else "Not detected"
+                # Road access extraction
+                _road_blocked = any(kw in _text_lower for kw in [
+                    "blocked", "block", "nahi ja", "cannot pass", "can't pass",
+                    "vehicles stuck", "cars stuck", "nahin jaa", "road closed",
+                    "band", "rasta band", "jaam", "traffic", "access blocked",
+                ])
+                _road_access = "Blocked / Restricted" if _road_blocked else (
+                    "Reduced" if any(kw in _text_lower for kw in ["slow", "difficult", "tough", "hard"]) else "Not detected"
+                )
+
                 # Main AI classification card
                 _proc_badge = (
                     '<span style="background:#14532d;color:#bbf7d0;font-size:0.65rem;padding:1px 6px;border-radius:3px;font-weight:700">🧠 IBM GRANITE</span>'
@@ -292,70 +331,80 @@ with col_form:
 
                 # Single consolidated st.markdown — no split/orphaned tags
                 st.markdown(f"""
-                <div style="background:{bg};border:2px solid {color}40;border-top:3px solid {color};
-                            border-radius:10px;padding:1rem;margin-top:0.5rem">
-                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">
-                    <span style="font-size:0.78rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em">🤖 AI CLASSIFICATION</span>
-                    {_proc_badge}
-                    <span style="font-size:0.65rem;color:#475569">USER SUBMITTED — not real emergency data</span>
-                  </div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:0.6rem">
-                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
-                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Incident Type</div>
-                      <div style="font-size:0.9rem;font-weight:700;color:#e2e8f0">{cat_display}</div>
-                    </div>
-                    <div style="background:#0d1020;border:1px solid {color}40;border-radius:6px;padding:0.5rem 0.7rem">
-                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Severity</div>
-                      <div style="font-size:0.9rem;font-weight:700;color:{color}">{_sev_icon} {sev}</div>
-                    </div>
-                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
-                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Priority</div>
-                      <div style="font-size:0.9rem;font-weight:700;color:{color}">#{priority} in queue</div>
-                    </div>
-                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
-                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Language</div>
-                      <div style="font-size:0.85rem;font-weight:700;color:#94a3b8">{lang_det}</div>
-                    </div>
-                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
-                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Routing To</div>
-                      <div style="font-size:0.8rem;font-weight:700;color:#3b82f6">{report.get('assigned_team','N/A')}</div>
-                    </div>
-                    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
-                      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Status</div>
-                      <div style="font-size:0.85rem;font-weight:700;color:#22c55e">OPEN</div>
-                    </div>
-                  </div>
+<div style="background:{bg};border:2px solid {color}40;border-top:3px solid {color};
+            border-radius:10px;padding:1rem;margin-top:0.5rem">
+  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">
+    <span style="font-size:0.78rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em">🤖 AI CLASSIFICATION</span>
+    {_proc_badge}
+    <span style="font-size:0.65rem;color:#475569">USER SUBMITTED — not real emergency data</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:0.6rem">
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Incident Type</div>
+      <div style="font-size:0.9rem;font-weight:700;color:#e2e8f0">{cat_display}</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid {color}40;border-radius:6px;padding:0.5rem 0.7rem">
+      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Severity</div>
+      <div style="font-size:0.9rem;font-weight:700;color:{color}">{_sev_icon} {sev}</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Priority</div>
+      <div style="font-size:0.9rem;font-weight:700;color:{color}">#{priority} in queue</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Language</div>
+      <div style="font-size:0.85rem;font-weight:700;color:#94a3b8">{lang_det}</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Routing To</div>
+      <div style="font-size:0.8rem;font-weight:700;color:#3b82f6">{report.get('assigned_team','N/A')}</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Status</div>
+      <div style="font-size:0.85rem;font-weight:700;color:#22c55e">OPEN</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem">
+      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Water Depth (reported)</div>
+      <div style="font-size:0.82rem;font-weight:700;color:#93c5fd">{_water_depth}</div>
+      <div style="font-size:0.58rem;color:#475569">RULE-BASED EXTRACTION</div>
+    </div>
+    <div style="background:#0d1020;border:1px solid {'#ef444440' if _road_blocked else '#1e2440'};border-radius:6px;padding:0.5rem 0.7rem">
+      <div style="font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase">Road Access</div>
+      <div style="font-size:0.82rem;font-weight:700;color:{'#ef4444' if _road_blocked else '#94a3b8'}">{_road_access}</div>
+      <div style="font-size:0.58rem;color:#475569">KEYWORD DETECTION</div>
+    </div>
+  </div>
 
-                  {"<div style='background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.5rem;font-size:0.78rem;color:#fca5a5'><strong>🚨 CRITICAL:</strong> Requires immediate response. Emergency team notified. (DEMO — no real emergency services contacted)</div>" if sev == "CRITICAL" else ""}
-                  {("<div style='margin-bottom:0.5rem'><div style='font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700'>Keywords Detected</div><div style='display:flex;flex-wrap:wrap;gap:4px'>" + "".join(['<span style="background:#1e2440;color:#93c5fd;padding:1px 7px;border-radius:12px;font-size:0.68rem">' + kw + "</span>" for kw in keywords[:6]]) + "</div></div>") if keywords else ""}
-                  {("<div style='background:#050810;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem;margin-bottom:0.5rem'><div style='font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700'>" + ("🧠 Granite AI Summary" if granite_used else "⚙ AI Summary") + "</div><div style='font-size:0.8rem;color:#c7d2fe;line-height:1.5'>" + str(ai_summary) + "</div></div>") if ai_summary else ""}
-                  {("<div style='background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:0.45rem 0.7rem'><div style='font-size:0.62rem;color:#64748b;margin-bottom:0.15rem;text-transform:uppercase;font-weight:700'>Suggested Response</div><div style='font-size:0.8rem;color:#fbbf24'>" + str(suggested_action) + "</div></div>") if suggested_action else ""}
-                  <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
-                    <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">🔀 Processing Pipeline</div>
-                    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:0.68rem">
-                      <span style="background:#3a1a00;color:#fdba74;padding:2px 6px;border-radius:4px;font-weight:700">📱 CITIZEN REPORT</span>
-                      <span style="color:#475569">→</span>
-                      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">🔍 VALIDATE</span>
-                      <span style="color:#475569">→</span>
-                      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">📊 CLASSIFY</span>
-                      <span style="color:#475569">→</span>
-                      <span style="background:{_granite_bg};color:{_granite_col};padding:2px 6px;border-radius:4px;font-weight:700">{_granite_lbl}</span>
-                      <span style="color:#475569">→</span>
-                      <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🔀 EVIDENCE FUSION</span>
-                      <span style="color:#475569">→</span>
-                      <span style="background:#7c3aed22;color:#a78bfa;padding:2px 6px;border-radius:4px;font-weight:700;border:1px solid #7c3aed">📍 ZONE RISK UPDATE</span>
-                      <span style="color:#475569">→</span>
-                      <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🖥️ COMMAND CENTER</span>
-                    </div>
-                  </div>
-                  <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
-                    <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">📍 Zone Risk Context ({area})</div>
-                    {_zone_risk_html}
-                  </div>
-                  <div style="font-size:0.62rem;color:#475569;margin-top:0.4rem">
-                    Report ID: {report['report_id']} · Location: {area}, {city_choice}
-                  </div>
-                </div>
+  {"<div style='background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:0.4rem 0.6rem;margin-bottom:0.5rem;font-size:0.78rem;color:#fca5a5'><strong>🚨 CRITICAL:</strong> Requires immediate response. Emergency team notified. (DEMO — no real emergency services contacted)</div>" if sev == "CRITICAL" else ""}
+  {("<div style='margin-bottom:0.5rem'><div style='font-size:0.65rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700'>Keywords Detected</div><div style='display:flex;flex-wrap:wrap;gap:4px'>" + "".join(['<span style="background:#1e2440;color:#93c5fd;padding:1px 7px;border-radius:12px;font-size:0.68rem">' + kw + "</span>" for kw in keywords[:6]]) + "</div></div>") if keywords else ""}
+  {("<div style='background:#050810;border:1px solid #1e2440;border-radius:6px;padding:0.5rem 0.7rem;margin-bottom:0.5rem'><div style='font-size:0.62rem;color:#64748b;margin-bottom:0.2rem;text-transform:uppercase;font-weight:700'>" + ("🧠 Granite AI Summary" if granite_used else "⚙ AI Summary") + "</div><div style='font-size:0.8rem;color:#c7d2fe;line-height:1.5'>" + str(ai_summary) + "</div></div>") if ai_summary else ""}
+  {("<div style='background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:0.45rem 0.7rem'><div style='font-size:0.62rem;color:#64748b;margin-bottom:0.15rem;text-transform:uppercase;font-weight:700'>Suggested Response</div><div style='font-size:0.8rem;color:#fbbf24'>" + str(suggested_action) + "</div></div>") if suggested_action else ""}
+  <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
+    <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">🔀 Processing Pipeline</div>
+    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:0.68rem">
+      <span style="background:#3a1a00;color:#fdba74;padding:2px 6px;border-radius:4px;font-weight:700">📱 CITIZEN REPORT</span>
+      <span style="color:#475569">→</span>
+      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">🔍 VALIDATE</span>
+      <span style="color:#475569">→</span>
+      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-weight:700">📊 CLASSIFY</span>
+      <span style="color:#475569">→</span>
+      <span style="background:{_granite_bg};color:{_granite_col};padding:2px 6px;border-radius:4px;font-weight:700">{_granite_lbl}</span>
+      <span style="color:#475569">→</span>
+      <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🔀 EVIDENCE FUSION</span>
+      <span style="color:#475569">→</span>
+      <span style="background:#7c3aed22;color:#a78bfa;padding:2px 6px;border-radius:4px;font-weight:700;border:1px solid #7c3aed">📍 ZONE RISK UPDATE</span>
+      <span style="color:#475569">→</span>
+      <span style="background:#14532d;color:#bbf7d0;padding:2px 6px;border-radius:4px;font-weight:700">🖥️ COMMAND CENTER</span>
+    </div>
+  </div>
+  <div style="margin-top:0.6rem;padding-top:0.5rem;border-top:1px solid #1e2440">
+    <div style="font-size:0.65rem;color:#64748b;margin-bottom:0.3rem;text-transform:uppercase;font-weight:700">📍 Zone Risk Context ({area})</div>
+    {_zone_risk_html}
+  </div>
+  <div style="font-size:0.62rem;color:#475569;margin-top:0.4rem">
+    Report ID: {report['report_id']} · Location: {area}, {city_choice}
+  </div>
+</div>
                 """, unsafe_allow_html=True)
 
                 if image_upload:
@@ -372,15 +421,15 @@ with col_form:
     critical_r   = sum(1 for r in city_reports if r.get("severity") == "CRITICAL")
 
     st.markdown(f"""
-    <div style="margin-top:0.5rem">
-        <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.5rem">
-            📊 {city_choice} Report Status
-            <span style="background:#3a1a00;color:#fdba74;font-size:0.65rem;
-                         padding:1px 5px;border-radius:3px;font-weight:700">
-                USER SUBMITTED + DEMO SEED
-            </span>
-        </div>
+<div style="margin-top:0.5rem">
+    <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.5rem">
+        📊 {city_choice} Report Status
+        <span style="background:#3a1a00;color:#fdba74;font-size:0.65rem;
+                     padding:1px 5px;border-radius:3px;font-weight:700">
+            USER SUBMITTED + DEMO SEED
+        </span>
     </div>
+</div>
     """, unsafe_allow_html=True)
 
     mc1, mc2, mc3 = st.columns(3)
@@ -404,6 +453,134 @@ with col_form:
         df_display["Category"] = df_display["Category"].str.replace("_", " ").str.title()
         df_display["Submitted"] = pd.to_datetime(df_display["Submitted"], errors="coerce").dt.strftime("%b %d %H:%M")
         st.dataframe(df_display, use_container_width=True, hide_index=True, height=220)
+
+    # ── Report Hotspots (Sub-Task B) ─────────────────────────────────────────
+    _cp_state_hs    = orch.current_state or {}
+    _report_analysis = _cp_state_hs.get("report_analysis", {})
+    _hotspots = _report_analysis.get("hotspot_areas", [])
+    # Filter to current city if hotspots carry city info
+    _city_hotspots = [h for h in _hotspots if h.get("city", city_choice) == city_choice]
+    if not _city_hotspots:
+        _city_hotspots = _hotspots[:5]  # fallback: show top 5 regardless of city
+
+    if _city_hotspots:
+        st.markdown("---")
+        st.markdown("""
+<div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.4rem">
+    📍 Active Report Hotspots
+    <span style="font-size:0.65rem;background:#3a1a00;color:#fdba74;padding:1px 6px;
+                 border-radius:3px;margin-left:6px;font-weight:600">USER SUBMITTED + DEMO</span>
+</div>
+<div style="font-size:0.72rem;color:#94a3b8;margin-bottom:0.5rem">
+    Areas with the highest concentration of active citizen reports.
+        </div>""", unsafe_allow_html=True)
+
+        _sev_colors = {
+            "CRITICAL": "#ef4444", "HIGH": "#f97316",
+            "MEDIUM": "#eab308", "LOW": "#22c55e",
+        }
+        _hs_cols = st.columns(min(len(_city_hotspots[:5]), 3))
+        for _hs_i, _hs in enumerate(_city_hotspots[:5]):
+            _hs_area     = _hs.get("area", "Unknown")
+            _hs_count    = _hs.get("report_count", _hs.get("count", 0))
+            _hs_sev      = _hs.get("dominant_severity", _hs.get("severity", "MEDIUM"))
+            _hs_cat      = _hs.get("dominant_category", _hs.get("category", ""))
+            _hs_color    = _sev_colors.get(_hs_sev, "#94a3b8")
+            _hs_cat_disp = _hs_cat.replace("_", " ").title() if _hs_cat else "—"
+            with _hs_cols[_hs_i % 3]:
+                st.markdown(f"""
+<div style="background:#1a1d27;border:1px solid {_hs_color}40;
+            border-left:3px solid {_hs_color};border-radius:6px;
+            padding:0.55rem 0.7rem;margin-bottom:0.4rem">
+    <div style="font-size:0.8rem;font-weight:700;color:#e2e8f0;margin-bottom:2px">
+        📍 {_hs_area}
+    </div>
+    <div style="display:flex;gap:0.3rem;align-items:center;flex-wrap:wrap">
+        <span style="background:{_hs_color};color:white;padding:1px 5px;
+                     border-radius:3px;font-size:0.62rem;font-weight:700">
+            {_hs_sev}
+        </span>
+        <span style="font-size:0.68rem;color:#94a3b8">{_hs_count} report{"s" if _hs_count != 1 else ""}</span>
+    </div>
+    <div style="font-size:0.67rem;color:#64748b;margin-top:2px">{_hs_cat_disp}</div>
+</div>
+                """, unsafe_allow_html=True)
+
+    # ── Incident Clustering (Req 7) ─────────────────────────────────────────
+    # Group reports from same area + similar category into clusters
+    _cluster_source_reports = [r for r in city_reports if r.get("status") == "OPEN"]
+    _clusters: dict = {}
+    for _cr in _cluster_source_reports:
+        _cr_area = _cr.get("area", "Unknown")
+        _cr_cat  = _cr.get("category", "waterlogging")
+        # Normalise to broad cluster category
+        _broad = (
+            "Road Waterlogging" if _cr_cat in ("waterlogging", "road_blockage", "traffic_disruption")
+            else "Property / Emergency" if _cr_cat in ("property_flooding", "emergency_situation")
+            else "Drain Overflow"
+        )
+        _ckey = f"{_cr_area}||{_broad}"
+        if _ckey not in _clusters:
+            _clusters[_ckey] = {
+                "area": _cr_area,
+                "incident": _broad,
+                "reports": [],
+                "severities": [],
+            }
+        _clusters[_ckey]["reports"].append(_cr)
+        _clusters[_ckey]["severities"].append(_cr.get("severity", "MEDIUM"))
+
+    # Only show clusters with 2+ reports
+    _active_clusters = sorted(
+        [v for v in _clusters.values() if len(v["reports"]) >= 2],
+        key=lambda x: len(x["reports"]),
+        reverse=True,
+    )[:5]
+
+    if _active_clusters:
+        st.markdown("---")
+        st.markdown("""
+<div style="font-size:0.85rem;font-weight:700;color:#e2e8f0;margin-bottom:0.4rem">
+    &#x1F4CD; Incident Clusters
+    <span style="font-size:0.65rem;background:#1e3a5f;color:#93c5fd;padding:1px 6px;
+                 border-radius:3px;margin-left:6px;font-weight:600">AI CLUSTERED</span>
+    <span style="font-size:0.65rem;background:#3a1a00;color:#fdba74;padding:1px 6px;
+                 border-radius:3px;margin-left:4px;font-weight:600">USER SUBMITTED + DEMO</span>
+</div>
+<div style="font-size:0.72rem;color:#94a3b8;margin-bottom:0.5rem">
+    Multiple reports from the same area grouped into incident clusters.
+    Clusters help identify concentrated flood incidents.
+        </div>""", unsafe_allow_html=True)
+
+        _cl_sev_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+        for _cl in _active_clusters:
+            _cl_count = len(_cl["reports"])
+            _cl_sevs  = _cl["severities"]
+            _cl_top_sev = max(_cl_sevs, key=lambda s: _cl_sev_rank.get(s, 0))
+            _cl_color = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(_cl_top_sev, "#94a3b8")
+            _cl_priority = "HIGH" if _cl_top_sev in ("CRITICAL", "HIGH") or _cl_count >= 5 else "MEDIUM"
+            _cl_cats_display = _cl["incident"]
+            st.markdown(
+                f'<div style="background:rgba(59,130,246,0.06);border:1px solid #3b82f640;'
+                f'border-left:3px solid {_cl_color};border-radius:6px;padding:0.5rem 0.8rem;margin-bottom:0.4rem">'
+                f'<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">'
+                f'<span style="font-size:0.8rem;font-weight:700;color:#e2e8f0">&#x1F4CD; {_cl["area"]}</span>'
+                f'<span style="background:{_cl_color};color:white;padding:1px 5px;border-radius:3px;font-size:0.6rem;font-weight:700">CLUSTER</span>'
+                f'<span style="font-size:0.68rem;color:#94a3b8">{_cl_count} report{"s" if _cl_count!=1 else ""}</span>'
+                f'</div>'
+                f'<div style="margin-top:0.2rem;display:flex;gap:0.4rem;flex-wrap:wrap;font-size:0.68rem">'
+                f'<span style="color:#64748b">Incident: <strong style="color:#e2e8f0">{_cl_cats_display}</strong></span>'
+                f'<span style="color:#475569">&#183;</span>'
+                f'<span style="color:#64748b">Severity: <strong style="color:{_cl_color}">{_cl_top_sev}</strong></span>'
+                f'<span style="color:#475569">&#183;</span>'
+                f'<span style="color:#64748b">Priority: <strong style="color:{_cl_color}">{_cl_priority}</strong></span>'
+                f'</div>'
+                f'<div style="font-size:0.62rem;color:#475569;margin-top:0.15rem">'
+                f'Location: {_cl["area"]} (text-only — no GPS coordinates). '
+                f'Cluster based on area name + incident type matching.</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 with col_map:
     st.markdown(f"### {lbl['local_risk']}")

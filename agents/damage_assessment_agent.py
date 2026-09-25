@@ -92,6 +92,16 @@ class DamageAssessmentAgent:
             else:
                 infra_damage_scores[infra] = 40.0
 
+        # Separate reported (from description/severity) vs potential (model-extrapolated) impact
+        _reported_impact = f"Severity reported as {severity}. " + (
+            description[:200] if description else "No description provided."
+        )
+        _potential_impact = (
+            f"Potential damage level: {damage_level}. "
+            f"Affected infrastructure: {', '.join(affected_infra) if affected_infra else 'Unknown'}. "
+            f"If flood duration exceeds {flood_duration_hours:.0f}h, structural damage risk increases."
+        )
+
         report = {
             "assessment_id": f"DMG-{uuid.uuid4().hex[:8].upper()}",
             "incident_id": incident_id,
@@ -106,6 +116,11 @@ class DamageAssessmentAgent:
             "estimated_priority": priority,
             "recommended_next_step": next_step,
             "ai_assessment": description[:500],
+            # Data-transparency impact labels
+            "reported_impact": _reported_impact,
+            "potential_impact": _potential_impact,
+            "reported_impact_label": "USER SUBMITTED — unverified citizen report",
+            "potential_impact_label": "ESTIMATED — AI extrapolation from reported severity + duration",
             "image_paths": image_paths or [],
             "is_preliminary": True,
             "disclaimer": (
@@ -152,6 +167,16 @@ class DamageAssessmentAgent:
         from collections import Counter
         top_infra = Counter(all_infra).most_common(3)
 
+        # Sub-Task F: Build plain-English infrastructure_summary
+        infra_summary = ""
+        if top_infra:
+            parts = [f"{item.replace('_', ' ').title()} ({count} incident{'s' if count != 1 else ''})"
+                     for item, count in top_infra]
+            infra_summary = "Primary impact: " + ", ".join(parts) + "."
+            severe = by_damage.get("SEVERE", 0) + by_damage.get("HIGH", 0)
+            if severe > 0:
+                infra_summary += f" {severe} incident{'s' if severe != 1 else ''} rated HIGH/SEVERE."
+
         self.last_run = datetime.now(timezone.utc).isoformat()
         return {
             "assessments": assessments,
@@ -161,6 +186,7 @@ class DamageAssessmentAgent:
                 "most_affected_infrastructure": [k for k, _ in top_infra],
                 "severe_count": by_damage.get("SEVERE", 0) + by_damage.get("HIGH", 0),
             },
+            "infrastructure_summary": infra_summary,
             "is_preliminary": True,
             "disclaimer": "All assessments are AI-generated and require field verification.",
             "assessed_at": datetime.now(timezone.utc).isoformat(),

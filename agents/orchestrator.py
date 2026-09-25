@@ -74,13 +74,25 @@ class AgentOrchestrator:
         self.pipeline_log: list[dict] = []
         self._initialized = False
 
-    def _log_step(self, step: str, agent: str, status: str, details: str = ""):
+    def _log_step(
+        self,
+        step: str,
+        agent: str,
+        status: str,
+        details: str = "",
+        agent_input: str = "",
+        agent_output: str = "",
+        why: str = "",
+    ):
         self.pipeline_log.append({
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "step": step,
             "agent": agent,
             "status": status,
             "details": details,
+            "agent_input": agent_input,
+            "agent_output": agent_output,
+            "why": why,
         })
         if len(self.pipeline_log) > 100:
             self.pipeline_log = self.pipeline_log[-100:]
@@ -100,10 +112,21 @@ class AgentOrchestrator:
         """
         self.current_scenario = scenario
         t_start = time.time()
-        self._log_step("PIPELINE_START", "Orchestrator", "RUNNING", f"Scenario={scenario}, City={city}")
+        self._log_step(
+            "PIPELINE_START", "Orchestrator", "RUNNING",
+            f"Scenario={scenario}, City={city}",
+            agent_input=f"Scenario: {scenario}, City scope: {city}",
+            agent_output="Pipeline initialised",
+            why="Orchestrator sequences all 6 agents in order",
+        )
 
         # ── Step 1: Load data ──────────────────────────────────
-        self._log_step("DATA_LOAD", "Orchestrator", "RUNNING", "Loading scenario data")
+        self._log_step(
+            "DATA_LOAD", "Orchestrator", "RUNNING", "Loading scenario data",
+            agent_input="Scenario parameters",
+            agent_output="Rainfall, drains, incidents, reports, teams",
+            why="Seed generator builds scenario-scaled demo/hybrid dataset",
+        )
         rainfall = generate_rainfall_data(scenario)
         drains   = generate_drains()
         incidents = generate_flood_incidents()
@@ -181,11 +204,21 @@ class AgentOrchestrator:
             }
             self._log_step("LIVE_WEATHER", "LiveDataManager", "FALLBACK", str(exc))
 
-        self._log_step("DATA_LOAD", "Orchestrator", "COMPLETE",
-                       f"{len(rainfall)} areas, {len(drains)} drains, {len(reports)} reports")
+        self._log_step(
+            "DATA_LOAD", "Orchestrator", "COMPLETE",
+            f"{len(rainfall)} areas, {len(drains)} drains, {len(reports)} reports",
+            agent_input="Scenario parameters",
+            agent_output=f"{len(rainfall)} areas, {len(drains)} drains, {len(reports)} reports loaded",
+            why="Dataset built from seed generator with scenario-scaled rainfall multipliers",
+        )
 
         # ── Step 2: Flood Risk Agent ───────────────────────────
-        self._log_step("FLOOD_RISK", "Flood Risk Agent", "RUNNING", "Analyzing rainfall and risk")
+        self._log_step(
+            "FLOOD_RISK", "Flood Risk Agent", "RUNNING", "Analyzing rainfall and risk",
+            agent_input=f"Rainfall records for {len(rainfall)} areas + drain data + citizen reports",
+            agent_output="Risk scores being computed",
+            why="Agent 1: ML model scores each zone using rainfall, drainage, reports, elevation",
+        )
         risk_predictions = self.flood_agent.analyze_all_areas(
             rainfall_records=rainfall,
             drain_records=drains,
@@ -195,30 +228,66 @@ class AgentOrchestrator:
         )
         critical_count = sum(1 for p in risk_predictions if p["risk_level"] == "CRITICAL")
         high_count     = sum(1 for p in risk_predictions if p["risk_level"] == "HIGH")
-        self._log_step("FLOOD_RISK", "Flood Risk Agent", "COMPLETE",
-                       f"Analyzed {len(risk_predictions)} areas — {critical_count} CRITICAL, {high_count} HIGH")
+        top_zone = max(risk_predictions, key=lambda x: x["risk_score"]) if risk_predictions else {}
+        self._log_step(
+            "FLOOD_RISK", "Flood Risk Agent", "COMPLETE",
+            f"Analyzed {len(risk_predictions)} areas — {critical_count} CRITICAL, {high_count} HIGH",
+            agent_input=f"Rainfall + drain + report data for {len(risk_predictions)} zones",
+            agent_output=f"{len(risk_predictions)} risk assessments: {critical_count} CRITICAL, {high_count} HIGH. Top zone: {top_zone.get('area','—')} ({top_zone.get('risk_score',0):.0f}/100)",
+            why="Random Forest ML model + rule-based fallback; output labelled MODEL/SIMULATED",
+        )
 
         # ── Step 3: Drainage Agent ─────────────────────────────
-        self._log_step("DRAINAGE", "Drainage Agent", "RUNNING", "Prioritizing drainage maintenance")
+        self._log_step(
+            "DRAINAGE", "Drainage Agent", "RUNNING", "Prioritizing drainage maintenance",
+            agent_input=f"{len(drains)} drain records + rainfall + risk predictions from Agent 1",
+            agent_output="Drain risk scores being computed",
+            why="Agent 2: Scores drains by capacity, blockage frequency, flood-zone proximity",
+        )
         drain_analysis = self.drain_agent.prioritize_drains(
             drains=drains,
             rainfall_records=rainfall,
             risk_predictions=risk_predictions,
         )
-        self._log_step("DRAINAGE", "Drainage Agent", "COMPLETE",
-                       f"Identified {len(drain_analysis['requires_immediate_action'])} critical drains")
+        crit_drains = len(drain_analysis['requires_immediate_action'])
+        high_drains = drain_analysis.get("priority_summary", {}).get("HIGH", 0)
+        self._log_step(
+            "DRAINAGE", "Drainage Agent", "COMPLETE",
+            f"Identified {crit_drains} critical drains",
+            agent_input=f"{len(drains)} drains, rainfall and risk predictions",
+            agent_output=f"{crit_drains} CRITICAL drains, {high_drains} HIGH priority. Resource data: DEMO/SYNTHETIC",
+            why="High-risk drains identified by blockage + capacity + condition scoring",
+        )
 
         # ── Step 4: Citizen Report Agent ──────────────────────
-        self._log_step("CITIZEN_REPORTS", "Citizen Report Agent", "RUNNING", "Analyzing citizen reports")
+        self._log_step(
+            "CITIZEN_REPORTS", "Citizen Report Agent", "RUNNING", "Analyzing citizen reports",
+            agent_input=f"{len(reports)} citizen report records",
+            agent_output="Report classification in progress",
+            why="Agent 3: Classifies reports by severity, category, language; detects hotspots",
+        )
         report_analysis = self.citizen_agent.batch_analyze(reports)
-        self._log_step("CITIZEN_REPORTS", "Citizen Report Agent", "COMPLETE",
-                       f"Processed {report_analysis['total_reports']} reports, "
-                       f"{report_analysis['open_reports']} open")
+        open_rpts = report_analysis['open_reports']
+        crit_rpts = report_analysis.get("critical_count", 0)
+        hotspots  = report_analysis.get("hotspot_areas", [])
+        top_hs = hotspots[0]["area"] if hotspots else "—"
+        self._log_step(
+            "CITIZEN_REPORTS", "Citizen Report Agent", "COMPLETE",
+            f"Processed {report_analysis['total_reports']} reports, {open_rpts} open",
+            agent_input=f"{len(reports)} reports (EN/HI/GU)",
+            agent_output=f"{report_analysis['total_reports']} reports classified. {crit_rpts} CRITICAL. Top hotspot: {top_hs}. Data: USER SUBMITTED",
+            why="NLP + keyword matching classifies severity, routes to response team",
+        )
 
         # ── Step 5: Damage Assessment Agent ───────────────────
         # Runs BEFORE the response agent so damage intelligence informs response planning.
-        self._log_step("DAMAGE_ASSESSMENT", "Damage Assessment Agent", "RUNNING",
-                       "Assessing damage from incident reports")
+        self._log_step(
+            "DAMAGE_ASSESSMENT", "Damage Assessment Agent", "RUNNING",
+            "Assessing damage from incident reports",
+            agent_input="Active/resolved incident reports",
+            agent_output="Damage classification in progress",
+            why="Agent 4 (runs before Response Agent): Classifies infrastructure damage from incident data",
+        )
         damage_assessment_result: dict = {"assessments": [], "summary": {}, "is_preliminary": True}
         try:
             active_incidents = [
@@ -229,16 +298,32 @@ class AgentOrchestrator:
                 damage_assessment_result = self.damage_agent.batch_assess(active_incidents)
                 severe_count = damage_assessment_result["summary"].get("severe_count", 0)
                 total_assessed = damage_assessment_result["summary"].get("total_assessed", 0)
-                self._log_step("DAMAGE_ASSESSMENT", "Damage Assessment Agent", "COMPLETE",
-                               f"Assessed {total_assessed} incidents — {severe_count} severe/high damage")
+                infra_sum = damage_assessment_result.get("infrastructure_summary", "")
+                self._log_step(
+                    "DAMAGE_ASSESSMENT", "Damage Assessment Agent", "COMPLETE",
+                    f"Assessed {total_assessed} incidents — {severe_count} severe/high damage",
+                    agent_input=f"{len(active_incidents)} active/resolved incidents",
+                    agent_output=f"{total_assessed} assessed. {severe_count} SEVERE/HIGH. {infra_sum[:80] if infra_sum else '—'} (PRELIMINARY — needs field verification)",
+                    why="AI-generated preliminary assessment; all outputs require human field verification",
+                )
             else:
-                self._log_step("DAMAGE_ASSESSMENT", "Damage Assessment Agent", "COMPLETE",
-                               "No active/resolved incidents to assess")
+                self._log_step(
+                    "DAMAGE_ASSESSMENT", "Damage Assessment Agent", "COMPLETE",
+                    "No active/resolved incidents to assess",
+                    agent_input="No active incidents",
+                    agent_output="No assessments generated",
+                    why="Damage Assessment only runs on ACTIVE or RESOLVED incidents",
+                )
         except Exception as exc:
             self._log_step("DAMAGE_ASSESSMENT", "Damage Assessment Agent", "ERROR", str(exc))
 
         # ── Step 6: Response Coordination Agent ───────────────
-        self._log_step("RESPONSE", "Response Coordination Agent", "RUNNING", "Generating response plan")
+        self._log_step(
+            "RESPONSE", "Response Coordination Agent", "RUNNING", "Generating response plan",
+            agent_input="Risk predictions + drain analysis + report analysis + available teams",
+            agent_output="Incident response plans being generated",
+            why="Agent 5: Combines all agent outputs to produce ranked incident plans",
+        )
         response_plan = self.response_agent.coordinate(
             risk_predictions=risk_predictions,
             drain_analysis=drain_analysis,
@@ -246,36 +331,54 @@ class AgentOrchestrator:
             response_teams=teams,
             city=city,
         )
-        self._log_step("RESPONSE", "Response Coordination Agent", "COMPLETE",
-                       f"Generated {len(response_plan['incidents'])} incidents, "
-                       f"{len(response_plan['top_recommendations'])} recommendations")
+        n_incidents = len(response_plan['incidents'])
+        n_recs = len(response_plan['top_recommendations'])
+        n_approval = sum(1 for inc in response_plan['incidents'] if inc.get("requires_human_approval"))
+        self._log_step(
+            "RESPONSE", "Response Coordination Agent", "COMPLETE",
+            f"Generated {n_incidents} incidents, {n_recs} recommendations",
+            agent_input="Outputs from Agents 1-4 + team availability (DEMO)",
+            agent_output=f"{n_incidents} incident plans, {n_recs} system recommendations. {n_approval} require human approval. Resources: DEMO",
+            why="Priority queue sorts areas by risk score; human approval required for CRITICAL actions",
+        )
 
         # ── Step 7: Granite reasoning layer ───────────────────
-        # generate_situation_report uses the module-level generation cache so
-        # repeated pipeline runs with the same scenario / zone counts won't fire
-        # duplicate Granite requests.  We call granite_status() AFTER the
-        # generation attempt so the status accurately reflects whether generation
-        # succeeded (the status probe result is cached for _STATUS_CACHE_TTL).
-        self._log_step("GRANITE", "IBM Granite", "RUNNING", "Generating situation summary")
+        self._log_step(
+            "GRANITE", "IBM Granite", "RUNNING", "Generating situation summary",
+            agent_input=f"Situation summary for {city}, scenario {scenario}",
+            agent_output="LLM generation in progress",
+            why="IBM Granite (NOT an agent) provides NL reasoning over structured agent outputs",
+        )
         situation_report = generate_situation_report(
             city=city if city != "All" else "Ahmedabad & Surat",
             scenario=scenario,
             summary_data=response_plan["summary"],
         )
-        # Invalidate the status cache so the next call reflects the generation
-        # outcome (either LIVE if the call succeeded, or RATE_LIMITED/FALLBACK).
         invalidate_granite_status_cache()
         g_status = granite_status()
+        _granite_out = (
+            "Live IBM Granite generation — ibm/granite-4-h-small" if g_status["available"]
+            else "Rule-based fallback (rate limited)" if g_status["rate_limited"]
+            else "Rule-based fallback (credentials not configured)"
+        )
         self._log_step(
             "GRANITE", "IBM Granite", "COMPLETE",
             "🟢 Live — IBM Granite generation" if g_status["available"]
             else "🟠 Rate limited — rule-based fallback" if g_status["rate_limited"]
             else "⚙ Fallback mode (configure WatsonX credentials)",
+            agent_input="Structured summary from all 6 agents",
+            agent_output=_granite_out,
+            why="Granite converts structured data into natural-language situation report for officers",
         )
 
         # ── Step 8: Chief Response Agent ──────────────────────
-        self._log_step("CHIEF_RESPONSE", "Chief Response Agent", "RUNNING",
-                       "Generating unified emergency action plan")
+        self._log_step(
+            "CHIEF_RESPONSE", "Chief Response Agent", "RUNNING",
+            "Generating unified emergency action plan",
+            agent_input="All agent outputs + resource state + scenario",
+            agent_output="Unified action plan being assembled",
+            why="Agent 6: Combines all previous outputs into prioritised action plan with HITL gates",
+        )
         action_plan = self.chief_agent.generate_action_plan(
             risk_predictions=risk_predictions,
             drain_analysis=drain_analysis,
@@ -289,20 +392,37 @@ class AgentOrchestrator:
             teams=teams,
             scenario=scenario,
         )
-        self._log_step("CHIEF_RESPONSE", "Chief Response Agent", "COMPLETE",
-                       f"{action_plan['total_actions']} actions, {action_plan['approval_needed']} need approval")
+        n_acts = action_plan['total_actions']
+        n_appr = action_plan['approval_needed']
+        n_crit_acts = action_plan.get('critical_actions', 0)
+        self._log_step(
+            "CHIEF_RESPONSE", "Chief Response Agent", "COMPLETE",
+            f"{n_acts} actions, {n_appr} need approval",
+            agent_input="Outputs from all 6 agents",
+            agent_output=f"{n_acts} prioritised actions: {n_crit_acts} CRITICAL, {n_appr} require human approval. Summary: {('GRANITE' if action_plan.get('executive_summary_source')=='GRANITE' else 'TEMPLATE')}",
+            why="Chief Response Agent is the final AI decision layer before human officer review",
+        )
 
         # ── Step 9: Closed-loop learning ──────────────────────
-        self._log_step("LEARNING", "Closed-Loop Learning", "RUNNING",
-                       "Seeding prediction-outcome cycles")
-        # Reset learning store on each new pipeline run
+        self._log_step(
+            "LEARNING", "Closed-Loop Learning", "RUNNING",
+            "Seeding prediction-outcome cycles",
+            agent_input="Risk predictions for current scenario",
+            agent_output="Learning cycles being recorded",
+            why="Tracks prediction-outcome pairs for future model improvement",
+        )
         self.learning_store._initialized = False
         learning_cycles = self.learning_store.get_cycles(
             scenario=scenario,
             risk_predictions=risk_predictions,
         )
-        self._log_step("LEARNING", "Closed-Loop Learning", "COMPLETE",
-                       f"{len(learning_cycles)} cycles recorded")
+        self._log_step(
+            "LEARNING", "Closed-Loop Learning", "COMPLETE",
+            f"{len(learning_cycles)} cycles recorded",
+            agent_input="Risk predictions",
+            agent_output=f"{len(learning_cycles)} prediction-outcome cycles stored (no live model retraining)",
+            why="Closed-loop records predictions for accuracy tracking",
+        )
 
         # ── Step 10: Build alerts (legacy simple alerts) ──────
         alerts = _generate_alerts(risk_predictions, response_plan, scenario)
@@ -364,8 +484,13 @@ class AgentOrchestrator:
             "live_weather_map_points":  live_weather_map_points,
         }
 
-        self._log_step("PIPELINE_COMPLETE", "Orchestrator", "COMPLETE",
-                       f"Pipeline finished in {elapsed}s")
+        self._log_step(
+            "PIPELINE_COMPLETE", "Orchestrator", "COMPLETE",
+            f"Pipeline finished in {elapsed}s",
+            agent_input="All 6 agent outputs",
+            agent_output=f"Unified state ready. {critical_count} CRITICAL zones, {n_acts} actions, {n_appr} need approval",
+            why="All agents completed — state now available for Command Center and officer review",
+        )
         self._initialized = True
         return self.current_state
 

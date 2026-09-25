@@ -7,8 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
-from datetime import datetime, timezone
-from frontend.ui_utils import apply_global_css
+from frontend.ui_utils import apply_global_css, _now_ist
 
 st.set_page_config(
     page_title="FloodGuard AI — Command Center",
@@ -78,66 +77,108 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Hero header ───────────────────────────────────────────────────────────────
-now_str = datetime.now(timezone.utc).strftime("%d %b %Y · %H:%M UTC")
+now_str = _now_ist("%d %b %Y · %H:%M IST")
 
-# Try to read live pipeline state for the status strip (best-effort, non-blocking)
+# ── Gather live application state for the hero status strip ──────────────────
+# All values come from the actual running application state — nothing hardcoded.
 try:
     from agents.orchestrator import get_orchestrator as _get_orch_hp
     from agents.evidence_fusion import get_audit_trail as _get_audit_hp
-    _hp_orch = _get_orch_hp()
+    from agents.granite_service import granite_status as _granite_status_hp
+
+    _hp_orch  = _get_orch_hp()
     _hp_state = _hp_orch.current_state or {}
     _hp_preds = _hp_state.get("risk_predictions", [])
     _hp_crit  = sum(1 for p in _hp_preds if p.get("risk_level") == "CRITICAL")
     _hp_high  = sum(1 for p in _hp_preds if p.get("risk_level") == "HIGH")
-    _hp_scen  = _hp_state.get("scenario", "NORMAL")
     _hp_live  = _hp_state.get("live_weather_status", {}).get("is_live", False)
-    _hp_gran  = _hp_state.get("granite_status", {}).get("available", False)
     _hp_audit = len(_get_audit_hp().get_all())
     _hp_ready = bool(_hp_preds)
-except Exception:
-    _hp_crit = _hp_high = _hp_scen = _hp_live = _hp_gran = _hp_audit = 0
-    _hp_ready = False
 
-st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0a0f1e 0%,#0f1a2e 50%,#0a1020 100%);border:1px solid #1e3a5f;border-radius:12px;padding:2.5rem 2rem 2rem;margin-bottom:1.5rem;position:relative;overflow:hidden">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
-    <div>
-      <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem">
-        <span style="font-size:2.8rem">🌊</span>
-        <div>
-          <div style="font-size:2rem;font-weight:800;letter-spacing:-0.02em;
-                      background:linear-gradient(135deg,#3b82f6,#7c3aed);
-                      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-                      line-height:1.1">FLOODGUARD AI</div>
-          <div style="font-size:0.85rem;color:#64748b;letter-spacing:0.08em;font-weight:600">
-            AI FLOOD COMMAND CENTER — AHMEDABAD &amp; SURAT, GUJARAT
-          </div>
-        </div>
-      </div>
-      <div style="font-size:0.9rem;color:#94a3b8;max-width:620px">
-        Agentic AI system combining ML flood-risk prediction, IBM Granite reasoning,
-        citizen intelligence and drainage analytics for urban flood emergency management.
-      </div>
-    </div>
-    <div style="text-align:right">
-      <div style="font-size:0.7rem;color:#475569;margin-bottom:0.4rem">{now_str}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;margin-bottom:0.3rem">
-        <span style="background:#0f4c2a;color:#6ee7b7;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">🌐 HYBRID DATA</span>
-        <span style="background:#0d2818;color:#4ade80;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">🤖 6 AGENTS ACTIVE</span>
-        <span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">🧠 IBM GRANITE</span>
-        <span style="background:#1a1500;color:#fde68a;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">⚙ DEMO/SYNTHETIC</span>
-      </div>
-      {f'''<div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end">
-        <span style="background:rgba(239,68,68,0.15);color:#fca5a5;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">🔴 {_hp_crit} CRITICAL</span>
-        <span style="background:rgba(249,115,22,0.12);color:#fdba74;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">🟠 {_hp_high} HIGH</span>
-        <span style="background:{"#14532d" if _hp_live else "#3a2e00"};color:{"#bbf7d0" if _hp_live else "#fde68a"};font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">{"🟢 Live" if _hp_live else "🟡 Demo"} Weather</span>
-        <span style="background:{"#0d2818" if _hp_gran else "#1a1d27"};color:{"#6ee7b7" if _hp_gran else "#94a3b8"};font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">{"🧠 Granite LIVE" if _hp_gran else "⚙ Granite FALLBACK"}</span>
-        <span style="background:#1a1d27;color:#a78bfa;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">📋 {_hp_audit} audit entries</span>
-      </div>''' if _hp_ready else ''}
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+    # Full Granite status — use cached probe (force_probe=False to avoid slow call)
+    _gr_st          = _granite_status_hp(force_probe=False)
+    _gr_available   = _gr_st.get("available", False)
+    _gr_rate_limited = _gr_st.get("rate_limited", False)
+    _gr_config_err  = _gr_st.get("config_error", False)
+
+    # Derive Granite display state (mutually exclusive, in priority order)
+    if _gr_available:
+        _gr_state = "CONNECTED"
+    elif _gr_rate_limited:
+        _gr_state = "RATE LIMITED"
+    elif _gr_config_err:
+        _gr_state = "CONFIG ERROR"
+    else:
+        _gr_state = "FALLBACK"
+
+except Exception:
+    _hp_crit = _hp_high = _hp_live = _hp_audit = 0
+    _hp_ready = False
+    _gr_available = _gr_rate_limited = _gr_config_err = False
+    _gr_state = "FALLBACK"
+
+# ── Build badge HTML — top badge row (always visible) ────────────────────────
+
+# 🧠 IBM GRANITE badge — colour and label reflect actual Granite state
+_gr_badge_cfg = {
+    "CONNECTED":    ("#0d2818", "#6ee7b7", "\U0001F7E2 IBM GRANITE CONNECTED"),
+    "RATE LIMITED": ("#3a2e00", "#fde68a", "\u23F3 IBM GRANITE RATE LIMITED"),
+    "CONFIG ERROR": ("#3a0a0a", "#fca5a5", "\u26A0 IBM GRANITE CONFIG ERROR"),
+    "FALLBACK":     ("#1a1d27", "#94a3b8", "\u2699 IBM GRANITE FALLBACK"),
+}
+_gr_bg, _gr_col, _gr_lbl = _gr_badge_cfg[_gr_state]
+_gr_badge = (
+    f'<span style="background:{_gr_bg};color:{_gr_col};font-size:0.68rem;'
+    f'padding:2px 8px;border-radius:4px;font-weight:700">{_gr_lbl}</span>'
+)
+
+# ⚙ DEMO/SYNTHETIC — always shown: drainage/teams/baseline data is always demo
+_demo_badge = (
+    '<span style="background:#1a1500;color:#fde68a;font-size:0.68rem;'
+    'padding:2px 8px;border-radius:4px;font-weight:700">\u2699 DEMO/SYNTHETIC</span>'
+)
+
+# ── Build the live-data second row — always shown, values from real state ─────
+_wx_bg  = "#14532d" if _hp_live else "#3a2e00"
+_wx_col = "#bbf7d0" if _hp_live else "#fde68a"
+_wx_lbl = "\U0001F7E2 Live Weather" if _hp_live else "\U0001F7E1 Demo Weather"
+
+_status_row = (
+    f'<div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;margin-top:0.25rem">'
+    f'<span style="background:rgba(239,68,68,0.15);color:#fca5a5;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">\U0001F534 {_hp_crit} CRITICAL</span>'
+    f'<span style="background:rgba(249,115,22,0.12);color:#fdba74;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">\U0001F7E0 {_hp_high} HIGH</span>'
+    f'<span style="background:{_wx_bg};color:{_wx_col};font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">{_wx_lbl}</span>'
+    f'<span style="background:#1a1d27;color:#a78bfa;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">\U0001F4CB {_hp_audit} audit entries</span>'
+    f'</div>'
+)
+
+_hero_html = (
+    '<div style="background:linear-gradient(135deg,#0a0f1e 0%,#0f1a2e 50%,#0a1020 100%);border:1px solid #1e3a5f;border-radius:12px;padding:2.5rem 2rem 2rem;margin-bottom:1.5rem;position:relative;overflow:hidden">'
+    '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">'
+    '<div>'
+    '<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem">'
+    '<span style="font-size:2.8rem">\U0001F30A</span>'
+    '<div>'
+    '<div style="font-size:2rem;font-weight:800;letter-spacing:-0.02em;background:linear-gradient(135deg,#3b82f6,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.1">FLOODGUARD AI</div>'
+    '<div style="font-size:0.85rem;color:#64748b;letter-spacing:0.08em;font-weight:600">AI FLOOD COMMAND CENTER \u2014 AHMEDABAD &amp; SURAT, GUJARAT</div>'
+    '</div>'
+    '</div>'
+    '<div style="font-size:0.9rem;color:#94a3b8;max-width:620px">Agentic AI system combining ML flood-risk prediction, IBM Granite reasoning, citizen intelligence and drainage analytics for urban flood emergency management.</div>'
+    '</div>'
+    f'<div style="text-align:right">'
+    f'<div style="font-size:0.7rem;color:#475569;margin-bottom:0.4rem">{now_str}</div>'
+    f'<div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;margin-bottom:0.3rem">'
+    '<span style="background:#0f4c2a;color:#6ee7b7;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">\U0001F310 HYBRID DATA</span>'
+    '<span style="background:#0d2818;color:#4ade80;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">\U0001F916 6 AGENTS ACTIVE</span>'
+    f'{_gr_badge}'
+    f'{_demo_badge}'
+    '</div>'
+    f'{_status_row}'
+    '</div>'
+    '</div>'
+    '</div>'
+)
+st.markdown(_hero_html, unsafe_allow_html=True)
 
 # ── Portal buttons — Row 1 ─────────────────────────────────────────────────────
 def portal_card(col, emoji, title, subtitle, page, color, badge=""):

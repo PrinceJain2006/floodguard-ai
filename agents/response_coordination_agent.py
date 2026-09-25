@@ -125,6 +125,38 @@ class ResponseCoordinationAgent:
             "top_actions": [r["recommendation"] for r in top_recommendations[:3]],
         }
 
+        # ── Sub-Task E: Build team_assignments per incident ───────────────────
+        # Match each incident to the best-fit available team from same city.
+        # Result: list[{incident_id, area, city, team_id, team_name, team_type}]
+        team_assignments = []
+        _team_pool = list(available_teams)  # copy so we can pop assigned teams
+        _team_type_priority = ["rapid_response", "emergency", "pump_team", "drainage", "traffic"]
+        for inc in incidents:
+            inc_city = inc.get("city", city)
+            assigned_team_id   = None
+            assigned_team_name = None
+            assigned_team_type = None
+            # Try each team type in priority order; match same city
+            for t_type in _team_type_priority:
+                match = next(
+                    (t for t in _team_pool
+                     if t.get("team_type") == t_type and t.get("city") == inc_city),
+                    None,
+                )
+                if match:
+                    assigned_team_id   = match.get("team_id")
+                    assigned_team_name = match.get("name", match.get("team_id"))
+                    assigned_team_type = t_type
+                    break
+            team_assignments.append({
+                "incident_id":  inc["incident_id"],
+                "area":         inc.get("area", ""),
+                "city":         inc_city,
+                "team_id":      assigned_team_id,
+                "team_name":    assigned_team_name or "Unassigned",
+                "team_type":    assigned_team_type or "unassigned",
+            })
+
         self._log(f"Generated {len(incidents)} incidents, {len(top_recommendations)} recommendations")
         self.last_run = datetime.now(timezone.utc).isoformat()
 
@@ -133,6 +165,7 @@ class ResponseCoordinationAgent:
             "incidents": incidents,
             "top_recommendations": top_recommendations,
             "summary": summary_data,
+            "team_assignments": team_assignments,
             "available_teams": len(available_teams),
             "total_teams": len(response_teams),
             "critical_drain_count": len(critical_drains),
@@ -261,26 +294,38 @@ def _generate_system_recommendations(
 
     if critical_areas:
         top_area = critical_areas[0]
+        _reasons = "; ".join(top_area.get("main_reasons", [])[:2])
         recs.append({
             "rec_id": f"SYS-{rec_counter:03d}",
             "agent": "Response Coordination Agent",
             "recommendation": f"Deploy emergency resources to {top_area['area']}, {top_area['city']} — highest risk zone (score: {top_area['risk_score']:.0f})",
-            "reasoning": f"Risk score {top_area['risk_score']:.0f}/100, level {top_area['risk_level']}. " +
-                         ("; ".join(top_area.get("main_reasons", [])[:2])),
+            "reasoning": f"Risk score {top_area['risk_score']:.0f}/100, level {top_area['risk_level']}. {_reasons}",
             "priority": top_area["risk_level"],
             "requires_approval": top_area["risk_level"] == "CRITICAL",
+            # Structured actionable format
+            "what": f"Deploy emergency response team to {top_area['area']}, {top_area['city']}",
+            "why": f"Flood risk model scored {top_area['risk_score']:.0f}/100 ({top_area['risk_level']}). {_reasons}",
+            "action": "Dispatch nearest available rapid_response or pump_team immediately",
+            "evidence": f"ML prediction (DEMO/SIMULATED). Risk factors: {_reasons or 'elevated rainfall/drainage pressure'}",
+            "data_status": "DEMO/SIMULATED",
         })
         rec_counter += 1
 
     if critical_drain_ids:
         n = len(critical_drain_ids)
+        drain_list = ", ".join(critical_drain_ids[:3])
         recs.append({
             "rec_id": f"SYS-{rec_counter:03d}",
             "agent": "Drainage Agent",
-            "recommendation": f"Dispatch drainage maintenance team to {n} CRITICAL drain(s): {', '.join(critical_drain_ids[:3])}",
+            "recommendation": f"Dispatch drainage maintenance team to {n} CRITICAL drain(s): {drain_list}",
             "reasoning": f"{n} drains classified as CRITICAL priority due to blockage/capacity issues.",
             "priority": "CRITICAL" if n >= 3 else "HIGH",
             "requires_approval": False,
+            "what": f"Clear {n} CRITICAL-priority drain(s): {drain_list}",
+            "why": f"{n} drains at or near capacity — blockage significantly amplifies flood risk",
+            "action": "Dispatch drain crew within 30 minutes; inspect for debris and capacity violations",
+            "evidence": f"Drainage capacity model (ESTIMATED). {n} drains flagged CRITICAL.",
+            "data_status": "ESTIMATED",
         })
         rec_counter += 1
 
@@ -289,9 +334,14 @@ def _generate_system_recommendations(
             "rec_id": f"SYS-{rec_counter:03d}",
             "agent": "Citizen Report Agent",
             "recommendation": f"Activate surge response protocol — {open_reports} open citizen reports",
-            "reasoning": f"High volume of unresolved citizen reports indicates widespread impact.",
+            "reasoning": "High volume of unresolved citizen reports indicates widespread impact.",
             "priority": "HIGH",
             "requires_approval": False,
+            "what": f"Triage and respond to {open_reports} open citizen flood reports",
+            "why": f"{open_reports} unresolved reports suggest widespread flooding impact across multiple areas",
+            "action": "Assign citizen response team; acknowledge critical reports within 15 minutes",
+            "evidence": f"{open_reports} citizen reports (USER SUBMITTED — unverified).",
+            "data_status": "USER SUBMITTED",
         })
         rec_counter += 1
 
@@ -304,6 +354,11 @@ def _generate_system_recommendations(
             "reasoning": f"Only {available_count} teams available for deployment.",
             "priority": "HIGH",
             "requires_approval": True,
+            "what": "Request mutual aid or activate off-duty response teams",
+            "why": f"Only {available_count} team(s) currently available — insufficient for multi-zone response",
+            "action": "Contact district emergency operations centre for additional resources",
+            "evidence": f"Team availability: {available_count} active (DEMO/SIMULATED roster).",
+            "data_status": "DEMO/SIMULATED",
         })
         rec_counter += 1
 
@@ -314,6 +369,11 @@ def _generate_system_recommendations(
         "reasoning": "Regular communication ensures coordinated response across all municipal teams.",
         "priority": "MEDIUM",
         "requires_approval": False,
+        "what": "Broadcast situation report to all department heads",
+        "why": "Coordinated multi-department awareness reduces response time and avoids resource conflicts",
+        "action": "Use FloodGuard Situation Report tab to generate and distribute the current report",
+        "evidence": "Standard incident management protocol.",
+        "data_status": "N/A",
     })
 
     for r in recs:

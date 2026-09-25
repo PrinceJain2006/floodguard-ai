@@ -353,7 +353,30 @@ def compute_risk_alert(
     if scores["water_level_stress"] > 10:
         data_sources.append("Water Level Estimate (rainfall-derived)")
     if scores["citizen_report_signals"] > 0:
-        data_sources.append("Citizen Reports")
+        data_sources.append("Citizen Reports (USER SUBMITTED)")
+
+    # Per-factor data status labels for display
+    data_status_map = {
+        "Rainfall":           "LIVE" if rainfall_1h > 0 else "ESTIMATED",
+        "ML Risk Score":      "MODEL",
+        "Water Level":        "ESTIMATED",   # derived from rainfall, not live sensor
+        "Drainage":           "DEMO",         # synthetic infrastructure data
+        "Citizen Reports":    "USER SUBMITTED",
+        "Historical":         "DEMO",
+    }
+    # Derive overall alert data status
+    _has_live_rain = rainfall_1h > 0
+    data_status_summary = "LIVE+MODEL" if _has_live_rain else "MODEL+DEMO"
+
+    # Trigger text (what caused this alert to fire)
+    if composite >= THRESHOLD_RED:
+        trigger_text = f"Risk score {composite:.0f}/100 crossed RED threshold ({THRESHOLD_RED})"
+    elif composite >= THRESHOLD_ORANGE:
+        trigger_text = f"Risk score {composite:.0f}/100 crossed ORANGE threshold ({THRESHOLD_ORANGE})"
+    elif composite >= THRESHOLD_YELLOW:
+        trigger_text = f"Risk score {composite:.0f}/100 crossed YELLOW threshold ({THRESHOLD_YELLOW})"
+    else:
+        trigger_text = f"Risk score {composite:.0f}/100 — below alert threshold"
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -376,6 +399,9 @@ def compute_risk_alert(
         "fusion_weight_note": FUSION_WEIGHT_LABEL,
         "recommended_action": recommended_action,
         "data_sources":      data_sources,
+        "data_status_map":   data_status_map,
+        "data_status":       data_status_summary,
+        "trigger":           trigger_text,
         "scenario":          scenario,
         "is_simulation":     is_simulation,
         "alert_state":       "NEW",

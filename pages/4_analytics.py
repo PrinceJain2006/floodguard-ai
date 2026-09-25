@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import random
 from frontend.ui_utils import (
     apply_global_css, header, metric_card, demo_badge,
-    simulated_badge, hybrid_badge, model_badge, live_badge, section_header, COLORS
+    simulated_badge, hybrid_badge, model_badge, live_badge, section_header, COLORS, _utc_to_ist,
 )
 from agents.orchestrator import get_orchestrator, SCENARIOS
 from agents.damage_assessment_agent import get_damage_agent
@@ -62,6 +62,16 @@ with st.sidebar:
 header("Analytics & Impact Dashboard",
        "Flood trends, agent performance, response metrics, and damage assessment",
        "📊")
+
+# Sub-Task I: Data provenance badge
+_an_is_live = state.get("live_weather_status", {}).get("is_live", False)
+_an_data_label = state.get("data_label", "DEMO/SIMULATED")
+_an_badge_html = (
+    '<span style="background:#14532d;color:#bbf7d0;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700">🟢 LIVE Weather</span>'
+    if _an_is_live
+    else f'<span style="background:#3a2e00;color:#fde68a;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700">🟡 {_an_data_label}</span>'
+)
+st.markdown(f'<div style="margin-bottom:0.4rem">{_an_badge_html} &nbsp; <span style="font-size:0.7rem;color:#475569">Data as of: {_utc_to_ist(state.get("last_updated",""), "%d %b %H:%M IST") or "N/A"}</span></div>', unsafe_allow_html=True)
 
 st.markdown("""
 <div style="background:rgba(124,58,237,0.1);border:1px solid #7c3aed;border-radius:8px;
@@ -137,41 +147,32 @@ with tab1:
     else:
         _ana_sys = "NORMAL";   _ana_sys_c = "#22c55e"; _ana_sys_bg = "rgba(34,197,94,0.06)"
 
-    st.markdown(f"""
-    <div style="background:{_ana_sys_bg};border:1px solid {_ana_sys_c}40;border-left:4px solid {_ana_sys_c};
-                border-radius:0 8px 8px 0;padding:0.6rem 1rem;margin-bottom:0.75rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
-        <div style="display:flex;align-items:center;gap:0.75rem">
-          <span style="font-size:1.1rem;font-weight:800;color:{_ana_sys_c};letter-spacing:0.06em">
-            ● SYSTEM: {_ana_sys}
-          </span>
-          <span style="font-size:0.78rem;color:#94a3b8">
-            {_ana_scen_info.get("emoji","")} {_ana_scen_info.get("label", _ana_scen)}
-          </span>
-        </div>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-          <span style="background:rgba(239,68,68,0.15);color:#fca5a5;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
-            🔴 {high_risk_zones} CRITICAL
-          </span>
-          <span style="background:rgba(249,115,22,0.12);color:#fdba74;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
-            🟠 {flood_detected - high_risk_zones} HIGH
-          </span>
-          <span style="background:rgba(59,130,246,0.12);color:#93c5fd;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
-            📱 {reports_processed} reports
-          </span>
-          <span style="background:rgba(249,115,22,0.10);color:#fdba74;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">
-            🔧 {drain_issues} drain issues
-          </span>
-          <span style="{'background:#14532d;color:#bbf7d0' if _ana_is_live else 'background:#3a2e00;color:#fde68a'};padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">
-            {'🟢 LIVE Weather' if _ana_is_live else '🟡 DEMO Weather'}
-          </span>
-          <span style="{'background:#0d2818;color:#6ee7b7' if _ana_g_avail else 'background:#1a1d27;color:#94a3b8'};padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700;border:1px solid {'#22c55e40' if _ana_g_avail else '#2d3148'}">
-            {'🧠 Granite LIVE' if _ana_g_avail else '⚙ Granite FALLBACK'}
-          </span>
-        </div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+    _wx_badge_style = "background:#14532d;color:#bbf7d0" if _ana_is_live else "background:#3a2e00;color:#fde68a"
+    _wx_badge_text  = "&#127802; LIVE Weather" if _ana_is_live else "&#127841; DEMO Weather"
+    _g_badge_style  = "background:#0d2818;color:#6ee7b7" if _ana_g_avail else "background:#1a1d27;color:#94a3b8"
+    _g_badge_border = "#22c55e40" if _ana_g_avail else "#2d3148"
+    _g_badge_text   = "&#129504; Granite LIVE" if _ana_g_avail else "&#9881; Granite FALLBACK"
+    _scen_emoji     = _ana_scen_info.get("emoji", "")
+    _scen_label     = _ana_scen_info.get("label", _ana_scen)
+    _n_high         = flood_detected - high_risk_zones
+    st.markdown(
+        f'<div style="background:{_ana_sys_bg};border:1px solid {_ana_sys_c}40;border-left:4px solid {_ana_sys_c};'
+        f'border-radius:0 8px 8px 0;padding:0.6rem 1rem;margin-bottom:0.75rem">'
+        f'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">'
+        f'<div style="display:flex;align-items:center;gap:0.75rem">'
+        f'<span style="font-size:1.1rem;font-weight:800;color:{_ana_sys_c};letter-spacing:0.06em">&#9679; SYSTEM: {_ana_sys}</span>'
+        f'<span style="font-size:0.78rem;color:#94a3b8">{_scen_emoji} {_scen_label}</span>'
+        f'</div>'
+        f'<div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">'
+        f'<span style="background:rgba(239,68,68,0.15);color:#fca5a5;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">&#128308; {high_risk_zones} CRITICAL</span>'
+        f'<span style="background:rgba(249,115,22,0.12);color:#fdba74;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">&#129000; {_n_high} HIGH</span>'
+        f'<span style="background:rgba(59,130,246,0.12);color:#93c5fd;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">&#128241; {reports_processed} reports</span>'
+        f'<span style="background:rgba(249,115,22,0.10);color:#fdba74;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:600">&#128295; {drain_issues} drain issues</span>'
+        f'<span style="{_wx_badge_style};padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700">{_wx_badge_text}</span>'
+        f'<span style="{_g_badge_style};padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700;border:1px solid {_g_badge_border}">{_g_badge_text}</span>'
+        f'</div></div></div>',
+        unsafe_allow_html=True,
+    )
 
     col1, col2 = st.columns([1.5, 1])
 
@@ -576,12 +577,13 @@ with tab5:
         height=340, margin=dict(t=30, b=10, l=10, r=10),
     )
     st.plotly_chart(fig_comp, use_container_width=True, config={"displayModeBar": False})
-    st.markdown(f"""
-    <div style="font-size:0.7rem;color:#64748b">
-      🟡 SIMULATED reference values — based on scenario multiplier assumptions.
-      🟢 Green annotation = current live pipeline output for <strong style="color:#22c55e">{orch.current_scenario}</strong>.
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-size:0.7rem;color:#64748b">'
+        f'&#127841; SIMULATED reference values &mdash; based on scenario multiplier assumptions. '
+        f'&#127802; Green annotation = current live pipeline output for '
+        f'<strong style="color:#22c55e">{orch.current_scenario}</strong>.</div>',
+        unsafe_allow_html=True,
+    )
 
 # ═══════════════════════════════════════════════
 # TAB 6: ML MODEL EVALUATION & EXPLAINABILITY
@@ -825,19 +827,17 @@ with tab6:
 
                 st.markdown("---")
                 section_header("CV ACCURACY DISTRIBUTION")
-                st.markdown(f"""
-                <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.8rem 1rem">
-                    <div style="font-size:0.8rem;color:#94a3b8">
-                        3-fold cross-validation on {ml_metrics['n_train'] + ml_metrics['n_test']} samples
-                    </div>
-                    <div style="font-size:1.4rem;font-weight:700;color:#22c55e;margin:0.3rem 0">
-                        {ml_metrics['cv_mean']:.1%} ± {ml_metrics['cv_std']:.3f}
-                    </div>
-                    <div style="font-size:0.75rem;color:#94a3b8">
-                        Consistent performance across folds — model generalizes well on synthetic dataset.
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                _cv_total = ml_metrics['n_train'] + ml_metrics['n_test']
+                _cv_mean  = f"{ml_metrics['cv_mean']:.1%}"
+                _cv_std   = f"{ml_metrics['cv_std']:.3f}"
+                st.markdown(
+                    f'<div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.8rem 1rem">'
+                    f'<div style="font-size:0.8rem;color:#94a3b8">3-fold cross-validation on {_cv_total} samples</div>'
+                    f'<div style="font-size:1.4rem;font-weight:700;color:#22c55e;margin:0.3rem 0">{_cv_mean} &plusmn; {_cv_std}</div>'
+                    f'<div style="font-size:0.75rem;color:#94a3b8">Consistent performance across folds &mdash; model generalizes well on synthetic dataset.</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
                 # Confusion matrix
                 cm_data = ml_metrics.get("confusion_matrix")
@@ -898,53 +898,59 @@ with tab6:
 
                     # Show feature values vs importance
                     fi_sorted_zone = sorted(fi.items(), key=lambda x: -x[1])
-                    rows_html = ""
+                    _norms = {
+                        "rainfall_1h": 120, "rainfall_3h": 360, "rainfall_6h": 720, "rainfall_24h": 2400,
+                        "drainage_capacity": 100, "historical_flood_freq": 10, "water_level": 5,
+                        "elevation": 100, "road_density": 1, "citizen_reports": 50,
+                    }
+                    rows_html_parts = []
                     for feat, importance in fi_sorted_zone[:8]:
                         feat_val = zone_features.get(feat, 0)
                         feat_label = feat.replace("_", " ").title()
-                        # Normalize feature value for bar display
-                        _norms = {
-                            "rainfall_1h": 120, "rainfall_3h": 360, "rainfall_6h": 720, "rainfall_24h": 2400,
-                            "drainage_capacity": 100, "historical_flood_freq": 10, "water_level": 5,
-                            "elevation": 100, "road_density": 1, "citizen_reports": 50,
-                        }
                         _max = _norms.get(feat, 100)
                         bar_pct = min(100, (float(feat_val) / _max) * 100) if _max > 0 else 0
-                        imp_pct = importance * 100 * 10  # scale for visual
-                        rows_html += f"""
-                        <div style="margin-bottom:0.5rem">
-                            <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:0.15rem">
-                                <span style="color:#e2e8f0">{feat_label}</span>
-                                <span style="color:#94a3b8">val: {feat_val:.1f} &nbsp;·&nbsp; importance: {importance:.3f}</span>
-                            </div>
-                            <div style="background:#1a1d27;border-radius:4px;height:10px;overflow:hidden;border:1px solid #2d3148">
-                                <div style="width:{bar_pct:.0f}%;background:{risk_color};height:100%;border-radius:4px;opacity:0.85"></div>
-                            </div>
-                        </div>
-                        """
-                    st.markdown(f"""
-                    <div style="background:#1a1d27;border:1px solid {risk_color};border-radius:8px;padding:0.9rem 1rem">
-                        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem">
-                            <span style="background:{risk_color};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:700">{risk_lv}</span>
-                            <span style="font-size:1.1rem;font-weight:700;color:{risk_color}">{zone_pred['risk_score']:.0f}/100</span>
-                            <span style="font-size:0.72rem;color:#94a3b8">confidence {zone_pred.get('confidence', 0):.0%}</span>
-                        </div>
-                        {rows_html}
-                    </div>
-                    """, unsafe_allow_html=True)
+                        rows_html_parts.append(
+                            f'<div style="margin-bottom:0.5rem">'
+                            f'<div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:0.15rem">'
+                            f'<span style="color:#e2e8f0">{feat_label}</span>'
+                            f'<span style="color:#94a3b8">val: {feat_val:.1f} &nbsp;&middot;&nbsp; importance: {importance:.3f}</span>'
+                            f'</div>'
+                            f'<div style="background:#1a1d27;border-radius:4px;height:10px;overflow:hidden;border:1px solid #2d3148">'
+                            f'<div style="width:{bar_pct:.0f}%;background:{risk_color};height:100%;border-radius:4px;opacity:0.85"></div>'
+                            f'</div></div>'
+                        )
+                    rows_html = "".join(rows_html_parts)
+
+                    score_txt   = f"{zone_pred['risk_score']:.0f}/100"
+                    conf_txt    = f"{zone_pred.get('confidence', 0):.0%}"
+                    card_html = (
+                        f'<div style="background:#1a1d27;border:1px solid {risk_color};border-radius:8px;padding:0.9rem 1rem">'
+                        f'<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem">'
+                        f'<span style="background:{risk_color};color:white;padding:2px 8px;border-radius:8px;font-size:0.75rem;font-weight:700">{risk_lv}</span>'
+                        f'<span style="font-size:1.1rem;font-weight:700;color:{risk_color}">{score_txt}</span>'
+                        f'<span style="font-size:0.72rem;color:#94a3b8">confidence {conf_txt}</span>'
+                        f'</div>'
+                        f'{rows_html}'
+                        f'</div>'
+                    )
+                    st.markdown(card_html, unsafe_allow_html=True)
 
                 with ex2:
                     section_header("WHY: Plain Language Reasons")
                     reasons = zone_pred.get("main_reasons", [])
                     if reasons:
                         for r in reasons:
-                            r_color = "#ef4444" if "extreme" in r.lower() or "critical" in r.lower() or "dangerously" in r.lower() else "#f97316" if "high" in r.lower() else "#eab308"
-                            st.markdown(f"""
-                            <div style="background:#1a1d27;border-left:3px solid {r_color};border-radius:0 6px 6px 0;
-                                        padding:0.4rem 0.7rem;margin-bottom:0.4rem;font-size:0.82rem;color:#e2e8f0">
-                                ⚠ {r}
-                            </div>
-                            """, unsafe_allow_html=True)
+                            _rc = (
+                                "#ef4444" if any(w in r.lower() for w in ["extreme", "critical", "dangerously"])
+                                else "#f97316" if "high" in r.lower()
+                                else "#eab308"
+                            )
+                            st.markdown(
+                                f'<div style="background:#1a1d27;border-left:3px solid {_rc};border-radius:0 6px 6px 0;'
+                                f'padding:0.4rem 0.7rem;margin-bottom:0.4rem;font-size:0.82rem;color:#e2e8f0">'
+                                f'&#9888; {r}</div>',
+                                unsafe_allow_html=True,
+                            )
                     else:
                         st.info("No specific reasons available for this zone.")
 
@@ -953,20 +959,30 @@ with tab6:
                     if probs:
                         st.markdown("---")
                         section_header("RISK CLASS PROBABILITIES")
+                        _prob_colors = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}
                         for lbl in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
                             p = probs.get(lbl, 0)
-                            p_color = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}.get(lbl, "#94a3b8")
-                            st.markdown(f"""
-                            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">
-                                <div style="min-width:60px;font-size:0.75rem;color:{p_color};font-weight:600">{lbl}</div>
-                                <div style="flex:1;background:#1a1d27;border-radius:4px;height:14px;overflow:hidden;border:1px solid #2d3148">
-                                    <div style="width:{p*100:.0f}%;background:{p_color};height:100%;border-radius:4px"></div>
-                                </div>
-                                <div style="min-width:40px;font-size:0.75rem;color:#e2e8f0;text-align:right">{p:.0%}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            p_color = _prob_colors.get(lbl, "#94a3b8")
+                            p_bar = f"{p * 100:.0f}%"
+                            p_pct = f"{p:.0%}"
+                            st.markdown(
+                                f'<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">'
+                                f'<div style="min-width:60px;font-size:0.75rem;color:{p_color};font-weight:600">{lbl}</div>'
+                                f'<div style="flex:1;background:#1a1d27;border-radius:4px;height:14px;overflow:hidden;border:1px solid #2d3148">'
+                                f'<div style="width:{p_bar};background:{p_color};height:100%;border-radius:4px"></div>'
+                                f'</div>'
+                                f'<div style="min-width:40px;font-size:0.75rem;color:#e2e8f0;text-align:right">{p_pct}</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
 
-                    st.markdown(f'<div style="font-size:0.68rem;color:#64748b;margin-top:0.5rem">🔵 Probabilities from RandomForestClassifier.predict_proba(). Feature values from ML pipeline input for {zone_pred["area"]}, {zone_pred["city"]}.</div>', unsafe_allow_html=True)
+                    _area_city = f"{zone_pred['area']}, {zone_pred['city']}"
+                    st.markdown(
+                        f'<div style="font-size:0.68rem;color:#64748b;margin-top:0.5rem">'
+                        f'&#128309; Probabilities from RandomForestClassifier.predict_proba(). '
+                        f'Feature values from ML pipeline input for {_area_city}.</div>',
+                        unsafe_allow_html=True,
+                    )
     else:
         st.warning("ML model not trained or classifier unavailable. Run a scenario to initialize the model.")
 
