@@ -70,7 +70,7 @@ DATA SOURCES
 
 ---
 
-## 🤖 7-Agent AI Architecture (Updated Pipeline)
+## 🤖 6-Agent AI Architecture (Updated Pipeline)
 
 ```
 📡 DATA SOURCES
