@@ -57,7 +57,7 @@ DATA SOURCES
 
 | Page | Module | Key Features |
 |------|---------|-------------|
-| Landing | FloodGuard AI Hub | 9-page portal · 7-agent architecture · IBM Granite status |
+| Landing | FloodGuard AI Hub | 9-page portal · 6-agent architecture · IBM Granite status |
 | 1 | Citizen Portal | EN/हिं/ગુ multilingual reporting · Zone risk context |
 | 2 | Command Center | Live map · Active alerts panel · Data source strip |
 | 3 | Agent Monitor | INPUT→PROCESS→OUTPUT per agent · Pipeline execution log · NL query |
