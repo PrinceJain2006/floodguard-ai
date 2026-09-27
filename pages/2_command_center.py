@@ -632,13 +632,14 @@ if _sb_ok:
 else:
     # Graceful fallback when neither API nor CSV could be loaded
     _tel_err = _sb_tel.get("error") or "Telemetry not yet loaded — run the pipeline."
+    _ts_display = _sb_tel.get("latest_timestamp_str") or "\N{EM DASH}"
     st.markdown(
         f'<div style="background:#1a0000;border:1px solid #ef4444;border-radius:8px;'
         f'padding:0.7rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.8rem">'
         f'<span style="background:#3a0000;color:#fca5a5;font-size:0.68rem;padding:2px 8px;'
         f'border-radius:4px;font-weight:700">\U0001f534 TELEMETRY UNAVAILABLE \u2014 NWDP / Gujarat SW GW</span>'
         f'<span style="font-size:0.72rem;color:#94a3b8">'
-        f'Latest official telemetry available at: <em>{_sb_tel.get("latest_timestamp_str") or "\u2014"}</em> &nbsp;\u00b7&nbsp; '
+        f'Latest official telemetry available at: <em>{_ts_display}</em> &nbsp;\u00b7&nbsp; '
         f'<span style="color:#eab308">{_tel_err}</span>'
         f'</span>'
         f'</div>',
