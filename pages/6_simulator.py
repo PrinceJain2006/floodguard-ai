@@ -324,51 +324,63 @@ if st.session_state.sim_scenario_ran and st.session_state.sim_after_state:
 
     col_flow, col_analysis = st.columns([1, 1.2])
 
+    # Pre-compute all dynamic HTML fragments to avoid f-string nesting issues
+    _granite_badge = (
+        '<span style="background:#0d2818;color:#86efac;padding:0px 5px;'
+        'border-radius:3px;margin-left:4px;font-size:0.6rem">&#x1F9E0; GRANITE</span>'
+        if _narrative_source == "GRANITE" else ""
+    )
+    _bef_avg_str = f"{bef.get('avg_score', 0):.0f}" if bef.get("avg_score") is not None else "0"
+    _bef_crit_str = str(bef.get("critical", "—"))
+    _bef_high_str = str(bef.get("high", "—"))
+    _aft_avg_str = f"{aft['avg_score']:.0f}"
+    _narrative_safe = str(_narrative).replace("<", "&lt;").replace(">", "&gt;") if not st.session_state.sim_granite_narrative else str(_narrative)
+
     with col_flow:
-        st.markdown(f"""
-<div style="background:#131620;border:1px solid #2d3148;border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.5rem">
-  <div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.7rem;
-              text-transform:uppercase;letter-spacing:0.05em">
-    🎬 SCENARIO TRANSITION
-  </div>
-  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
-    <div style="background:#1e2440;border:1px solid #2d3148;border-radius:6px;
-                padding:0.4rem 0.8rem;flex:1">
-      <div style="font-size:0.62rem;color:#475569;text-transform:uppercase;font-weight:700">BEFORE</div>
-      <div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">{bef_emoji} {bef_label}</div>
-      <div style="font-size:0.68rem;color:#64748b">
-        Critical: {bef.get("critical", "—")} &nbsp;|&nbsp; High: {bef.get("high", "—")} &nbsp;|&nbsp; Avg score: {bef.get("avg_score", 0):.0f}
-      </div>
-    </div>
-  </div>
-  <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
-  <div style="background:{sys_bg};border:1px solid {sys_color};border-radius:6px;
-              padding:0.4rem 0.8rem;margin-bottom:0.4rem;
-              display:flex;align-items:center;gap:0.5rem">
-    <span style="font-size:1.2rem">{_sc_emoji}</span>
-    <div>
-      <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">
-        SCENARIO APPLIED
-        {"<span style='background:#0d2818;color:#86efac;padding:0px 5px;border-radius:3px;margin-left:4px;font-size:0.6rem'>🧠 GRANITE</span>" if _narrative_source == "GRANITE" else ""}
-      </div>
-      <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_label}</div>
-      <div style="font-size:0.68rem;color:#94a3b8">{_narrative}</div>
-    </div>
-  </div>
-  <div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">▼</div>
-  <div style="background:#1e2440;border:2px solid {sys_color};border-radius:6px;padding:0.4rem 0.8rem">
-    <div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">AFTER — SYSTEM STATE: {sys_status}</div>
-    <div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_emoji} {_sc_label}</div>
-    <div style="font-size:0.68rem;color:#94a3b8">
-      Critical: {aft["critical"]} &nbsp;|&nbsp; High: {aft["high"]} &nbsp;|&nbsp; Avg score: {aft["avg_score"]:.0f}
-    </div>
-  </div>
-  <div style="margin-top:0.6rem;text-align:center">
-    <span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;
-                 border-radius:4px;font-weight:700">🟡 SIMULATION MODE</span>
-  </div>
-</div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="background:#131620;border:1px solid #2d3148;border-radius:10px;'
+            f'padding:1rem 1.2rem;margin-bottom:0.5rem">'
+            f'<div style="font-size:0.75rem;font-weight:700;color:#94a3b8;margin-bottom:0.7rem;'
+            f'text-transform:uppercase;letter-spacing:0.05em">&#x1F3AC; SCENARIO TRANSITION</div>'
+
+            f'<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">'
+            f'<div style="background:#1e2440;border:1px solid #2d3148;border-radius:6px;'
+            f'padding:0.4rem 0.8rem;flex:1">'
+            f'<div style="font-size:0.62rem;color:#475569;text-transform:uppercase;font-weight:700">BEFORE</div>'
+            f'<div style="font-size:0.85rem;font-weight:700;color:#e2e8f0">{bef_emoji} {bef_label}</div>'
+            f'<div style="font-size:0.68rem;color:#64748b">'
+            f'Critical: {_bef_crit_str} &nbsp;|&nbsp; High: {_bef_high_str} &nbsp;|&nbsp; Avg score: {_bef_avg_str}'
+            f'</div></div></div>'
+
+            f'<div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">&#9660;</div>'
+
+            f'<div style="background:{sys_bg};border:1px solid {sys_color};border-radius:6px;'
+            f'padding:0.4rem 0.8rem;margin-bottom:0.4rem;display:flex;align-items:center;gap:0.5rem">'
+            f'<span style="font-size:1.2rem">{_sc_emoji}</span>'
+            f'<div style="min-width:0;flex:1">'
+            f'<div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">'
+            f'SCENARIO APPLIED {_granite_badge}</div>'
+            f'<div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_label}</div>'
+            f'<div style="font-size:0.68rem;color:#94a3b8;word-wrap:break-word;overflow-wrap:break-word">'
+            f'{_narrative_safe}</div>'
+            f'</div></div>'
+
+            f'<div style="text-align:center;font-size:1.2rem;color:#2d3148;line-height:1;margin:0.15rem 0">&#9660;</div>'
+
+            f'<div style="background:#1e2440;border:2px solid {sys_color};border-radius:6px;padding:0.4rem 0.8rem">'
+            f'<div style="font-size:0.62rem;color:{sys_color};text-transform:uppercase;font-weight:700">'
+            f'AFTER &#8212; SYSTEM STATE: {sys_status}</div>'
+            f'<div style="font-size:0.85rem;font-weight:700;color:{sys_color}">{_sc_emoji} {_sc_label}</div>'
+            f'<div style="font-size:0.68rem;color:#94a3b8">'
+            f'Critical: {aft["critical"]} &nbsp;|&nbsp; High: {aft["high"]} &nbsp;|&nbsp; Avg score: {_aft_avg_str}'
+            f'</div></div>'
+
+            f'<div style="margin-top:0.6rem;text-align:center">'
+            f'<span style="background:#3a2e00;color:#fde68a;font-size:0.65rem;padding:2px 8px;'
+            f'border-radius:4px;font-weight:700">&#x1F7E1; SIMULATION MODE</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
 
     with col_analysis:
         # Agent pipeline outputs
@@ -872,7 +884,7 @@ with tab2:
                     lvl = score_to_level(score)
                     counts[lvl] = counts.get(lvl, 0) + 1
 
-                dom_level = max(counts, key=counts.get)
+                dom_level = max(counts, key=lambda k: counts.get(k, 0))
                 dom_color = level_colors.get(dom_level, "#94a3b8")
 
                 st.markdown(f"""
@@ -1006,7 +1018,7 @@ with tab3:
             dc1, dc2, dc3 = st.columns(3)
             with dc1:
                 new_capacity = st.slider("New Capacity %", 0, 100,
-                    min(100, base_drain.get("capacity_rating", 50) + 30),
+                    int(min(100, int(base_drain.get("capacity_rating") or 50) + 30)),
                     step=5, key="drain_cap")
             with dc2:
                 new_cond = st.selectbox("Condition After", ["GOOD", "FAIR", "POOR", "CRITICAL"],
