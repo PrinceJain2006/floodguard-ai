@@ -27,6 +27,8 @@ try:
         generate_citizen_reports, generate_response_teams, generate_risk_predictions, ALL_AREAS
     )
     from services.live_data_manager import get_live_data_manager
+    from services.sabarmati_telemetry import get_telemetry, get_primary_station_reading
+    from services.glofas_flood_api import get_flood_discharge as get_glofas_discharge
 except ImportError:
     from flood_risk_agent import get_flood_risk_agent
     from drainage_agent import get_drainage_agent
@@ -43,6 +45,15 @@ except ImportError:
         from services.live_data_manager import get_live_data_manager
     except ImportError:
         get_live_data_manager = None  # type: ignore[assignment]
+    try:
+        from services.sabarmati_telemetry import get_telemetry, get_primary_station_reading
+    except ImportError:
+        get_telemetry = None           # type: ignore[assignment]
+        get_primary_station_reading = None  # type: ignore[assignment]
+    try:
+        from services.glofas_flood_api import get_flood_discharge as get_glofas_discharge
+    except ImportError:
+        get_glofas_discharge = None    # type: ignore[assignment]
 
 
 SCENARIOS = {
@@ -212,10 +223,122 @@ class AgentOrchestrator:
             why="Dataset built from seed generator with scenario-scaled rainfall multipliers",
         )
 
+        # ── Step 1c: Load Sabarmati real telemetry (CSV-based, never API) ──────
+        sabarmati_telemetry: dict = {
+            "ok": False,
+            "error": "Telemetry service not available",
+            "stations": [],
+            "station_count": 0,
+            "latest_timestamp_str": None,
+            "data_source": "REAL TELEMETRY — NWDP / Gujarat SW GW",
+            "data_mode": "CSV",
+            "is_live": False,
+        }
+        real_water_level: dict | None = None
+        try:
+            if get_telemetry is not None and get_primary_station_reading is not None:
+                sabarmati_telemetry = get_telemetry()
+                real_water_level = get_primary_station_reading(sabarmati_telemetry)
+                if sabarmati_telemetry.get("ok"):
+                    self._log_step(
+                        "SABARMATI_TELEMETRY", "SabarmatiTelemetryLoader", "COMPLETE",
+                        f"{sabarmati_telemetry['station_count']} stations loaded from NWDP CSV. "
+                        f"Primary station: {real_water_level.get('station')} "
+                        f"wl={real_water_level.get('water_level_m')} m "
+                        f"@ {real_water_level.get('timestamp_str')}",
+                        agent_input="data/Sabarmati_River_Water_Level_Telemetry_2026_2030.csv.csv",
+                        agent_output=(
+                            f"Latest telemetry: {sabarmati_telemetry.get('latest_timestamp_str')} | "
+                            f"{sabarmati_telemetry['station_count']} stations | "
+                            f"Primary reading: {real_water_level.get('water_level_m')} m "
+                            f"({real_water_level.get('station')})"
+                        ),
+                        why="REAL TELEMETRY — NWDP Gujarat SW GW CSV; not an API. "
+                            "Provides authoritative river gauge height for Flood Risk Agent water_level input.",
+                    )
+                else:
+                    self._log_step(
+                        "SABARMATI_TELEMETRY", "SabarmatiTelemetryLoader", "FALLBACK",
+                        sabarmati_telemetry.get("error", "Unknown error"),
+                    )
+        except Exception as _tel_exc:
+            self._log_step(
+                "SABARMATI_TELEMETRY", "SabarmatiTelemetryLoader", "ERROR", str(_tel_exc),
+            )
+
+        # ── Step 1d: Open-Meteo GloFAS Flood API — modelled river discharge ────
+        # NOTE: This is NOT measured water level. It is a modelled discharge
+        # (m³/s) from the GloFAS hydrological model.  Clearly labelled throughout.
+        glofas_data: dict = {
+            "ok": False,
+            "error": "GloFAS service not available",
+            "cities": {},
+            "data_source": "MODELLED RIVER DISCHARGE — Open-Meteo / GloFAS",
+            "data_source_url": "https://open-meteo.com/en/docs/flood-api",
+        }
+        try:
+            if get_glofas_discharge is not None:
+                glofas_data = get_glofas_discharge()
+                if glofas_data.get("ok"):
+                    _glofas_cities_ok = [
+                        c for c, r in glofas_data.get("cities", {}).items()
+                        if r.get("ok")
+                    ]
+                    _glofas_summary = "; ".join(
+                        f"{c}: {glofas_data['cities'][c].get('current_discharge')} m\u00b3/s "
+                        f"({glofas_data['cities'][c].get('discharge_tier')})"
+                        for c in _glofas_cities_ok
+                    )
+                    self._log_step(
+                        "GLOFAS_DISCHARGE", "GloFASFloodAPIClient", "COMPLETE",
+                        f"River discharge fetched for {_glofas_cities_ok}. {_glofas_summary}",
+                        agent_input=(
+                            "https://flood-api.open-meteo.com/v1/flood — "
+                            "Ahmedabad (23.0225N, 72.5714E) & Surat (21.1702N, 72.8311E)"
+                        ),
+                        agent_output=(
+                            f"MODELLED discharge (not measured water level): {_glofas_summary}. "
+                            "Variable: river_discharge (m\u00b3/s), 7-day GloFAS forecast."
+                        ),
+                        why=(
+                            "GloFAS hydrological model provides supplementary discharge signal. "
+                            "Bounded additive bonus (max 8 pts) applied to risk score. "
+                            "NWDP telemetry (REAL TELEMETRY) is the primary water-level source."
+                        ),
+                    )
+                else:
+                    _glofas_err = glofas_data.get("error") or str(
+                        {c: r.get("error") for c, r in glofas_data.get("cities", {}).items()}
+                    )
+                    self._log_step(
+                        "GLOFAS_DISCHARGE", "GloFASFloodAPIClient", "FALLBACK",
+                        f"GloFAS unavailable — continuing without discharge data. Reason: {_glofas_err[:120]}",
+                        agent_input="Open-Meteo Flood API",
+                        agent_output="No discharge data — risk scoring uses rainfall + telemetry only.",
+                        why="GloFAS is a supplementary source; failure does not block the pipeline.",
+                    )
+        except Exception as _glofas_exc:
+            self._log_step(
+                "GLOFAS_DISCHARGE", "GloFASFloodAPIClient", "ERROR", str(_glofas_exc)[:160],
+            )
+
         # ── Step 2: Flood Risk Agent ───────────────────────────
+        _tel_inject_note = (
+            f"+ real telemetry from NWDP station '{real_water_level.get('station')}'"
+            if real_water_level and real_water_level.get("ok")
+            else "+ telemetry unavailable (CSV fallback)"
+        )
+        _glofas_inject_note = (
+            "+ GloFAS discharge (MODELLED)"
+            if glofas_data.get("ok")
+            else "+ GloFAS discharge unavailable"
+        )
         self._log_step(
             "FLOOD_RISK", "Flood Risk Agent", "RUNNING", "Analyzing rainfall and risk",
-            agent_input=f"Rainfall records for {len(rainfall)} areas + drain data + citizen reports",
+            agent_input=(
+                f"Rainfall records for {len(rainfall)} areas + drain data + citizen reports "
+                f"{_tel_inject_note} {_glofas_inject_note}"
+            ),
             agent_output="Risk scores being computed",
             why="Agent 1: ML model scores each zone using rainfall, drainage, reports, elevation",
         )
@@ -225,6 +348,8 @@ class AgentOrchestrator:
             report_records=reports,
             incident_records=incidents,
             area_meta=ALL_AREAS,
+            real_water_level=real_water_level,
+            glofas_data=glofas_data,
         )
         critical_count = sum(1 for p in risk_predictions if p["risk_level"] == "CRITICAL")
         high_count     = sum(1 for p in risk_predictions if p["risk_level"] == "HIGH")
@@ -482,6 +607,11 @@ class AgentOrchestrator:
             "live_weather_status":      live_weather_status,
             "live_weather_records":     live_weather_records,
             "live_weather_map_points":  live_weather_map_points,
+            # Real telemetry (NWDP Gujarat SW GW — CSV-based, not an API)
+            "sabarmati_telemetry":      sabarmati_telemetry,
+            "real_water_level":         real_water_level,
+            # Modelled river discharge (Open-Meteo GloFAS Flood API)
+            "glofas_data":              glofas_data,
         }
 
         self._log_step(

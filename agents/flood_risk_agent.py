@@ -71,10 +71,33 @@ class FloodRiskAgent:
         citizen_reports: list[dict],
         historical_incidents: list[dict],
         elevation: float = 50.0,
+        real_water_level: dict | None = None,
+        river_discharge: dict | None = None,
     ) -> dict:
         """
         Full risk analysis for a single area.
         Returns a structured risk assessment dict.
+
+        Parameters
+        ----------
+        real_water_level : dict | None
+            If provided, a reading dict from services.sabarmati_telemetry
+            (keys: station, water_level_m, timestamp_str, data_source, …).
+            When present its water_level_m value replaces the rainfall-
+            derived water_level estimate in the feature vector, and the
+            assessment result carries explicit REAL TELEMETRY labels.
+            The synthetic ML training dataset is NOT affected.
+
+        river_discharge : dict | None
+            If provided, a per-city record from services.glofas_flood_api
+            (keys: ok, city, discharge_factor, discharge_tier,
+                   current_discharge, peak_discharge, peak_date, …).
+            Labelled: "MODELLED RIVER DISCHARGE — Open-Meteo / GloFAS".
+            River discharge is NOT treated as a measured water level.
+            It is used as a supplementary `discharge_factor` (0.0–1.0)
+            that adds a bounded bonus to the risk score, separate from the
+            water_level feature.  This is clearly documented in the result.
+            The synthetic ML training dataset is NOT affected.
         """
         # Aggregate drain capacity
         if drain_data:
@@ -90,10 +113,32 @@ class FloodRiskAgent:
         # Citizen report count (last 2 hours approx)
         report_count = len(citizen_reports)
 
-        # Water level estimate from rainfall
         r1h = rainfall_data.get("rainfall_1h", 0)
         r6h = rainfall_data.get("rainfall_6h", 0)
-        water_level = min(5.0, r6h / 80.0 + (blocked_drains * 0.3))
+
+        # Water level: use real telemetry when available; otherwise derive from rainfall.
+        _telemetry_used = False
+        _telemetry_station: str | None = None
+        _telemetry_ts: str | None = None
+        _telemetry_raw_m: float | None = None
+
+        if (
+            real_water_level
+            and real_water_level.get("ok")
+            and real_water_level.get("water_level_m") is not None
+        ):
+            raw_m = float(real_water_level["water_level_m"])
+            # Normalise to a 0–5 m scale comparable to the rainfall-proxy.
+            # The CSV records absolute gauge heights (e.g. 52.961 m MSL for
+            # Sabarmati_Gandhinagar).  We cap at 5.0 to stay within the
+            # training-data range used by the ML model.
+            water_level = min(5.0, max(0.0, raw_m / 100.0))
+            _telemetry_used = True
+            _telemetry_station = real_water_level.get("station")
+            _telemetry_ts = real_water_level.get("timestamp_str")
+            _telemetry_raw_m = raw_m
+        else:
+            water_level = min(5.0, r6h / 80.0 + (blocked_drains * 0.3))
 
         features = {
             "rainfall_1h":          r1h,
@@ -116,6 +161,42 @@ class FloodRiskAgent:
 
         risk_score = pred["risk_score"]
         risk_level = pred["risk_level"]
+
+        # ── River-discharge advisory adjustment (GloFAS) ──────────────────────
+        # River discharge is MODELLED (not measured). It is NOT substituted for
+        # water_level. Instead, a bounded bonus (≤ 8 points) is added to the
+        # risk score when GloFAS signals elevated discharge.
+        # This preserves the integrity of the ML training data and clearly
+        # separates modelled discharge from the telemetry water-level input.
+        _discharge_used = False
+        _discharge_city: str | None = None
+        _discharge_m3s: float | None = None
+        _discharge_tier: str = "NORMAL"
+        _discharge_factor: float = 0.0
+        _discharge_fetched_at: str | None = None
+        _discharge_peak: float | None = None
+        _discharge_peak_date: str | None = None
+
+        if river_discharge and river_discharge.get("ok"):
+            _discharge_used      = True
+            _discharge_city      = river_discharge.get("city")
+            _discharge_m3s       = river_discharge.get("current_discharge")
+            _discharge_tier      = river_discharge.get("discharge_tier", "NORMAL")
+            _discharge_factor    = float(river_discharge.get("discharge_factor", 0.0))
+            _discharge_fetched_at = river_discharge.get("fetched_at")
+            _discharge_peak      = river_discharge.get("peak_discharge")
+            _discharge_peak_date = river_discharge.get("peak_date")
+            # Additive bonus: up to 8 points at discharge_factor=1.0
+            # Capped so a single-source GloFAS signal cannot alone push to CRITICAL.
+            _discharge_bonus = round(_discharge_factor * 8.0, 2)
+            risk_score = min(100.0, risk_score + _discharge_bonus)
+            # Re-derive risk_level from adjusted score
+            risk_level = (
+                "CRITICAL" if risk_score >= 75 else
+                "HIGH"     if risk_score >= 50 else
+                "MEDIUM"   if risk_score >= 25 else
+                "LOW"
+            )
 
         # Time window estimation
         if r1h > 60:
@@ -147,6 +228,44 @@ class FloodRiskAgent:
             ),
         }
 
+        # Build data labels — reflect all active sources
+        if _telemetry_used and _discharge_used:
+            _data_label = (
+                "REAL TELEMETRY — NWDP / Gujarat SW GW + "
+                "MODELLED RIVER DISCHARGE — Open-Meteo / GloFAS"
+            )
+        elif _telemetry_used:
+            _data_label = "REAL TELEMETRY — NWDP / Gujarat SW GW"
+        elif _discharge_used:
+            _data_label = "MODELLED RIVER DISCHARGE — Open-Meteo / GloFAS"
+        else:
+            _data_label = "DEMO/SIMULATED"
+
+        if _telemetry_used:
+            _telemetry_note = (
+                f"Water level from NWDP telemetry station '{_telemetry_station}' "
+                f"at {_telemetry_ts} (raw: {_telemetry_raw_m} m gauge height). "
+                "Normalised to 0–5 m model input range."
+            )
+        else:
+            _telemetry_note = "Water level derived from rainfall estimate (no live telemetry injected)."
+
+        if _discharge_used:
+            _discharge_note = (
+                f"MODELLED — GloFAS via Open-Meteo Flood API. "
+                f"City: {_discharge_city}. "
+                f"Current discharge: {_discharge_m3s} m\u00b3/s. "
+                f"Peak: {_discharge_peak} m\u00b3/s on {_discharge_peak_date}. "
+                f"Tier: {_discharge_tier}. "
+                f"Discharge factor: {_discharge_factor:.4f}. "
+                "NOT a measured water level. Treated as supplementary advisory input only."
+            )
+        else:
+            _discharge_note = (
+                "GloFAS river discharge unavailable or not injected. "
+                "Risk score based on rainfall, telemetry, and historical data only."
+            )
+
         result = {
             "prediction_id": f"PRED-{uuid.uuid4().hex[:8].upper()}",
             "city": city,
@@ -168,7 +287,23 @@ class FloodRiskAgent:
             "historical_incidents": hist_freq,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "model_version": "v1.0-synthetic",
-            "data_label": "DEMO/SIMULATED",
+            "data_label": _data_label,
+            # Real telemetry provenance fields (NWDP CSV)
+            "telemetry_used":      _telemetry_used,
+            "telemetry_station":   _telemetry_station,
+            "telemetry_timestamp": _telemetry_ts,
+            "telemetry_raw_m":     _telemetry_raw_m,
+            "telemetry_note":      _telemetry_note,
+            # River discharge provenance fields (GloFAS / Open-Meteo Flood API)
+            "discharge_used":       _discharge_used,
+            "discharge_city":       _discharge_city,
+            "discharge_m3s":        _discharge_m3s,
+            "discharge_tier":       _discharge_tier,
+            "discharge_factor":     _discharge_factor,
+            "discharge_peak_m3s":   _discharge_peak,
+            "discharge_peak_date":  _discharge_peak_date,
+            "discharge_fetched_at": _discharge_fetched_at,
+            "discharge_note":       _discharge_note,
         }
 
         self._log(f"Analyzed {area}, {city} → {risk_level} ({risk_score:.0f})")
@@ -182,12 +317,41 @@ class FloodRiskAgent:
         report_records: list[dict],
         incident_records: list[dict],
         area_meta: dict,
+        real_water_level: dict | None = None,
+        glofas_data: dict | None = None,
     ) -> list[dict]:
         """
         Run risk analysis for all areas across cities.
         Returns sorted list of risk assessments.
+
+        Parameters
+        ----------
+        real_water_level : dict | None
+            Latest reading from services.sabarmati_telemetry.
+            Passed unchanged to every per-area analysis call so that
+            all predictions share the same authoritative river gauge reading.
+
+        glofas_data : dict | None
+            Multi-city result from services.glofas_flood_api.get_flood_discharge().
+            Contains per-city river-discharge forecasts.
+            The correct city record is selected per area and passed as
+            river_discharge to analyze_area().
         """
         self._log(f"Starting batch analysis — {len(rainfall_records)} areas")
+        if real_water_level and real_water_level.get("ok"):
+            self._log(
+                f"Real telemetry injected: station={real_water_level.get('station')}, "
+                f"wl={real_water_level.get('water_level_m')} m, "
+                f"ts={real_water_level.get('timestamp_str')}"
+            )
+        _glofas_cities = (glofas_data or {}).get("cities", {})
+        if _glofas_cities:
+            _active = [c for c, r in _glofas_cities.items() if r.get("ok")]
+            if _active:
+                self._log(
+                    f"GloFAS discharge injected for cities: {_active} "
+                    f"[MODELLED — Open-Meteo Flood API, not measured water level]"
+                )
         results = []
 
         for rf in rainfall_records:
@@ -206,6 +370,9 @@ class FloodRiskAgent:
             area_reports = [r for r in report_records if r["area"] == area_name and r["city"] == city]
             area_incidents = [i for i in incident_records if i["area"] == area_name and i["city"] == city]
 
+            # Select per-city GloFAS discharge record (or None if unavailable)
+            city_discharge = _glofas_cities.get(city) if _glofas_cities else None
+
             assessment = self.analyze_area(
                 area=area_name,
                 city=city,
@@ -216,6 +383,8 @@ class FloodRiskAgent:
                 citizen_reports=area_reports,
                 historical_incidents=area_incidents,
                 elevation=elevation,
+                real_water_level=real_water_level,
+                river_discharge=city_discharge,
             )
             results.append(assessment)
 

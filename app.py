@@ -111,11 +111,47 @@ try:
     else:
         _gr_state = "FALLBACK"
 
+    # Real telemetry status (Sabarmati NWDP CSV)
+    _tel_ok = False
+    _tel_ts = None
+    _tel_stations = 0
+    try:
+        from services.sabarmati_telemetry import get_telemetry as _get_tel_hp
+        _tel_data = _get_tel_hp()
+        _tel_ok = _tel_data.get("ok", False)
+        _tel_ts = _tel_data.get("latest_timestamp_str")
+        _tel_stations = _tel_data.get("station_count", 0)
+    except Exception:
+        pass
+
+    # GloFAS modelled discharge status (Open-Meteo Flood API)
+    _gf_ok = False
+    _gf_summary = ""
+    try:
+        from services.glofas_flood_api import get_flood_discharge as _get_gf_hp
+        _gf_data = _get_gf_hp()
+        _gf_ok = _gf_data.get("ok", False)
+        if _gf_ok:
+            _parts = []
+            for _cn, _cr in _gf_data.get("cities", {}).items():
+                if _cr.get("ok"):
+                    _q = _cr.get("current_discharge")
+                    _t = _cr.get("discharge_tier", "")
+                    _parts.append(f"{_cn[:3]}: {_q:.1f} m³/s ({_t})" if _q else f"{_cn[:3]}: —")
+            _gf_summary = " | ".join(_parts)
+    except Exception:
+        pass
+
 except Exception:
     _hp_crit = _hp_high = _hp_live = _hp_audit = 0
     _hp_ready = False
     _gr_available = _gr_rate_limited = _gr_config_err = False
     _gr_state = "FALLBACK"
+    _tel_ok = False
+    _tel_ts = None
+    _tel_stations = 0
+    _gf_ok = False
+    _gf_summary = ""
 
 # ── Build badge HTML — top badge row (always visible) ────────────────────────
 
@@ -143,11 +179,31 @@ _wx_bg  = "#14532d" if _hp_live else "#3a2e00"
 _wx_col = "#bbf7d0" if _hp_live else "#fde68a"
 _wx_lbl = "\U0001F7E2 Live Weather" if _hp_live else "\U0001F7E1 Demo Weather"
 
+# Telemetry status badge for status row
+_tel_row_bg  = "#071a10" if _tel_ok else "#1a1d27"
+_tel_row_col = "#4ade80" if _tel_ok else "#6b7280"
+_tel_row_lbl = (
+    f"\U0001F6F0 NWDP: {_tel_stations} stations · {_tel_ts}"
+    if _tel_ok and _tel_ts
+    else "\U0001F6F0 NWDP Telemetry loading…"
+)
+
+# GloFAS status badge for status row
+_gf_row_bg  = "#0c1a2e" if _gf_ok else "#1a1d27"
+_gf_row_col = "#38bdf8" if _gf_ok else "#4b5563"
+_gf_row_lbl = (
+    f"\U0001F4E1 GloFAS: {_gf_summary}"
+    if _gf_ok and _gf_summary
+    else "\U0001F4E1 GloFAS: Unavailable"
+)
+
 _status_row = (
     f'<div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;margin-top:0.25rem">'
     f'<span style="background:rgba(239,68,68,0.15);color:#fca5a5;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">\U0001F534 {_hp_crit} CRITICAL</span>'
     f'<span style="background:rgba(249,115,22,0.12);color:#fdba74;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">\U0001F7E0 {_hp_high} HIGH</span>'
     f'<span style="background:{_wx_bg};color:{_wx_col};font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">{_wx_lbl}</span>'
+    f'<span style="background:{_tel_row_bg};color:{_tel_row_col};font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">{_tel_row_lbl}</span>'
+    f'<span style="background:{_gf_row_bg};color:{_gf_row_col};font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">{_gf_row_lbl}</span>'
     f'<span style="background:#1a1d27;color:#a78bfa;font-size:0.65rem;padding:1px 7px;border-radius:4px;font-weight:600">\U0001F4CB {_hp_audit} audit entries</span>'
     f'</div>'
 )
@@ -172,6 +228,20 @@ _hero_html = (
     '<span style="background:#0d2818;color:#4ade80;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">\U0001F916 6 AGENTS ACTIVE</span>'
     f'{_gr_badge}'
     f'{_demo_badge}'
+    + (
+        f'<span style="background:#14532d;color:#4ade80;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">'
+        f'\U0001F6F0 REAL TELEMETRY — NWDP / Gujarat SW GW</span>'
+        if _tel_ok else
+        f'<span style="background:#1a2a1a;color:#6b7280;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">'
+        f'\U0001F6F0 NWDP Telemetry: {"Loading..." if not _tel_ts else "Available"}</span>'
+    )
+    + (
+        f'<span style="background:#0c1a2e;color:#38bdf8;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">'
+        f'\U0001F4E1 MODELLED DISCHARGE — GloFAS</span>'
+        if _gf_ok else
+        f'<span style="background:#1a1d27;color:#4b5563;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">'
+        f'\U0001F4E1 GloFAS: Unavailable</span>'
+    ) +
     '</div>'
     f'{_status_row}'
     '</div>'
@@ -331,14 +401,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Data transparency footer ──────────────────────────────────────────────────
-st.markdown("""
+st.markdown(f"""
 <div style="text-align:center;color:#475569;font-size:0.73rem;padding:0.5rem 0 1rem;
             border-top:1px solid #1e293b;margin-top:0.5rem">
   <strong style="color:#64748b">DATA TRANSPARENCY</strong> —
-  FloodGuard AI combines live weather (Open-Meteo API), ML flood-risk predictions (Random Forest),
-  IBM Granite AI reasoning, user-submitted citizen reports, and clearly labelled
+  FloodGuard AI combines live weather (Open-Meteo Weather API),
+  <strong style="color:#38bdf8">MODELLED RIVER DISCHARGE</strong>
+    (Open-Meteo Flood API / GloFAS — {"available" if _gf_ok else "unavailable"}),
+  ML flood-risk predictions (Random Forest),
+  IBM Granite AI reasoning, user-submitted citizen reports,
+  <strong style="color:#4ade80">REAL TELEMETRY</strong> (NWDP Gujarat SW GW Sabarmati River CSV — {_tel_stations} stations, latest: {_tel_ts or "pending"}),
+  and clearly labelled
   <strong style="color:#eab308">DEMO/SYNTHETIC</strong> infrastructure data.
+  River discharge is <em>modelled</em> — not a measured water level.
   Drainage assets, response teams and baseline flood incidents are demo data.
+  The 30K synthetic ML training dataset is preserved and unmodified.
   All AI recommendations require authorized human verification before real-world implementation.
   This application is a hackathon demonstration and does not constitute an official municipal emergency system.
 </div>
