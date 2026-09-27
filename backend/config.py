@@ -114,6 +114,23 @@ LIVE_DATA_REQUEST_TIMEOUT: int = int(_secret("LIVE_DATA_REQUEST_TIMEOUT", "8"))
 LIVE_DATA_STALE_THRESHOLD: int = int(_secret("LIVE_DATA_STALE_THRESHOLD", "1800"))  # 30 min
 
 # ──────────────────────────────────────────────
+# NWDP / Gujarat SW GW Telemetry API (optional)
+# ──────────────────────────────────────────────
+# NWDP_API_URL  : full endpoint URL from your data.gov.in or NWDP portal
+#                 registration. If empty, the CSV fallback is used instead.
+# NWDP_API_KEY  : API key for the endpoint (omit or leave blank if keyless).
+# NWDP_API_KEY_PARAM : query-parameter name for the key (default: header).
+# NWDP_REFRESH_INTERVAL : cache TTL in seconds (default 3600 = 1 h).
+# NWDP_API_TIMEOUT      : HTTP request timeout in seconds (default 10).
+# Field-mapping overrides (only needed if the API uses different column names):
+# NWDP_STATION_NAME_FIELD, NWDP_WL_FIELD, NWDP_TS_FIELD, NWDP_TS_FORMAT
+NWDP_API_URL:          str  = _secret("NWDP_API_URL",          "")
+NWDP_API_KEY:          str  = _secret("NWDP_API_KEY",          "")
+NWDP_API_KEY_PARAM:    str  = _secret("NWDP_API_KEY_PARAM",    "")
+NWDP_REFRESH_INTERVAL: int  = int(_secret("NWDP_REFRESH_INTERVAL", "3600"))
+NWDP_API_TIMEOUT:      int  = int(_secret("NWDP_API_TIMEOUT",      "10"))
+
+# ──────────────────────────────────────────────
 # Flood Alert Engine
 # ──────────────────────────────────────────────
 ALERT_THRESHOLD_GREEN:  float = float(_secret("ALERT_THRESHOLD_GREEN",  "25"))

@@ -488,6 +488,30 @@ _sb_tel   = state.get("sabarmati_telemetry", {})
 _sb_rwl   = state.get("real_water_level", {})
 _sb_ok    = _sb_tel.get("ok", False)
 
+# Determine data mode and pick the right badge / border colour
+_sb_data_mode = _sb_tel.get("data_mode", "CSV_FALLBACK")
+_sb_is_live   = _sb_tel.get("is_live", False)
+_sb_badge     = _sb_tel.get("badge", "\U0001f7e1 CSV FALLBACK \u2014 NWDP / Gujarat SW GW")
+_sb_api_err   = _sb_tel.get("api_error")
+_sb_fb_note   = _sb_tel.get("api_fallback_note")
+
+# Visual style: green border for LIVE_API, amber for CSV_FALLBACK, red if unavailable
+if _sb_data_mode == "LIVE_API":
+    _sb_border = "#16a34a"
+    _sb_bg     = "#071a10"
+    _sb_mode_label = "LIVE API"
+    _sb_mode_color = "#4ade80"
+elif _sb_data_mode == "CSV_FALLBACK":
+    _sb_border = "#ca8a04"
+    _sb_bg     = "#1a1500"
+    _sb_mode_label = "CSV FALLBACK"
+    _sb_mode_color = "#fde68a"
+else:
+    _sb_border = "#ef4444"
+    _sb_bg     = "#1a0000"
+    _sb_mode_label = "UNAVAILABLE"
+    _sb_mode_color = "#fca5a5"
+
 if _sb_ok:
     _tel_stations  = _sb_tel.get("stations", [])
     _tel_count     = _sb_tel.get("station_count", 0)
@@ -515,15 +539,19 @@ if _sb_ok:
     )[:10]
     _rows_html = ""
     for _s in _sorted_stations:
-        _wl_v = f"{_s['water_level_m']:.3f}"
+        _wl_v     = f"{_s['water_level_m']:.3f}"
+        _s_mode   = _s.get("data_mode", "CSV_FALLBACK")
+        _s_badge  = (
+            '<span style="background:#0d2818;color:#4ade80;padding:1px 5px;border-radius:3px;font-size:0.65rem">LIVE API</span>'
+            if _s_mode == "LIVE_API" else
+            '<span style="background:#2a1f00;color:#fde68a;padding:1px 5px;border-radius:3px;font-size:0.65rem">CSV</span>'
+        )
         _rows_html += (
             f'<tr style="border-bottom:1px solid #1e293b">'
             f'<td style="padding:4px 8px;color:#e2e8f0;font-size:0.72rem">{_s["station"]}</td>'
             f'<td style="padding:4px 8px;color:#94a3b8;font-size:0.7rem">{_s.get("timestamp_str","—")}</td>'
             f'<td style="padding:4px 8px;color:#38bdf8;font-size:0.72rem;text-align:right">{_wl_v} m</td>'
-            f'<td style="padding:4px 8px;font-size:0.68rem">'
-            f'<span style="background:#0f2a1a;color:#4ade80;padding:1px 5px;border-radius:3px">REAL</span>'
-            f'</td>'
+            f'<td style="padding:4px 8px;font-size:0.68rem">{_s_badge}</td>'
             f'</tr>'
         )
     _table_html = (
@@ -532,34 +560,45 @@ if _sb_ok:
         f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:left">Station</th>'
         f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:left">Acquisition Time</th>'
         f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:right">Water Level</th>'
-        f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:left">Data Type</th>'
+        f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:left">Source</th>'
         f'</tr></thead><tbody>{_rows_html}</tbody></table>'
     )
 
+    # API fallback warning if applicable
+    _fb_html = ""
+    if _sb_fb_note:
+        _fb_html = (
+            f'<div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:#2a1a00;'
+            f'border-left:3px solid #ca8a04;border-radius:4px;font-size:0.65rem;color:#fde68a">'
+            f'⚠️ {_sb_fb_note}</div>'
+        )
+
     with st.expander(
-        "🛰️ REAL TELEMETRY — NWDP / Gujarat SW GW · Sabarmati River Water Level",
+        f"🛰️ NWDP / Gujarat SW GW · Sabarmati River Water Level ({_sb_mode_label})",
         expanded=True,
     ):
         st.markdown(
-            f'<div style="background:#071a10;border:2px solid #16a34a;border-radius:10px;'
+            f'<div style="background:{_sb_bg};border:2px solid {_sb_border};border-radius:10px;'
             f'padding:1rem 1.2rem;margin-bottom:0.5rem">'
             f'<div style="display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;margin-bottom:0.6rem">'
-            f'<span style="background:#14532d;color:#4ade80;font-size:0.72rem;padding:3px 10px;'
-            f'border-radius:5px;font-weight:800;letter-spacing:0.04em">'
-            f'🛰️ REAL TELEMETRY — NWDP / Gujarat SW GW</span>'
-            f'<span style="background:#1e293b;color:#94a3b8;font-size:0.65rem;padding:2px 7px;'
-            f'border-radius:4px">CSV-BASED · NOT AN API</span>'
+            # Primary source badge — green for LIVE, amber for CSV
+            f'<span style="background:{_sb_border}22;color:{_sb_mode_color};font-size:0.72rem;'
+            f'padding:3px 10px;border-radius:5px;font-weight:800;letter-spacing:0.04em;'
+            f'border:1px solid {_sb_border}">{_sb_badge}</span>'
             f'<span style="background:#1e293b;color:#94a3b8;font-size:0.65rem;padding:2px 7px;'
             f'border-radius:4px">SYNTHETIC DATA PRESERVED</span>'
             f'</div>'
             f'<div style="display:flex;gap:2rem;flex-wrap:wrap">'
             f'<div>'
             f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.15rem">STATIONS DETECTED</div>'
-            f'<div style="font-size:1.4rem;font-weight:800;color:#4ade80">{_tel_count}</div>'
+            f'<div style="font-size:1.4rem;font-weight:800;color:{_sb_mode_color}">{_tel_count}</div>'
             f'</div>'
             f'<div>'
-            f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.15rem">LATEST TELEMETRY AVAILABLE AT</div>'
+            f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.15rem">SOURCE TIMESTAMP</div>'
             f'<div style="font-size:1rem;font-weight:700;color:#38bdf8">{_tel_latest_ts}</div>'
+            f'<div style="font-size:0.62rem;color:#475569">'
+            f'{"Live API reading" if _sb_is_live else "Last record in static CSV download — NOT current clock time"}'
+            f'</div>'
             f'</div>'
             f'<div>'
             f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.15rem">PRIMARY STATION WATER LEVEL</div>'
@@ -573,26 +612,33 @@ if _sb_ok:
             f'Field: <strong style="color:#94a3b8">River Water Level Telemetry Hourly (meter)</strong> &nbsp;·&nbsp; '
             f'Injected into Flood Risk Agent: <strong style="color:#4ade80">{"YES" if _rwl_ok else "NO"}</strong>'
             f'</div>'
+            f'{_fb_html}'
             f'</div>',
             unsafe_allow_html=True,
         )
         st.markdown(_table_html, unsafe_allow_html=True)
-        st.caption(
-            "⚠️ These are the latest readings available in the static NWDP CSV download. "
-            "This is NOT a live streaming API. The timestamp shown is the last data point "
-            "in the file — not the current clock time. "
-            "Synthetic/demo training data is unmodified."
-        )
+        if _sb_is_live:
+            st.caption(
+                "\U0001f7e2 LIVE API mode: data fetched from configured NWDP endpoint. "
+                "Refreshes every " + str(_sb_tel.get("refresh_interval", 3600)) + " seconds."
+            )
+        else:
+            st.caption(
+                "\U0001f7e1 CSV FALLBACK: latest readings from the static NWDP CSV download. "
+                "This is NOT a live stream. Timestamps reflect the last record in the file. "
+                "Set NWDP_API_URL in .env or Streamlit secrets to enable live API mode. "
+                "Synthetic/demo training data is unmodified."
+            )
 else:
-    # Graceful fallback when CSV is not loaded
+    # Graceful fallback when neither API nor CSV could be loaded
     _tel_err = _sb_tel.get("error") or "Telemetry not yet loaded — run the pipeline."
     st.markdown(
-        f'<div style="background:#1a1d27;border:1px solid #334155;border-radius:8px;'
+        f'<div style="background:#1a0000;border:1px solid #ef4444;border-radius:8px;'
         f'padding:0.7rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.8rem">'
-        f'<span style="background:#14532d;color:#4ade80;font-size:0.68rem;padding:2px 8px;'
-        f'border-radius:4px;font-weight:700">🛰️ REAL TELEMETRY — NWDP / Gujarat SW GW</span>'
+        f'<span style="background:#3a0000;color:#fca5a5;font-size:0.68rem;padding:2px 8px;'
+        f'border-radius:4px;font-weight:700">\U0001f534 TELEMETRY UNAVAILABLE \u2014 NWDP / Gujarat SW GW</span>'
         f'<span style="font-size:0.72rem;color:#94a3b8">'
-        f'Latest official telemetry available at: <em>{_sb_tel.get("latest_timestamp_str") or "—"}</em> &nbsp;·&nbsp; '
+        f'Latest official telemetry available at: <em>{_sb_tel.get("latest_timestamp_str") or "\u2014"}</em> &nbsp;\u00b7&nbsp; '
         f'<span style="color:#eab308">{_tel_err}</span>'
         f'</span>'
         f'</div>',

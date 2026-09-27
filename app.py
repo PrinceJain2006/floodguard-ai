@@ -111,16 +111,20 @@ try:
     else:
         _gr_state = "FALLBACK"
 
-    # Real telemetry status (Sabarmati NWDP CSV)
+    # Real telemetry status (Sabarmati NWDP — API or CSV fallback)
     _tel_ok = False
     _tel_ts = None
     _tel_stations = 0
+    _tel_is_live = False
+    _tel_badge = "\U0001f7e1 CSV FALLBACK \u2014 NWDP / Gujarat SW GW"
     try:
         from services.sabarmati_telemetry import get_telemetry as _get_tel_hp
         _tel_data = _get_tel_hp()
         _tel_ok = _tel_data.get("ok", False)
         _tel_ts = _tel_data.get("latest_timestamp_str")
         _tel_stations = _tel_data.get("station_count", 0)
+        _tel_is_live = _tel_data.get("is_live", False)
+        _tel_badge = _tel_data.get("badge", _tel_badge)
     except Exception:
         pass
 
@@ -150,6 +154,8 @@ except Exception:
     _tel_ok = False
     _tel_ts = None
     _tel_stations = 0
+    _tel_is_live = False
+    _tel_badge = "\U0001f7e1 CSV FALLBACK \u2014 NWDP / Gujarat SW GW"
     _gf_ok = False
     _gf_summary = ""
 
@@ -179,14 +185,22 @@ _wx_bg  = "#14532d" if _hp_live else "#3a2e00"
 _wx_col = "#bbf7d0" if _hp_live else "#fde68a"
 _wx_lbl = "\U0001F7E2 Live Weather" if _hp_live else "\U0001F7E1 Demo Weather"
 
-# Telemetry status badge for status row
-_tel_row_bg  = "#071a10" if _tel_ok else "#1a1d27"
-_tel_row_col = "#4ade80" if _tel_ok else "#6b7280"
-_tel_row_lbl = (
-    f"\U0001F6F0 NWDP: {_tel_stations} stations · {_tel_ts}"
-    if _tel_ok and _tel_ts
-    else "\U0001F6F0 NWDP Telemetry loading…"
-)
+# Telemetry status badge for status row — colour/label reflects LIVE vs CSV
+if _tel_ok and _tel_is_live:
+    _tel_row_bg  = "#071a10"
+    _tel_row_col = "#4ade80"
+    _tel_row_lbl = f"\U0001f7e2 NWDP LIVE: {_tel_stations} stn \u00b7 {_tel_ts}"
+elif _tel_ok:
+    _tel_row_bg  = "#1a1500"
+    _tel_row_col = "#fde68a"
+    _tel_row_lbl = (
+        f"\U0001f7e1 NWDP CSV: {_tel_stations} stn \u00b7 {_tel_ts}"
+        if _tel_ts else "\U0001f7e1 NWDP CSV Fallback"
+    )
+else:
+    _tel_row_bg  = "#1a1d27"
+    _tel_row_col = "#6b7280"
+    _tel_row_lbl = "\U0001F6F0 NWDP Telemetry loading\u2026"
 
 # GloFAS status badge for status row
 _gf_row_bg  = "#0c1a2e" if _gf_ok else "#1a1d27"
@@ -229,11 +243,17 @@ _hero_html = (
     f'{_gr_badge}'
     f'{_demo_badge}'
     + (
-        f'<span style="background:#14532d;color:#4ade80;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">'
-        f'\U0001F6F0 REAL TELEMETRY — NWDP / Gujarat SW GW</span>'
+        # LIVE API: green badge
+        f'<span style="background:#071a10;color:#4ade80;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700;border:1px solid #16a34a">'
+        f'\U0001f7e2 NWDP LIVE API</span>'
+        if (_tel_ok and _tel_is_live) else
+        # CSV fallback: amber badge
+        f'<span style="background:#1a1500;color:#fde68a;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700;border:1px solid #ca8a04">'
+        f'\U0001f7e1 NWDP CSV FALLBACK</span>'
         if _tel_ok else
-        f'<span style="background:#1a2a1a;color:#6b7280;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">'
-        f'\U0001F6F0 NWDP Telemetry: {"Loading..." if not _tel_ts else "Available"}</span>'
+        # Neither available
+        f'<span style="background:#1a1d27;color:#6b7280;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">'
+        f'\U0001F6F0 NWDP: Unavailable</span>'
     )
     + (
         f'<span style="background:#0c1a2e;color:#38bdf8;font-size:0.68rem;padding:2px 8px;border-radius:4px;font-weight:700">'
