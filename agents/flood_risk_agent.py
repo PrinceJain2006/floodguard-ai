@@ -319,6 +319,7 @@ class FloodRiskAgent:
         area_meta: dict,
         real_water_level: dict | None = None,
         glofas_data: dict | None = None,
+        water_level_by_city: dict[str, dict] | None = None,
     ) -> list[dict]:
         """
         Run risk analysis for all areas across cities.
@@ -327,9 +328,20 @@ class FloodRiskAgent:
         Parameters
         ----------
         real_water_level : dict | None
-            Latest reading from services.sabarmati_telemetry.
-            Passed unchanged to every per-area analysis call so that
-            all predictions share the same authoritative river gauge reading.
+            Legacy single-city reading (Sabarmati / Ahmedabad).
+            Used when water_level_by_city is not supplied or has no entry
+            for the area's city.  Kept for backward compatibility.
+
+        water_level_by_city : dict[str, dict] | None
+            Optional city-keyed map of telemetry readings, e.g.:
+                {
+                    "Ahmedabad": <Sabarmati primary station reading>,
+                    "Surat":     <Tapi primary station reading>,
+                }
+            When present, the correct river's reading is selected per area
+            so that Sabarmati values are NEVER injected into Surat areas and
+            Tapi values are NEVER injected into Ahmedabad areas.
+            Takes priority over the legacy real_water_level argument.
 
         glofas_data : dict | None
             Multi-city result from services.glofas_flood_api.get_flood_discharge().
@@ -338,7 +350,17 @@ class FloodRiskAgent:
             river_discharge to analyze_area().
         """
         self._log(f"Starting batch analysis — {len(rainfall_records)} areas")
-        if real_water_level and real_water_level.get("ok"):
+        # Log telemetry sources that will be injected
+        if water_level_by_city:
+            for _city, _reading in water_level_by_city.items():
+                if _reading and _reading.get("ok"):
+                    self._log(
+                        f"Real telemetry injected for {_city}: "
+                        f"station={_reading.get('station')}, "
+                        f"wl={_reading.get('water_level_m')} m, "
+                        f"ts={_reading.get('timestamp_str')}"
+                    )
+        elif real_water_level and real_water_level.get("ok"):
             self._log(
                 f"Real telemetry injected: station={real_water_level.get('station')}, "
                 f"wl={real_water_level.get('water_level_m')} m, "
@@ -373,6 +395,14 @@ class FloodRiskAgent:
             # Select per-city GloFAS discharge record (or None if unavailable)
             city_discharge = _glofas_cities.get(city) if _glofas_cities else None
 
+            # Select the correct river telemetry for this area's city.
+            # water_level_by_city takes priority; legacy real_water_level is
+            # the fallback so existing callers without the new map still work.
+            if water_level_by_city is not None:
+                area_water_level = water_level_by_city.get(city)
+            else:
+                area_water_level = real_water_level
+
             assessment = self.analyze_area(
                 area=area_name,
                 city=city,
@@ -383,7 +413,7 @@ class FloodRiskAgent:
                 citizen_reports=area_reports,
                 historical_incidents=area_incidents,
                 elevation=elevation,
-                real_water_level=real_water_level,
+                real_water_level=area_water_level,
                 river_discharge=city_discharge,
             )
             results.append(assessment)

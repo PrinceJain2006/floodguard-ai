@@ -28,6 +28,10 @@ try:
     )
     from services.live_data_manager import get_live_data_manager
     from services.sabarmati_telemetry import get_telemetry, get_primary_station_reading
+    from services.tapi_telemetry import (
+        get_tapi_telemetry,
+        get_primary_station_reading as get_tapi_primary_reading,
+    )
     from services.glofas_flood_api import get_flood_discharge as get_glofas_discharge
 except ImportError:
     from flood_risk_agent import get_flood_risk_agent
@@ -50,6 +54,14 @@ except ImportError:
     except ImportError:
         get_telemetry = None           # type: ignore[assignment]
         get_primary_station_reading = None  # type: ignore[assignment]
+    try:
+        from services.tapi_telemetry import (
+            get_tapi_telemetry,
+            get_primary_station_reading as get_tapi_primary_reading,
+        )
+    except ImportError:
+        get_tapi_telemetry = None          # type: ignore[assignment]
+        get_tapi_primary_reading = None    # type: ignore[assignment]
     try:
         from services.glofas_flood_api import get_flood_discharge as get_glofas_discharge
     except ImportError:
@@ -266,6 +278,63 @@ class AgentOrchestrator:
                 "SABARMATI_TELEMETRY", "SabarmatiTelemetryLoader", "ERROR", str(_tel_exc),
             )
 
+        # ── Step 1c-ii: Load Tapi real telemetry (CSV snapshot, Surat) ──────────
+        # Tapi telemetry is NEVER mixed with Sabarmati.
+        # It is only injected for Surat areas.
+        tapi_telemetry: dict = {
+            "ok": False,
+            "error": "Tapi telemetry service not available",
+            "stations": [],
+            "station_count": 0,
+            "latest_timestamp_str": None,
+            "data_source": "REAL TELEMETRY \u2014 NWDP / Gujarat SW GW \u00b7 Tapi River",
+            "data_mode": "CSV_FALLBACK",
+            "is_live": False,
+            "river": "Tapi",
+        }
+        tapi_water_level: dict | None = None
+        try:
+            if get_tapi_telemetry is not None and get_tapi_primary_reading is not None:
+                tapi_telemetry = get_tapi_telemetry()
+                tapi_water_level = get_tapi_primary_reading(tapi_telemetry)
+                if tapi_telemetry.get("ok"):
+                    self._log_step(
+                        "TAPI_TELEMETRY", "TapiTelemetryLoader", "COMPLETE",
+                        f"{tapi_telemetry['station_count']} stations loaded from Tapi NWDP CSV. "
+                        f"Primary station: {tapi_water_level.get('station')} "
+                        f"wl={tapi_water_level.get('water_level_m')} m "
+                        f"@ {tapi_water_level.get('timestamp_str')}",
+                        agent_input="data/Tapi_River_Water_Level_Telemetry_2026_2030.csv.csv",
+                        agent_output=(
+                            f"Latest Tapi telemetry: {tapi_telemetry.get('latest_timestamp_str')} | "
+                            f"{tapi_telemetry['station_count']} stations | "
+                            f"Primary reading: {tapi_water_level.get('water_level_m')} m "
+                            f"({tapi_water_level.get('station')})"
+                        ),
+                        why="REAL TELEMETRY \u2014 NWDP Gujarat SW GW Tapi CSV snapshot. "
+                            "Injected for Surat areas only. Never mixed with Sabarmati.",
+                    )
+                else:
+                    self._log_step(
+                        "TAPI_TELEMETRY", "TapiTelemetryLoader", "FALLBACK",
+                        tapi_telemetry.get("error", "Unknown Tapi telemetry error"),
+                    )
+        except Exception as _tapi_exc:
+            self._log_step(
+                "TAPI_TELEMETRY", "TapiTelemetryLoader", "ERROR", str(_tapi_exc),
+            )
+
+        # Build per-city water level map so the Flood Risk Agent receives the
+        # correct river's reading per area.
+        # Sabarmati → Ahmedabad areas only.
+        # Tapi      → Surat areas only.
+        # A city with no valid reading gets None (agent falls back to rainfall proxy).
+        _water_level_by_city: dict[str, dict | None] = {}
+        if real_water_level and real_water_level.get("ok"):
+            _water_level_by_city["Ahmedabad"] = real_water_level
+        if tapi_water_level and tapi_water_level.get("ok"):
+            _water_level_by_city["Surat"] = tapi_water_level
+
         # ── Step 1d: Open-Meteo GloFAS Flood API — modelled river discharge ────
         # NOTE: This is NOT measured water level. It is a modelled discharge
         # (m³/s) from the GloFAS hydrological model.  Clearly labelled throughout.
@@ -323,10 +392,20 @@ class AgentOrchestrator:
             )
 
         # ── Step 2: Flood Risk Agent ───────────────────────────
+        _tel_parts = []
+        if real_water_level and real_water_level.get("ok"):
+            _tel_parts.append(
+                f"Sabarmati:{real_water_level.get('station')} "
+                f"{real_water_level.get('water_level_m')} m"
+            )
+        if tapi_water_level and tapi_water_level.get("ok"):
+            _tel_parts.append(
+                f"Tapi:{tapi_water_level.get('station')} "
+                f"{tapi_water_level.get('water_level_m')} m"
+            )
         _tel_inject_note = (
-            f"+ real telemetry from NWDP station '{real_water_level.get('station')}'"
-            if real_water_level and real_water_level.get("ok")
-            else "+ telemetry unavailable (CSV fallback)"
+            "+ real telemetry: " + "; ".join(_tel_parts)
+            if _tel_parts else "+ telemetry unavailable (rainfall proxy only)"
         )
         _glofas_inject_note = (
             "+ GloFAS discharge (MODELLED)"
@@ -350,6 +429,7 @@ class AgentOrchestrator:
             area_meta=ALL_AREAS,
             real_water_level=real_water_level,
             glofas_data=glofas_data,
+            water_level_by_city=_water_level_by_city if _water_level_by_city else None,
         )
         critical_count = sum(1 for p in risk_predictions if p["risk_level"] == "CRITICAL")
         high_count     = sum(1 for p in risk_predictions if p["risk_level"] == "HIGH")
@@ -610,6 +690,9 @@ class AgentOrchestrator:
             # Real telemetry (NWDP Gujarat SW GW — CSV-based, not an API)
             "sabarmati_telemetry":      sabarmati_telemetry,
             "real_water_level":         real_water_level,
+            # Tapi River telemetry (NWDP Gujarat SW GW — CSV snapshot, Surat)
+            "tapi_telemetry":           tapi_telemetry,
+            "tapi_water_level":         tapi_water_level,
             # Modelled river discharge (Open-Meteo GloFAS Flood API)
             "glofas_data":              glofas_data,
         }

@@ -25,6 +25,7 @@ from frontend.map_component import build_flood_map
 from streamlit_folium import st_folium
 from services.report_store import get_user_reports, count_open as _user_open_count
 from services.weather_dashboard import get_weather_for_city, cache_age_seconds, GUJARAT_CITIES
+from services.glofas_flood_api import fetch_all_cities as _glofas_fetch_all
 
 st.set_page_config(
     page_title="Command Center — FloodGuard AI",
@@ -51,6 +52,25 @@ if "auto_refresh" not in st.session_state:
     st.session_state.auto_refresh = False
 if "refresh_interval" not in st.session_state:
     st.session_state.refresh_interval = 300   # seconds
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_glofas_direct() -> dict:
+    """
+    Fetch Open-Meteo GloFAS river-discharge data independently of the pipeline.
+    Cached for 1 hour (discharge forecasts change slowly).
+    This provides GloFAS data on the dashboard even if the full pipeline
+    has not yet completed (e.g. first cold-start with Granite retries).
+    """
+    try:
+        return _glofas_fetch_all(forecast_days=7, timeout=12)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": f"Direct GloFAS fetch failed: {exc}",
+            "cities": {},
+            "data_source": "MODELLED RIVER DISCHARGE \u2014 Open-Meteo / GloFAS",
+        }
 
 
 @st.cache_resource
@@ -649,6 +669,144 @@ else:
 st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
+# Tapi River Real Telemetry Panel
+# ──────────────────────────────────────────────
+_tp_tel  = state.get("tapi_telemetry", {})
+_tp_rwl  = state.get("tapi_water_level", {})
+_tp_ok   = _tp_tel.get("ok", False)
+
+_tp_data_mode = _tp_tel.get("data_mode", "CSV_FALLBACK")
+_tp_badge     = _tp_tel.get("badge", "\U0001f7e1 CSV SNAPSHOT \u2014 NWDP / Gujarat SW GW \u00b7 Tapi")
+
+if _tp_ok:
+    _tp_border = "#ca8a04"
+    _tp_bg     = "#1a1500"
+    _tp_mode_color = "#fde68a"
+else:
+    _tp_border = "#ef4444"
+    _tp_bg     = "#1a0000"
+    _tp_mode_color = "#fca5a5"
+
+if _tp_ok:
+    _tp_stations   = _tp_tel.get("stations", [])
+    _tp_count      = _tp_tel.get("station_count", 0)
+    _tp_latest_ts  = _tp_tel.get("latest_timestamp_str") or "\u2014"
+    _tp_rwl_station = _tp_rwl.get("station", "\u2014") if _tp_rwl else "\u2014"
+    _tp_rwl_m       = _tp_rwl.get("water_level_m") if _tp_rwl else None
+    _tp_rwl_ts      = _tp_rwl.get("timestamp_str", "\u2014") if _tp_rwl else "\u2014"
+    _tp_rwl_ok      = _tp_rwl.get("ok", False) if _tp_rwl else False
+
+    if _tp_rwl_ok and _tp_rwl_m is not None:
+        _tp_wl_display = f"{_tp_rwl_m:.3f} m (gauge height)"
+        _tp_wl_note    = f"Station: {_tp_rwl_station} \u00b7 {_tp_rwl_ts}"
+        _tp_wl_color   = "#22c55e"
+    else:
+        _tp_wl_display = "No valid reading"
+        _tp_wl_note    = "All stations parsed; no reading with valid water level found."
+        _tp_wl_color   = "#eab308"
+
+    # Station table
+    _tp_sorted = sorted(
+        [s for s in _tp_stations if s.get("water_level_m") is not None],
+        key=lambda s: s.get("timestamp_str", ""),
+        reverse=True,
+    )
+    _tp_em = "\u2014"
+    _tp_rows_html = ""
+    for _s in _tp_sorted:
+        _wl_v    = f"{_s['water_level_m']:.3f}"
+        _tp_ts_v = _s.get("timestamp_str") or _tp_em
+        _tp_rows_html += (
+            f'<tr style="border-bottom:1px solid #1e293b">'
+            f'<td style="padding:4px 8px;color:#e2e8f0;font-size:0.72rem">{_s["station"]}</td>'
+            f'<td style="padding:4px 8px;color:#94a3b8;font-size:0.7rem">'
+            f'{_tp_ts_v}</td>'
+            f'<td style="padding:4px 8px;color:#38bdf8;font-size:0.72rem;text-align:right">'
+            f'{_wl_v} m</td>'
+            f'<td style="padding:4px 8px;font-size:0.68rem">'
+            f'<span style="background:#2a1f00;color:#fde68a;padding:1px 5px;'
+            f'border-radius:3px;font-size:0.65rem">CSV SNAPSHOT</span></td>'
+            f'</tr>'
+        )
+    _tp_table_html = (
+        f'<table style="width:100%;border-collapse:collapse;margin-top:0.5rem">'
+        f'<thead><tr style="border-bottom:1px solid #334155">'
+        f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:left">Station</th>'
+        f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:left">Acquisition Time</th>'
+        f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:right">Water Level</th>'
+        f'<th style="padding:3px 8px;color:#64748b;font-size:0.65rem;text-align:left">Source</th>'
+        f'</tr></thead><tbody>{_tp_rows_html}</tbody></table>'
+    )
+
+    with st.expander(
+        "\U0001f6f0\ufe0f NWDP / Gujarat SW GW \u00b7 Tapi River Water Level (CSV SNAPSHOT)",
+        expanded=True,
+    ):
+        st.markdown(
+            f'<div style="background:{_tp_bg};border:2px solid {_tp_border};border-radius:10px;'
+            f'padding:1rem 1.2rem;margin-bottom:0.5rem">'
+            f'<div style="display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;margin-bottom:0.6rem">'
+            f'<span style="background:{_tp_border}22;color:{_tp_mode_color};font-size:0.72rem;'
+            f'padding:3px 10px;border-radius:5px;font-weight:800;letter-spacing:0.04em;'
+            f'border:1px solid {_tp_border}">{_tp_badge}</span>'
+            f'<span style="background:#1e293b;color:#94a3b8;font-size:0.65rem;padding:2px 7px;'
+            f'border-radius:4px">SYNTHETIC DATA PRESERVED</span>'
+            f'<span style="background:#1e3a5f;color:#93c5fd;font-size:0.65rem;padding:2px 7px;'
+            f'border-radius:4px">SURAT / TAPI</span>'
+            f'</div>'
+            f'<div style="display:flex;gap:2rem;flex-wrap:wrap">'
+            f'<div>'
+            f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.15rem">STATIONS DETECTED</div>'
+            f'<div style="font-size:1.4rem;font-weight:800;color:{_tp_mode_color}">{_tp_count}</div>'
+            f'</div>'
+            f'<div>'
+            f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.15rem">SOURCE TIMESTAMP</div>'
+            f'<div style="font-size:1rem;font-weight:700;color:#38bdf8">{_tp_latest_ts}</div>'
+            f'<div style="font-size:0.62rem;color:#475569">'
+            f'Last record in static CSV download \u2014 NOT current clock time</div>'
+            f'</div>'
+            f'<div>'
+            f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.15rem">'
+            f'PRIMARY STATION WATER LEVEL</div>'
+            f'<div style="font-size:1rem;font-weight:700;color:{_tp_wl_color}">{_tp_wl_display}</div>'
+            f'<div style="font-size:0.67rem;color:#64748b">{_tp_wl_note}</div>'
+            f'</div>'
+            f'</div>'
+            f'<div style="margin-top:0.6rem;font-size:0.67rem;color:#475569;'
+            f'border-top:1px solid #1e293b;padding-top:0.4rem">'
+            f'River: <strong style="color:#94a3b8">Tapi Basin</strong> &nbsp;\u00b7&nbsp; '
+            f'Agency: <strong style="color:#94a3b8">Gujarat SW GW (NWDP)</strong> &nbsp;\u00b7&nbsp; '
+            f'Field: <strong style="color:#94a3b8">River Water Level Telemetry Hourly (meter)</strong>'
+            f' &nbsp;\u00b7&nbsp; '
+            f'Injected into Flood Risk Agent (Surat areas): '
+            f'<strong style="color:#4ade80">{"YES" if _tp_rwl_ok else "NO"}</strong>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(_tp_table_html, unsafe_allow_html=True)
+        st.caption(
+            "\U0001f7e1 CSV SNAPSHOT \u2014 NOT a live feed. "
+            "Timestamps reflect the last record in the static NWDP Tapi CSV download. "
+            "Water level values are injected for Surat areas only and are never mixed "
+            "with Sabarmati readings. Synthetic/demo training data is unmodified."
+        )
+else:
+    _tp_err = _tp_tel.get("error") or "Tapi telemetry not yet loaded \u2014 run the pipeline."
+    st.markdown(
+        f'<div style="background:#1a0000;border:1px solid #ef4444;border-radius:8px;'
+        f'padding:0.7rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.8rem">'
+        f'<span style="background:#3a0000;color:#fca5a5;font-size:0.68rem;padding:2px 8px;'
+        f'border-radius:4px;font-weight:700">'
+        f'\U0001f534 TAPI TELEMETRY UNAVAILABLE \u2014 NWDP / Gujarat SW GW</span>'
+        f'<span style="font-size:0.72rem;color:#eab308">{_tp_err[:160]}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
 # GloFAS / Open-Meteo Flood API Panel
 # ──────────────────────────────────────────────
 
@@ -667,9 +825,17 @@ def _discharge_tier_for_val(val: float, city: str) -> str:
     if val >= w: return "WARNING"
     return "NORMAL"
 
+# Prefer pipeline state; fall back to a direct independent fetch so the
+# panel is always populated even when the pipeline has not yet completed.
 _glofas  = state.get("glofas_data", {})
 _gf_ok   = _glofas.get("ok", False)
 _gf_cities = _glofas.get("cities", {})
+if not _gf_ok:
+    _glofas_direct = _fetch_glofas_direct()
+    if _glofas_direct.get("ok"):
+        _glofas    = _glofas_direct
+        _gf_ok     = True
+        _gf_cities = _glofas_direct.get("cities", {})
 
 with st.expander(
     "📡 MODELLED RIVER DISCHARGE — Open-Meteo / GloFAS Flood API",
@@ -683,13 +849,24 @@ with st.expander(
                 _tier = _city_rec.get("discharge_tier", "NORMAL") if _ok else "N/A"
                 _q    = _city_rec.get("current_discharge")
                 _pk   = _city_rec.get("peak_discharge")
-                _pkd  = _city_rec.get("peak_date", "—")
-                _riv  = _city_rec.get("river", "—")
+                _pkd  = _city_rec.get("peak_date", "\u2014")
+                _riv  = _city_rec.get("river", "\u2014")
                 _fac  = _city_rec.get("discharge_factor", 0.0)
-                _fat  = _city_rec.get("fetched_at", "")[:16]
+                _fat  = _city_rec.get("fetched_at", "")[:19]
+                _lat  = _city_rec.get("latitude")
+                _lon  = _city_rec.get("longitude")
+                _coord = (
+                    f"{_lat:.4f}\u00b0N, {_lon:.4f}\u00b0E"
+                    if (_lat is not None and _lon is not None) else "\u2014"
+                )
+                _today = _city_rec.get("times", [""])[0] or "\u2014"
                 _tc   = _tier_color(_tier)
                 _times  = _city_rec.get("times", [])
                 _qdaily = _city_rec.get("discharge_m3s", [])
+                # Pre-compute display strings to avoid backslash in f-string expressions
+                _em = "\u2014"
+                _q_disp  = f"{_q:.2f}" if _q is not None else _em
+                _pk_disp = f"{_pk:.2f}" if _pk is not None else _em
 
                 if _ok:
                     # Forecast sparkline (simple inline SVG bar chart)
@@ -719,9 +896,9 @@ with st.expander(
                         f'<span style="font-size:0.7rem;font-weight:800;color:#93c5fd">{_city_name}</span>'
                         f'<span style="font-size:0.62rem;color:#64748b">{_riv} River</span>'
                         f'</div>'
-                        f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.1rem">CURRENT DISCHARGE</div>'
+                        f'<div style="font-size:0.65rem;color:#64748b;margin-bottom:0.1rem">MODELLED RIVER DISCHARGE</div>'
                         f'<div style="font-size:1.2rem;font-weight:800;color:#38bdf8">'
-                        f'{f"{_q:.2f}" if _q is not None else "—"} m³/s</div>'
+                        f'{_q_disp} m\u00b3/s</div>'
                         f'<div style="margin-top:0.3rem">'
                         f'<span style="background:{_tc}22;color:{_tc};font-size:0.62rem;'
                         f'padding:1px 6px;border-radius:3px;font-weight:700">{_tier}</span>'
@@ -729,32 +906,47 @@ with st.expander(
                         f'factor: {_fac:.4f}</span>'
                         f'</div>'
                         f'<div style="font-size:0.62rem;color:#64748b;margin-top:0.25rem">'
-                        f'Peak: {f"{_pk:.2f}" if _pk else "—"} m³/s on {_pkd}</div>'
-                        f'<div style="font-size:0.62rem;color:#475569;margin-top:0.15rem">'
-                        f'Fetched: {_fat} UTC</div>'
+                        f'Peak: {_pk_disp} m\u00b3/s on {_pkd}</div>'
+                        f'<div style="font-size:0.62rem;color:#64748b;margin-top:0.1rem">'
+                        f'Data timestamp: {_today}</div>'
+                        f'<div style="font-size:0.62rem;color:#475569;margin-top:0.1rem">'
+                        f'Coordinates: {_coord}</div>'
+                        f'<div style="font-size:0.62rem;color:#334155;margin-top:0.1rem">'
+                        f'Fetched: {_fat} UTC \u00b7 '
+                        f'Source: MODELLED RIVER DISCHARGE \u2014 Open-Meteo / GloFAS</div>'
                         f'{_spark}'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
                 else:
-                    _err = _city_rec.get("error", "Unavailable")
+                    _err = _city_rec.get("error") or "Unavailable"
                     st.markdown(
                         f'<div style="background:#1a1d27;border:1px solid #334155;border-radius:8px;'
                         f'padding:0.6rem;margin-bottom:0.4rem">'
                         f'<div style="font-size:0.7rem;font-weight:700;color:#64748b">{_city_name}</div>'
                         f'<div style="font-size:0.65rem;color:#eab308;margin-top:0.2rem">'
-                        f'Unavailable: {_err[:80]}</div>'
+                        f'API error: {_err[:120]}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
     else:
-        _gf_err = _glofas.get("error") or "GloFAS data not yet loaded — run the pipeline."
+        # Collect real per-city errors from each city record when available
+        _city_errs = {
+            c: r.get("error") or "unknown"
+            for c, r in _glofas.get("cities", {}).items()
+            if not r.get("ok")
+        }
+        _gf_err = (
+            "; ".join(f"{c}: {e}" for c, e in _city_errs.items())
+            if _city_errs
+            else (_glofas.get("error") or "Open-Meteo Flood API unreachable — check network connectivity.")
+        )
         st.markdown(
             f'<div style="background:#1a1d27;border:1px solid #334155;border-radius:8px;'
             f'padding:0.7rem 1rem;display:flex;align-items:center;gap:0.8rem">'
             f'<span style="background:#1e3a5f;color:#93c5fd;font-size:0.68rem;padding:2px 8px;'
-            f'border-radius:4px;font-weight:700">📡 MODELLED RIVER DISCHARGE — Open-Meteo / GloFAS</span>'
-            f'<span style="font-size:0.72rem;color:#eab308">{_gf_err}</span>'
+            f'border-radius:4px;font-weight:700">📡 MODELLED RIVER DISCHARGE \u2014 Open-Meteo / GloFAS</span>'
+            f'<span style="font-size:0.72rem;color:#eab308">{_gf_err[:200]}</span>'
             f'</div>',
             unsafe_allow_html=True,
         )
